@@ -1,0 +1,652 @@
+import { Item, Party, Supplier, User, CompanySettings, SupplierOrder, StockMovement, Sale } from '../types';
+
+export const INITIAL_COMPANY_SETTINGS: CompanySettings = {
+  companyName: 'RAW MATERIAL MANAGEMENT SYSTEM',
+  tagline: 'Precision Inventory & Order Management',
+  address: 'Plot No. 42, Industrial Area Phase II',
+  phone: '+91 98765 43210',
+  email: 'info@rawmaterialcorp.com',
+  gstin: '07AAAAA0000A1Z5',
+  currencySymbol: '₹',
+  defaultGstPercent: 18,
+  invoicePrefix: 'INV-',
+  purchasePrefix: 'PUR-',
+  selfUsePrefix: 'SU-',
+  orderPrefix: 'ORD-'
+};
+
+export const INITIAL_USERS: User[] = [
+  {
+    id: 'user-admin',
+    name: 'Admin Manager',
+    username: 'admin',
+    role: 'ADMIN',
+    permissions: [
+      'VIEW_DASHBOARD',
+      'MANAGE_ORDERS',
+      'CREATE_SALE',
+      'EDIT_SALE',
+      'DELETE_SALE',
+      'CREATE_PURCHASE',
+      'EDIT_PURCHASE',
+      'DELETE_PURCHASE',
+      'CREATE_SELF_USE',
+      'EDIT_SELF_USE',
+      'DELETE_SELF_USE',
+      'VIEW_REPORTS',
+      'MANAGE_MASTERS',
+      'ADJUST_STOCK',
+      'MANAGE_USERS',
+      'MANAGE_SETTINGS'
+    ],
+    isActive: true,
+    pin: '1234',
+    createdAt: '2026-08-01'
+  },
+  {
+    id: 'user-operator',
+    name: 'Counter Operator',
+    username: 'operator',
+    role: 'OPERATOR',
+    permissions: [
+      'VIEW_DASHBOARD',
+      'MANAGE_ORDERS',
+      'CREATE_SALE',
+      'CREATE_PURCHASE',
+      'CREATE_SELF_USE',
+      'VIEW_REPORTS'
+    ],
+    isActive: true,
+    pin: '0000',
+    createdAt: '2026-08-01'
+  }
+];
+
+export const INITIAL_PARTIES: Party[] = [
+  {
+    id: 'party-1',
+    name: 'Shree Ganesh Graphics',
+    propName: 'Ramesh Sharma',
+    phone: '9820011223',
+    phone2: '9820099887',
+    email: 'ganesh.graphics@gmail.com',
+    address: '14, Main Market, Sector 5',
+    block: 'Phase-1',
+    distt: 'Central',
+    city: 'Delhi',
+    state: 'Delhi',
+    gstin: '07AAACG1234Q1Z1',
+    openingBalance: 0,
+    creditLimit: 50000,
+    isActive: true,
+    createdAt: '2026-08-01'
+  },
+  {
+    id: 'party-2',
+    name: 'Royal Printers & Pack',
+    propName: 'Vikram Singh',
+    phone: '9811122334',
+    phone2: '9811199001',
+    email: 'royalprinters@yahoo.com',
+    address: '88, Central Commercial Hub',
+    block: 'Block-C',
+    distt: 'North',
+    city: 'Noida',
+    state: 'Uttar Pradesh',
+    gstin: '07BBBRP5678R1Z2',
+    openingBalance: 0,
+    creditLimit: 75000,
+    isActive: true,
+    createdAt: '2026-08-01'
+  },
+  {
+    id: 'party-3',
+    name: 'Modern Studio Works',
+    propName: 'Amit Verma',
+    phone: '9711223344',
+    phone2: '9711228899',
+    email: 'modernstudio@gmail.com',
+    address: 'Near Old Bus Stand',
+    block: 'Zone-2',
+    distt: 'West',
+    city: 'Gurugram',
+    state: 'Haryana',
+    gstin: '07CCCMS9012S1Z3',
+    openingBalance: 0,
+    creditLimit: 30000,
+    isActive: true,
+    createdAt: '2026-08-01'
+  }
+];
+
+export const INITIAL_SUPPLIERS: Supplier[] = [
+  {
+    id: 'sup-1',
+    name: 'KONARK',
+    propName: 'Rajesh Agarwal',
+    phone: '9899001122',
+    phone2: '9899003344',
+    email: 'sales@konarkmaterials.com',
+    address: 'Konark Raw Materials Depot, Ring Road',
+    block: 'Industrial Area',
+    distt: 'South',
+    city: 'Delhi',
+    state: 'Delhi',
+    gstin: '07AAACK9988K1Z9',
+    openingBalance: 0,
+    isActive: true,
+    createdAt: '2026-08-01'
+  },
+  {
+    id: 'sup-2',
+    name: 'DELTA',
+    propName: 'Sunil Mehta',
+    phone: '9877003344',
+    phone2: '9877008899',
+    email: 'info@deltapack.com',
+    address: 'Delta Packaging Solutions, Phase 1',
+    block: 'Sector 62',
+    distt: 'Gautam Buddha Nagar',
+    city: 'Noida',
+    state: 'Uttar Pradesh',
+    gstin: '07AAACD7766D1Z4',
+    openingBalance: 0,
+    isActive: true,
+    createdAt: '2026-08-01'
+  },
+  {
+    id: 'sup-3',
+    name: 'VMS',
+    propName: 'Vijay Sharma',
+    phone: '9833112233',
+    phone2: '9833119988',
+    email: 'vms.materials@gmail.com',
+    address: 'VMS Trading Center, GIDC Estate',
+    block: 'Block-A',
+    distt: 'East',
+    city: 'Faridabad',
+    state: 'Haryana',
+    gstin: '07AAACV4433V1Z6',
+    openingBalance: 0,
+    isActive: true,
+    createdAt: '2026-08-01'
+  },
+  {
+    id: 'sup-4',
+    name: 'PAYAL',
+    propName: 'Praveen Gupta',
+    phone: '9811445566',
+    phone2: '9811447788',
+    email: 'payalpolymers@rediffmail.com',
+    address: 'Payal Polymer Complex, Phase 2',
+    block: 'Phase 2',
+    distt: 'Central',
+    city: 'Delhi',
+    state: 'Delhi',
+    gstin: '07AAACP1122P1Z7',
+    openingBalance: 0,
+    isActive: true,
+    createdAt: '2026-08-01'
+  },
+  {
+    id: 'sup-5',
+    name: 'SUPREME POLYMERS',
+    propName: 'Kishore Patel',
+    phone: '9844005566',
+    phone2: '9844007788',
+    email: 'supreme.poly@gmail.com',
+    address: 'GIDC Industrial Estate, Ring Road',
+    block: 'Plot 10',
+    distt: 'Surat',
+    city: 'Surat',
+    state: 'Gujarat',
+    gstin: '07AAACS5544S1Z8',
+    openingBalance: 0,
+    isActive: true,
+    createdAt: '2026-08-01'
+  }
+];
+
+export const INITIAL_ITEMS: Item[] = [
+  {
+    id: 'item-1',
+    sno: '1456',
+    name: 'ASTER - 12X36',
+    hsn: '4802',
+    description: 'High Quality Glossy Aster Sheets',
+    category: 'Paper & Sheets',
+    supplierId: 'sup-1',
+    supplierName: 'KONARK',
+    unit: 'Roll',
+    minStock: 100, // minStock threshold is 100, opening stock is 50 -> low stock!
+    openingStock: 50,
+    purchaseRate: 25.0,
+    saleRate: 35.0,
+    gstPercent: 18,
+    unitA: {
+      unitName: 'Roll',
+      basicPrice: 1000,
+      gstPercent: 18,
+      tranPercent: 10,
+      profPercent: 25,
+      misPercent: 2,
+      nettPrice: 470,
+      roundUp: 30,
+      salePrice: 500,
+      isActive: true
+    },
+    unitB: {
+      unitName: 'Mt.',
+      conversionFactor: 40,
+      basicPrice: 1000,
+      gstPercent: 18,
+      tranPercent: 10,
+      profPercent: 25,
+      misPercent: 2,
+      nettPrice: 470,
+      roundUp: 30,
+      salePrice: 500,
+      isActive: true
+    },
+    isActive: true,
+    createdAt: '2026-08-01'
+  },
+  {
+    id: 'item-2',
+    sno: '1457',
+    name: 'JAMBO ROLL - 27MIC',
+    hsn: '3920',
+    description: 'Thermal Lamination Film 27 Micron',
+    category: 'Rolls',
+    supplierId: 'sup-1',
+    supplierName: 'KONARK',
+    unit: 'Roll',
+    minStock: 10,
+    openingStock: 0, // stock is 0 -> low stock!
+    purchaseRate: 450.0,
+    saleRate: 600.0,
+    gstPercent: 18,
+    unitA: {
+      unitName: 'Roll',
+      basicPrice: 450,
+      gstPercent: 18,
+      tranPercent: 5,
+      profPercent: 20,
+      misPercent: 2,
+      nettPrice: 550,
+      roundUp: 50,
+      salePrice: 600,
+      isActive: true
+    },
+    isActive: true,
+    createdAt: '2026-08-01'
+  },
+  {
+    id: 'item-3',
+    sno: '1458',
+    name: '11MM RED TAP',
+    hsn: '3919',
+    description: 'Self-Adhesive Packing Tape 11mm Red',
+    category: 'Tapes',
+    supplierId: 'sup-1',
+    supplierName: 'KONARK',
+    unit: 'Roll',
+    minStock: 20,
+    openingStock: 25,
+    purchaseRate: 15.0,
+    saleRate: 25.0,
+    gstPercent: 18,
+    unitA: {
+      unitName: 'Roll',
+      basicPrice: 15,
+      gstPercent: 18,
+      tranPercent: 5,
+      profPercent: 30,
+      misPercent: 2,
+      nettPrice: 22,
+      roundUp: 3,
+      salePrice: 25,
+      isActive: true
+    },
+    isActive: true,
+    createdAt: '2026-08-01'
+  },
+  {
+    id: 'item-4',
+    sno: '1459',
+    name: '12" WONDER TAP',
+    hsn: '3919',
+    description: 'Wonder Tape 12 Inch Heavy Duty',
+    category: 'Tapes',
+    supplierId: 'sup-1',
+    supplierName: 'KONARK',
+    unit: 'Roll',
+    minStock: 30,
+    openingStock: 35,
+    purchaseRate: 40.0,
+    saleRate: 60.0,
+    gstPercent: 18,
+    unitA: {
+      unitName: 'Roll',
+      basicPrice: 40,
+      gstPercent: 18,
+      tranPercent: 5,
+      profPercent: 25,
+      misPercent: 2,
+      nettPrice: 52,
+      roundUp: 8,
+      salePrice: 60,
+      isActive: true
+    },
+    isActive: true,
+    createdAt: '2026-08-01'
+  },
+  {
+    id: 'item-5',
+    sno: '1460',
+    name: '20" INKJET 240GSM',
+    hsn: '4811',
+    description: 'Photo Glossy Inkjet Paper Roll 240 GSM',
+    category: 'Media',
+    supplierId: 'sup-3',
+    supplierName: 'VMS',
+    unit: 'Roll',
+    minStock: 10,
+    openingStock: 1, // stock 1 <= 10 -> low stock!
+    purchaseRate: 850.0,
+    saleRate: 1200.0,
+    gstPercent: 18,
+    unitA: {
+      unitName: 'Roll',
+      basicPrice: 850,
+      gstPercent: 18,
+      tranPercent: 8,
+      profPercent: 22,
+      misPercent: 2,
+      nettPrice: 1100,
+      roundUp: 100,
+      salePrice: 1200,
+      isActive: true
+    },
+    isActive: true,
+    createdAt: '2026-08-01'
+  },
+  {
+    id: 'item-6',
+    sno: '1461',
+    name: 'PVC HOLDER - V4',
+    hsn: '3926',
+    description: 'Rigid PVC Holder Type V4',
+    category: 'Hardware',
+    supplierId: 'sup-2',
+    supplierName: 'DELTA',
+    unit: 'Pcs',
+    minStock: 600,
+    openingStock: 500,
+    purchaseRate: 8.0,
+    saleRate: 14.0,
+    gstPercent: 18,
+    unitA: {
+      unitName: 'Pcs',
+      basicPrice: 8,
+      gstPercent: 18,
+      tranPercent: 5,
+      profPercent: 40,
+      misPercent: 2,
+      nettPrice: 12.5,
+      roundUp: 1.5,
+      salePrice: 14,
+      isActive: true
+    },
+    isActive: true,
+    createdAt: '2026-08-01'
+  },
+  {
+    id: 'item-7',
+    sno: '1462',
+    name: '16MM NOCH',
+    hsn: '7318',
+    description: 'Industrial Noch 16mm Metallic',
+    category: 'Hardware',
+    supplierId: 'sup-2',
+    supplierName: 'DELTA',
+    unit: 'Pcs',
+    minStock: 1000,
+    openingStock: 500, // stock 500 <= 1000 -> low stock!
+    purchaseRate: 4.5,
+    saleRate: 8.0,
+    gstPercent: 18,
+    unitA: {
+      unitName: 'Pcs',
+      basicPrice: 4.5,
+      gstPercent: 18,
+      tranPercent: 5,
+      profPercent: 45,
+      misPercent: 2,
+      nettPrice: 7,
+      roundUp: 1,
+      salePrice: 8,
+      isActive: true
+    },
+    isActive: true,
+    createdAt: '2026-08-01'
+  }
+];
+
+export const INITIAL_ORDERS: SupplierOrder[] = [
+  {
+    id: 'ord-konark-1',
+    orderNumber: 'ORD-101',
+    orderDate: '2026-08-25',
+    supplierId: 'sup-1',
+    supplierName: 'KONARK',
+    status: 'ORDERED',
+    items: [
+      {
+        id: 'ord-item-1',
+        sno: '1456',
+        itemId: 'item-1',
+        itemName: 'ASTER - 12X36',
+        orderedQty: 500,
+        receivedQty: 0,
+        supplierId: 'sup-1',
+        supplierName: 'KONARK',
+        orderDate: '2026-08-25',
+        status: 'ORDERED'
+      },
+      {
+        id: 'ord-item-2',
+        sno: '1457',
+        itemId: 'item-2',
+        itemName: 'JAMBO ROLL - 27MIC',
+        orderedQty: 2,
+        receivedQty: 0,
+        supplierId: 'sup-1',
+        supplierName: 'KONARK',
+        orderDate: '2026-08-25',
+        status: 'ORDERED'
+      },
+      {
+        id: 'ord-item-3',
+        sno: '1458',
+        itemId: 'item-3',
+        itemName: '11MM RED TAP',
+        orderedQty: 12,
+        receivedQty: 0,
+        supplierId: 'sup-1',
+        supplierName: 'KONARK',
+        orderDate: '2026-08-25',
+        status: 'ORDERED'
+      },
+      {
+        id: 'ord-item-4',
+        sno: '1459',
+        itemId: 'item-4',
+        itemName: '12" WONDER TAP',
+        orderedQty: 24,
+        receivedQty: 0,
+        supplierId: 'sup-1',
+        supplierName: 'KONARK',
+        orderDate: '2026-08-25',
+        status: 'ORDERED'
+      }
+    ],
+    createdAt: '2026-08-25'
+  },
+  {
+    id: 'ord-delta-1',
+    orderNumber: 'ORD-102',
+    orderDate: '2026-08-28',
+    supplierId: 'sup-2',
+    supplierName: 'DELTA',
+    status: 'ORDERED',
+    items: [
+      {
+        id: 'ord-item-5',
+        sno: '1461',
+        itemId: 'item-6',
+        itemName: 'PVC HOLDER - V4',
+        orderedQty: 500,
+        receivedQty: 0,
+        supplierId: 'sup-2',
+        supplierName: 'DELTA',
+        orderDate: '2026-08-28',
+        status: 'ORDERED'
+      },
+      {
+        id: 'ord-item-6',
+        sno: '1462',
+        itemId: 'item-7',
+        itemName: '16MM NOCH',
+        orderedQty: 4,
+        receivedQty: 0,
+        supplierId: 'sup-2',
+        supplierName: 'DELTA',
+        orderDate: '2026-08-28',
+        status: 'ORDERED'
+      }
+    ],
+    createdAt: '2026-08-28'
+  }
+];
+
+export const INITIAL_STOCK_MOVEMENTS: StockMovement[] = [
+  {
+    id: 'mov-init-1',
+    itemId: 'item-1',
+    type: 'OPENING',
+    qtyChange: 50,
+    refType: 'OPENING',
+    refId: 'init',
+    refNo: 'OPENING',
+    date: '2026-08-01',
+    notes: 'Initial opening stock',
+    createdAt: '2026-08-01'
+  },
+  {
+    id: 'mov-init-2',
+    itemId: 'item-2',
+    type: 'OPENING',
+    qtyChange: 0,
+    refType: 'OPENING',
+    refId: 'init',
+    refNo: 'OPENING',
+    date: '2026-08-01',
+    notes: 'Initial opening stock',
+    createdAt: '2026-08-01'
+  },
+  {
+    id: 'mov-init-3',
+    itemId: 'item-3',
+    type: 'OPENING',
+    qtyChange: 25,
+    refType: 'OPENING',
+    refId: 'init',
+    refNo: 'OPENING',
+    date: '2026-08-01',
+    notes: 'Initial opening stock',
+    createdAt: '2026-08-01'
+  },
+  {
+    id: 'mov-init-4',
+    itemId: 'item-4',
+    type: 'OPENING',
+    qtyChange: 35,
+    refType: 'OPENING',
+    refId: 'init',
+    refNo: 'OPENING',
+    date: '2026-08-01',
+    notes: 'Initial opening stock',
+    createdAt: '2026-08-01'
+  },
+  {
+    id: 'mov-init-5',
+    itemId: 'item-5',
+    type: 'OPENING',
+    qtyChange: 1,
+    refType: 'OPENING',
+    refId: 'init',
+    refNo: 'OPENING',
+    date: '2026-08-01',
+    notes: 'Initial opening stock',
+    createdAt: '2026-08-01'
+  },
+  {
+    id: 'mov-init-6',
+    itemId: 'item-6',
+    type: 'OPENING',
+    qtyChange: 500,
+    refType: 'OPENING',
+    refId: 'init',
+    refNo: 'OPENING',
+    date: '2026-08-01',
+    notes: 'Initial opening stock',
+    createdAt: '2026-08-01'
+  },
+  {
+    id: 'mov-init-7',
+    itemId: 'item-7',
+    type: 'OPENING',
+    qtyChange: 500,
+    refType: 'OPENING',
+    refId: 'init',
+    refNo: 'OPENING',
+    date: '2026-08-01',
+    notes: 'Initial opening stock',
+    createdAt: '2026-08-01'
+  }
+];
+
+export const INITIAL_SALES: Sale[] = [
+  {
+    id: 'sale-demo-1',
+    billNo: 'INV-1001',
+    billDate: '2026-08-31',
+    partyId: 'party-1',
+    partyName: 'Shree Ganesh Graphics',
+    items: [
+      {
+        id: 'sale-item-1',
+        itemId: 'item-4',
+        sno: '1459',
+        itemName: '12" WONDER TAP',
+        basicPrice: 40,
+        gstPercent: 18,
+        gstAmt: 7.2,
+        nettPrice: 47.2,
+        toPercent: 5,
+        salePrice: 50,
+        qty: 30,
+        amount: 1500
+      }
+    ],
+    basicTotal: 1200,
+    gstTotal: 216,
+    roundUp: 0,
+    billTotal: 1500,
+    recdCash: 1000,
+    recdUpi: 500,
+    notes: 'Cash ₹1000, UPI ₹500',
+    createdAt: '2026-08-31'
+  }
+];
