@@ -37,6 +37,23 @@ const STORAGE_KEYS = {
   INITIALIZED: 'rmms_initialized_v1'
 };
 
+const memoryStore: Record<string, string> = {};
+
+function safeGetStorage(key: string): string | null {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    return window.localStorage.getItem(key);
+  }
+  return memoryStore[key] || null;
+}
+
+function safeSetStorage(key: string, value: string): void {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    window.localStorage.setItem(key, value);
+  } else {
+    memoryStore[key] = value;
+  }
+}
+
 type DbChangeListener = () => void;
 
 class DatabaseService {
@@ -63,7 +80,7 @@ class DatabaseService {
 
   private get<T>(key: string, defaultValue: T): T {
     try {
-      const data = localStorage.getItem(key);
+      const data = safeGetStorage(key);
       if (!data) return defaultValue;
       return JSON.parse(data) as T;
     } catch (e) {
@@ -74,16 +91,16 @@ class DatabaseService {
 
   private set<T>(key: string, value: T): void {
     try {
-      localStorage.setItem(key, JSON.stringify(value));
+      safeSetStorage(key, JSON.stringify(value));
     } catch (e) {
       console.error(`Error writing ${key} to storage:`, e);
     }
   }
 
   public initDatabase(forceReset = false): void {
-    const isInitializedV2 = localStorage.getItem('rmms_initialized_v2');
+    const isInitializedV2 = safeGetStorage('rmms_initialized_v2');
     if (!isInitializedV2 || forceReset) {
-      const isFresh = !localStorage.getItem(STORAGE_KEYS.SETTINGS);
+      const isFresh = !safeGetStorage(STORAGE_KEYS.SETTINGS);
       if (isFresh || forceReset) {
         this.set(STORAGE_KEYS.SETTINGS, INITIAL_COMPANY_SETTINGS);
         this.set(STORAGE_KEYS.USERS, INITIAL_USERS);
@@ -121,7 +138,7 @@ class DatabaseService {
         });
         this.set(STORAGE_KEYS.ITEMS, items);
       }
-      localStorage.setItem('rmms_initialized_v2', 'true');
+      safeSetStorage('rmms_initialized_v2', 'true');
       this.notify();
     }
   }
@@ -579,8 +596,11 @@ class DatabaseService {
 
   public importFullBackupJSON(jsonString: string): boolean {
     try {
-      const data = JSON.parse(jsonString);
-      if (!data || !data.items || !data.parties) {
+      let data = JSON.parse(jsonString);
+      if (data && data.data && typeof data.data === 'object') {
+        data = { ...data, ...data.data };
+      }
+      if (!data) {
         throw new Error('Invalid backup file structure.');
       }
       if (data.settings) this.set(STORAGE_KEYS.SETTINGS, data.settings);

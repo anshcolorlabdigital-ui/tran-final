@@ -6,6 +6,8 @@ import { calculateItemPricing, calculateBillSummary, calculateItemUnitBreakdown,
 import { formatReceiptText, ReceiptData } from './utils/shareUtils';
 import { formatDateToDisplay, getTodayDateString } from './utils/dateUtils';
 import { ItemUnitPricing, SupplierOrder } from './types';
+import { buildExportDataset } from './utils/exportUtils';
+import { db } from './db/db';
 
 // Mock in-memory DB test harness matching DatabaseService logic
 interface Item {
@@ -376,8 +378,46 @@ function runVerificationSuite() {
   }
   console.log('Step 32 PASS? true: Orders on 2nd Sept and 4th Sept are independent distinct batches.');
 
+  // 33. Modular & Date-Filtered Export Dataset Verification
+  console.log('\nStep 33: Verifying Modular & Date-Filtered Export Dataset...');
+  const testExportOptions = {
+    fromDate: '2026-08-01',
+    toDate: '2026-08-31',
+    isFullHistory: false,
+    modules: {
+      orders: true,
+      purchases: true,
+      sales: true,
+      selfUse: true,
+      parties: true,
+      suppliers: true,
+      items: true,
+      adjustments: true,
+      settings: true
+    }
+  };
+  const dataset = buildExportDataset(testExportOptions);
+  console.log(`Exported items count: ${dataset.items.length}, sales: ${dataset.sales.length}, purchases: ${dataset.purchases.length}`);
+  if (!Array.isArray(dataset.items) || !Array.isArray(dataset.sales)) {
+    throw new Error('Export dataset failed to build valid arrays');
+  }
+  console.log('Step 33 PASS? true');
+
+  // 34. Full JSON Backup & Restore Invariant
+  console.log('\nStep 34: Verifying JSON Backup export and Restore...');
+  const jsonBackupString = db.exportFullBackupJSON();
+  const parsedBackup = JSON.parse(jsonBackupString);
+  if (!parsedBackup.items || !parsedBackup.parties || !parsedBackup.settings) {
+    throw new Error('Full backup JSON missing core tables');
+  }
+  const restoreSuccess = db.importFullBackupJSON(jsonBackupString);
+  if (!restoreSuccess) {
+    throw new Error('Failed to restore database from backup JSON');
+  }
+  console.log('Step 34 PASS? true: Database export and restore validated successfully.');
+
   console.log('\n====================================================');
-  console.log('ALL 32 CUSTOMER WORKFLOW STEPS & INVARIANTS PASSED!');
+  console.log('ALL 34 CUSTOMER WORKFLOW STEPS & INVARIANTS PASSED!');
   console.log('====================================================\n');
 }
 
