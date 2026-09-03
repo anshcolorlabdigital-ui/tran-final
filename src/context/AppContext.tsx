@@ -30,6 +30,8 @@ interface AppContextType {
   closeQuickModal: () => void;
   refreshKey: number;
   triggerRefresh: () => void;
+  pendingPurchasePrefill: any | null;
+  setPendingPurchasePrefill: (data: any | null) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -40,6 +42,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [settings, setSettings] = useState<CompanySettings>(() => db.getSettings());
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [refreshKey, setRefreshKey] = useState<number>(0);
+  const [pendingPurchasePrefill, setPendingPurchasePrefill] = useState<any | null>(null);
   const [quickModal, setQuickModal] = useState<QuickModalState>({
     isOpen: false,
     type: null
@@ -99,7 +102,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         openQuickModal,
         closeQuickModal,
         refreshKey,
-        triggerRefresh
+        triggerRefresh,
+        pendingPurchasePrefill,
+        setPendingPurchasePrefill
       }}
     >
       {children}

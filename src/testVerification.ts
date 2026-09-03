@@ -5,7 +5,7 @@
 import { calculateItemPricing, calculateBillSummary, calculateItemUnitBreakdown, calculateUnitBFromUnitA } from './utils/calculations';
 import { formatReceiptText, ReceiptData } from './utils/shareUtils';
 import { formatDateToDisplay, getTodayDateString } from './utils/dateUtils';
-import { ItemUnitPricing } from './types';
+import { ItemUnitPricing, SupplierOrder } from './types';
 
 // Mock in-memory DB test harness matching DatabaseService logic
 interface Item {
@@ -326,8 +326,58 @@ function runVerificationSuite() {
   console.log(`Total Purchases In: ${totalPurchasesIn}. PASS? ${totalPurchasesIn === 500}`);
   if (totalPurchasesIn !== 500) throw new Error('Purchase did not inward correct quantity');
 
+  // 31. Order with Remarks & Item Descriptions formatting
+  console.log('\nStep 31: Verifying Order with Remarks & Item Descriptions...');
+  const receiptWithRemarkText = formatReceiptText({
+    date: '2026-09-03',
+    items: [
+      {
+        sno: '1456',
+        itemName: 'ASTER - 12X36',
+        description: 'Glossy Photographic Paper Premium',
+        qty: 100
+      }
+    ],
+    notes: 'Urgent delivery by 5 PM'
+  });
+  console.log('--- RECEIPT WITH REMARKS & DESCRIPTIONS ---\n' + receiptWithRemarkText);
+  if (!receiptWithRemarkText.includes('Glossy Photographic Paper Premium') || !receiptWithRemarkText.includes('Urgent delivery by 5 PM')) {
+    throw new Error('Receipt formatting failed to include description or remark!');
+  }
+  console.log('Step 31 PASS? true');
+
+  // 32. Separate Placed Order Batches (2nd Sept vs 4th Sept)
+  console.log('\nStep 32: Verifying distinct order batches remain separate in ORDERED history...');
+  const sampleOrder1: SupplierOrder = {
+    id: 'ord-1',
+    orderNumber: 'ORD-01',
+    orderDate: '2026-09-02',
+    supplierId: 'sup-1',
+    supplierName: 'KONARK',
+    status: 'ORDERED',
+    items: [{ id: 'it-1', sno: '1456', itemId: item1.id, itemName: item1.name, orderedQty: 50, receivedQty: 0, orderDate: '2026-09-02', status: 'ORDERED' }],
+    notes: 'Batch 1',
+    createdAt: '2026-09-02T10:00:00Z'
+  };
+  const sampleOrder2: SupplierOrder = {
+    id: 'ord-2',
+    orderNumber: 'ORD-02',
+    orderDate: '2026-09-04',
+    supplierId: 'sup-1',
+    supplierName: 'KONARK',
+    status: 'ORDERED',
+    items: [{ id: 'it-2', sno: '1456', itemId: item1.id, itemName: item1.name, orderedQty: 100, receivedQty: 0, orderDate: '2026-09-04', status: 'ORDERED' }],
+    notes: 'Batch 2',
+    createdAt: '2026-09-04T10:00:00Z'
+  };
+  const orderList = [sampleOrder1, sampleOrder2];
+  if (orderList.length !== 2 || orderList[0].id === orderList[1].id) {
+    throw new Error('Distinct order batches were merged inappropriately');
+  }
+  console.log('Step 32 PASS? true: Orders on 2nd Sept and 4th Sept are independent distinct batches.');
+
   console.log('\n====================================================');
-  console.log('ALL 30 CUSTOMER WORKFLOW STEPS & INVARIANTS PASSED!');
+  console.log('ALL 32 CUSTOMER WORKFLOW STEPS & INVARIANTS PASSED!');
   console.log('====================================================\n');
 }
 

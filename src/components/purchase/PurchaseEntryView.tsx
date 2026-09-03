@@ -11,7 +11,7 @@ import { ConfirmDialog } from '../common/ConfirmDialog';
 import { Search } from 'lucide-react';
 
 export const PurchaseEntryView: React.FC = () => {
-  const { showToast, openQuickModal, refreshKey, selectedDate } = useApp();
+  const { showToast, openQuickModal, refreshKey, selectedDate, pendingPurchasePrefill, setPendingPurchasePrefill } = useApp();
   const { hasPermission } = useAuth();
 
   // Masters
@@ -25,6 +25,7 @@ export const PurchaseEntryView: React.FC = () => {
   const [billNo, setBillNo] = useState<string>('');
   const [supplierId, setSupplierId] = useState<string>('');
   const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(null);
+  const [associatedOrderId, setAssociatedOrderId] = useState<string | null>(null);
 
   // Line item strip
   const [selectedItemId, setSelectedItemId] = useState<string>('');
@@ -36,13 +37,57 @@ export const PurchaseEntryView: React.FC = () => {
 
   // Items added
   const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
+  const [isTouched, setIsTouched] = useState(false);
   const [searchHistory, setSearchHistory] = useState('');
 
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
+  // Handle incoming order prefill from ORDERED section
   useEffect(() => {
-    if (!editingPurchaseId) {
+    if (pendingPurchasePrefill) {
+      if (pendingPurchasePrefill.supplierId) {
+        setSupplierId(pendingPurchasePrefill.supplierId);
+      }
+      setBillNo(StockEngine.getNextBillNumber('PURCHASE'));
+      setBillDate(pendingPurchasePrefill.orderDate || getTodayDateString());
+      setRecdDate(getTodayDateString());
+      setAssociatedOrderId(pendingPurchasePrefill.orderId || null);
+      setIsTouched(true);
+
+      if (pendingPurchasePrefill.items && pendingPurchasePrefill.items.length > 0) {
+        const prefilledList: PurchaseItem[] = pendingPurchasePrefill.items.map((it: any) => {
+          const itemObj = items.find(i => i.id === it.itemId);
+          const bPrice = itemObj?.unitA?.basicPrice ?? itemObj?.purchaseRate ?? 0;
+          const gPercent = itemObj?.unitA?.gstPercent ?? itemObj?.gstPercent ?? 18;
+          const calc = calculateItemPricing(bPrice, gPercent, 0, Number(it.qty) || 1, 0);
+
+          return {
+            id: `pur-item-${Date.now()}-${Math.random()}`,
+            itemId: it.itemId,
+            sno: it.sno || itemObj?.sno || '',
+            itemName: it.itemName || itemObj?.name || 'Item',
+            basicPrice: calc.basicPrice,
+            gstPercent: calc.gstPercent,
+            gstAmt: calc.gstAmt,
+            nettPrice: calc.nettPrice,
+            toPercent: 0,
+            roundup: 0,
+            salePrice: calc.salePrice,
+            qty: Number(it.qty) || 1,
+            amount: calc.amount
+          };
+        });
+
+        setPurchaseItems(prefilledList);
+      }
+
+      showToast(`Loaded Order #${pendingPurchasePrefill.orderNumber} into Purchase Entry!`, 'success');
+      setPendingPurchasePrefill(null);
+    }
+  }, [pendingPurchasePrefill, items]);
+
+  useEffect(() => {
+    if (!editingPurchaseId && !pendingPurchasePrefill && !associatedOrderId) {
       setBillNo(StockEngine.getNextBillNumber('PURCHASE'));
       setBillDate(selectedDate || getTodayDateString());
       setRecdDate(selectedDate || getTodayDateString());
@@ -53,6 +98,7 @@ export const PurchaseEntryView: React.FC = () => {
   }, [editingPurchaseId, selectedDate, suppliers, refreshKey]);
 
   const handleItemSelect = (itemId: string) => {
+    setIsTouched(true);
     setSelectedItemId(itemId);
     const found = items.find(i => i.id === itemId);
     if (found) {
@@ -79,7 +125,10 @@ export const PurchaseEntryView: React.FC = () => {
     return calculateBillSummary(purchaseItems);
   }, [purchaseItems]);
 
+  const isFormActive = Boolean(editingPurchaseId || purchaseItems.length > 0 || selectedItemId || isTouched);
+
   const handleAddOrUpdateLineItem = () => {
+    setIsTouched(true);
     if (!selectedItemId) {
       showToast('Please select an item', 'error');
       return;
@@ -127,6 +176,7 @@ export const PurchaseEntryView: React.FC = () => {
   };
 
   const handleEditLineItem = (index: number) => {
+    setIsTouched(true);
     const item = purchaseItems[index];
     setSelectedItemId(item.itemId);
     setBasicPrice(String(item.basicPrice));
@@ -136,6 +186,7 @@ export const PurchaseEntryView: React.FC = () => {
   };
 
   const handleDeleteLineItem = (index: number) => {
+    setIsTouched(true);
     setPurchaseItems(prev => prev.filter((_, i) => i !== index));
     if (editingItemIndex === index) {
       setEditingItemIndex(null);
@@ -145,12 +196,16 @@ export const PurchaseEntryView: React.FC = () => {
 
   const handleNewEntry = () => {
     setEditingPurchaseId(null);
+    setIsTouched(false);
     setBillNo(StockEngine.getNextBillNumber('PURCHASE'));
     setBillDate(getTodayDateString());
     setRecdDate(getTodayDateString());
     if (suppliers.length > 0) setSupplierId(suppliers[0].id);
     setPurchaseItems([]);
     setSelectedItemId('');
+    setBasicPrice('0');
+    setGstPercent('18');
+    setQty('1');
     setEditingItemIndex(null);
     showToast('New Purchase entry ready', 'info');
   };
@@ -186,6 +241,7 @@ export const PurchaseEntryView: React.FC = () => {
       recdCash: 0,
       recdUpi: 0,
       notes: `Purchase from ${supplier?.name}`,
+      orderId: associatedOrderId || undefined,
       createdAt: new Date().toISOString()
     };
 
@@ -193,17 +249,20 @@ export const PurchaseEntryView: React.FC = () => {
     db.savePurchase(purchaseRecord);
 
     showToast(`Purchase bill ${purchaseRecord.billNo} saved! Stock increased.`, 'success');
+    setAssociatedOrderId(null);
     handleNewEntry();
   };
 
   const handleLoadPurchaseForEdit = (purchase: Purchase) => {
     setEditingPurchaseId(purchase.id);
+    setIsTouched(true);
     setBillNo(purchase.billNo);
     setBillDate(purchase.billDate);
     setRecdDate(purchase.recdDate || purchase.billDate);
     setSupplierId(purchase.supplierId);
     setPurchaseItems(purchase.items);
     showToast(`Loaded purchase bill ${purchase.billNo} for editing`, 'info');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDeleteCurrentPurchase = () => {
@@ -258,57 +317,47 @@ export const PurchaseEntryView: React.FC = () => {
     );
   }, [purchasesHistory, searchHistory]);
 
+  const isEditing = Boolean(editingPurchaseId);
+  const isCreating = Boolean(!isEditing && (isTouched || purchaseItems.length > 0 || selectedItemId || (suppliers.length > 0 && supplierId !== suppliers[0]?.id)));
+
+  const cardStateClass = isEditing
+    ? 'is-editing-pink'
+    : isCreating
+    ? 'is-creating-green'
+    : 'is-initial-blue';
+
   return (
     <div className="content-panel-grey">
       <PurchasePrintVoucher purchase={currentPurchaseForPrint} />
 
       {/* Top Header Strip matching new purchase.jpg */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-        <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '8px 36px', minWidth: '220px', textAlign: 'center' }}>
-          PURCHASE ENTRY
-        </div>
-
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <button
-            type="button"
-            onClick={() => setShowHistory(!showHistory)}
-            style={{
-              padding: '6px 16px',
-              borderRadius: '20px',
-              border: '1.5px solid #6B7280',
-              background: '#FFFFFF',
-              fontWeight: 800,
-              fontSize: '0.85rem',
-              cursor: 'pointer'
-            }}
-          >
-            {showHistory ? 'Hide Purchase History' : `History (${purchasesHistory.length})`}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleNewEntry}
-            className="btn-customer-new-entry"
-            style={{ fontSize: '0.95rem', padding: '8px 24px' }}
-          >
-            NEW ENTRY
-          </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '8px 36px', minWidth: '220px', textAlign: 'center' }}>
+            PURCHASE ENTRY
+          </div>
+          {isEditing ? (
+            <span className="active-mode-indicator is-editing">
+              ● Editing Purchase Bill ({billNo})
+            </span>
+          ) : isCreating ? (
+            <span className="active-mode-indicator is-creating">
+              ● Creating New Purchase Entry
+            </span>
+          ) : (
+            <span className="active-mode-indicator is-initial">
+              ● Ready for New Entry
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Main White Form Container matching new purchase.jpg */}
+      {/* Main Form Container: Light Blue on Initial, Light Green on Creating, Light Pink on Editing */}
       <div
+        className={`dynamic-entry-card ${cardStateClass}`}
         style={{
-          backgroundColor: '#FFFFFF',
-          border: '2px solid #000000',
-          borderRadius: '14px',
-          padding: '24px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '16px',
           maxWidth: '960px',
-          margin: '0 auto',
-          boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)'
+          margin: '0 auto'
         }}
       >
         {/* Top Dates & Bill No Row */}
@@ -319,7 +368,10 @@ export const PurchaseEntryView: React.FC = () => {
               type="date"
               className="input-text-clean"
               value={billDate}
-              onChange={e => setBillDate(e.target.value)}
+              onChange={e => {
+                setIsTouched(true);
+                setBillDate(e.target.value);
+              }}
               style={{ width: '140px' }}
             />
           </div>
@@ -330,7 +382,10 @@ export const PurchaseEntryView: React.FC = () => {
               type="text"
               className="input-text-clean"
               value={billNo}
-              onChange={e => setBillNo(e.target.value)}
+              onChange={e => {
+                setIsTouched(true);
+                setBillNo(e.target.value);
+              }}
               style={{ width: '140px', fontWeight: 800 }}
             />
           </div>
@@ -341,7 +396,10 @@ export const PurchaseEntryView: React.FC = () => {
               type="date"
               className="input-text-clean"
               value={recdDate}
-              onChange={e => setRecdDate(e.target.value)}
+              onChange={e => {
+                setIsTouched(true);
+                setRecdDate(e.target.value);
+              }}
               style={{ width: '140px' }}
             />
           </div>
@@ -353,7 +411,10 @@ export const PurchaseEntryView: React.FC = () => {
           <select
             className="input-text-clean"
             value={supplierId}
-            onChange={e => setSupplierId(e.target.value)}
+            onChange={e => {
+              setIsTouched(true);
+              setSupplierId(e.target.value);
+            }}
             style={{ fontSize: '0.95rem', height: '38px', fontWeight: 700 }}
           >
             <option value="">-- Select Supplier / Vendor --</option>
@@ -367,7 +428,10 @@ export const PurchaseEntryView: React.FC = () => {
             type="button"
             className="btn-quick-n"
             title="Quick Create Supplier"
-            onClick={() => openQuickModal('SUPPLIER', (newId) => setSupplierId(newId))}
+            onClick={() => openQuickModal('SUPPLIER', (newId) => {
+              setIsTouched(true);
+              setSupplierId(newId);
+            })}
           >
             N
           </button>
@@ -406,7 +470,7 @@ export const PurchaseEntryView: React.FC = () => {
             gridTemplateColumns: '1.2fr 80px 1fr 1fr 80px 1fr auto',
             gap: '8px',
             alignItems: 'flex-end',
-            background: '#F9FAFB',
+            background: isFormActive ? '#FFFFFF' : '#F9FAFB',
             padding: '12px 10px',
             borderRadius: '6px',
             border: '1px solid #000000'
@@ -422,7 +486,10 @@ export const PurchaseEntryView: React.FC = () => {
               step="0.01"
               className="input-text-clean"
               value={basicPrice}
-              onChange={e => setBasicPrice(e.target.value)}
+              onChange={e => {
+                setIsTouched(true);
+                setBasicPrice(e.target.value);
+              }}
               style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }}
             />
           </div>
@@ -436,7 +503,10 @@ export const PurchaseEntryView: React.FC = () => {
               type="number"
               className="input-text-clean"
               value={gstPercent}
-              onChange={e => setGstPercent(e.target.value)}
+              onChange={e => {
+                setIsTouched(true);
+                setGstPercent(e.target.value);
+              }}
               style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }}
             />
           </div>
@@ -479,7 +549,10 @@ export const PurchaseEntryView: React.FC = () => {
               min="1"
               className="input-text-clean"
               value={qty}
-              onChange={e => setQty(e.target.value)}
+              onChange={e => {
+                setIsTouched(true);
+                setQty(e.target.value);
+              }}
               style={{ textAlign: 'center', padding: '4px', fontWeight: 900, color: '#EA3943' }}
             />
           </div>
@@ -529,7 +602,7 @@ export const PurchaseEntryView: React.FC = () => {
         </div>
 
         {/* ITEMS TABLE matching new purchase.jpg */}
-        <div style={{ border: '2px solid #000000', borderRadius: '4px', overflow: 'hidden' }}>
+        <div style={{ border: '2px solid #000000', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#D2BEF6', borderBottom: '2px solid #000000' }}>
@@ -647,8 +720,9 @@ export const PurchaseEntryView: React.FC = () => {
                 className="btn-customer-action-pill"
                 onClick={() => {
                   if (purchasesHistory.length > 0) {
-                    setShowHistory(true);
-                    showToast('Select a purchase from history to edit', 'info');
+                    showToast('Select a purchase from the history list below to edit', 'info');
+                    const el = document.getElementById('purchase-inward-register');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
                   } else {
                     showToast('No saved purchases found', 'warning');
                   }
@@ -677,42 +751,53 @@ export const PurchaseEntryView: React.FC = () => {
         </div>
       </div>
 
-      {/* Purchase History Drawer */}
-      {showHistory && (
-        <div style={{ marginTop: '28px', background: '#FFFFFF', border: '2px solid #000000', borderRadius: '12px', padding: '20px', maxWidth: '960px', margin: '28px auto 0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-            <h4 style={{ fontWeight: 900, fontSize: '1.05rem', margin: 0 }}>Purchase Inward Register</h4>
-            <div style={{ position: 'relative', width: '280px' }}>
-              <Search size={14} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
-              <input
-                type="text"
-                placeholder="Search bill no, supplier..."
-                className="input-text-clean"
-                value={searchHistory}
-                onChange={e => setSearchHistory(e.target.value)}
-                style={{ paddingLeft: '32px', fontSize: '0.85rem' }}
-              />
-            </div>
+      {/* Purchase Inward History in the Downside (Always Visible) */}
+      <div id="purchase-inward-register" style={{ marginTop: '28px', background: '#FFFFFF', border: '2px solid #000000', borderRadius: '12px', padding: '20px', maxWidth: '960px', margin: '28px auto 0', boxShadow: '0 2px 4px rgba(0,0,0,0.04)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h4 style={{ fontWeight: 900, fontSize: '1.1rem', margin: 0 }}>Purchase Inward Register (History)</h4>
+            <span style={{ fontSize: '0.8rem', background: '#E0E7FF', color: '#3730A3', padding: '2px 10px', borderRadius: '12px', fontWeight: 800 }}>
+              {filteredPurchases.length} {filteredPurchases.length === 1 ? 'Record' : 'Records'}
+            </span>
           </div>
+          <div style={{ position: 'relative', width: '280px' }}>
+            <Search size={14} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
+            <input
+              type="text"
+              placeholder="Search bill no, supplier..."
+              className="input-text-clean"
+              value={searchHistory}
+              onChange={e => setSearchHistory(e.target.value)}
+              style={{ paddingLeft: '32px', fontSize: '0.85rem' }}
+            />
+          </div>
+        </div>
 
-          <div className="custom-table-container">
-            <table className="custom-table">
-              <thead>
+        <div className="custom-table-container">
+          <table className="custom-table">
+            <thead>
+              <tr>
+                <th>Bill Date</th>
+                <th>Bill No.</th>
+                <th>Supplier / Party</th>
+                <th style={{ textAlign: 'center' }}>Total Items</th>
+                <th style={{ textAlign: 'right' }}>Bill Total</th>
+                <th style={{ textAlign: 'center' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredPurchases.length === 0 ? (
                 <tr>
-                  <th>Bill Date</th>
-                  <th>Bill No.</th>
-                  <th>Supplier / Party</th>
-                  <th style={{ textAlign: 'center' }}>Total Items</th>
-                  <th style={{ textAlign: 'right' }}>Bill Total</th>
-                  <th style={{ textAlign: 'center' }}>Action</th>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: '#9CA3AF', fontWeight: 600 }}>
+                    No purchase inward records found.
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {filteredPurchases.map(p => (
+              ) : (
+                filteredPurchases.map(p => (
                   <tr
                     key={p.id}
                     style={{
-                      backgroundColor: editingPurchaseId === p.id ? '#F5F3FF' : 'transparent',
+                      backgroundColor: editingPurchaseId === p.id ? '#EFF6FF' : 'transparent',
                       cursor: 'pointer'
                     }}
                     onClick={() => handleLoadPurchaseForEdit(p)}
@@ -728,29 +813,28 @@ export const PurchaseEntryView: React.FC = () => {
                         onClick={e => {
                           e.stopPropagation();
                           handleLoadPurchaseForEdit(p);
-                          setShowHistory(false);
                         }}
                         style={{
-                          background: '#E2D2F8',
-                          color: '#EA3943',
+                          background: editingPurchaseId === p.id ? '#BFDBFE' : '#E2D2F8',
+                          color: editingPurchaseId === p.id ? '#1E40AF' : '#EA3943',
                           border: '1px solid #C4B5FD',
                           borderRadius: '12px',
-                          padding: '2px 10px',
+                          padding: '3px 12px',
                           fontWeight: 800,
-                          fontSize: '0.78rem',
+                          fontSize: '0.8rem',
                           cursor: 'pointer'
                         }}
                       >
-                        Load
+                        {editingPurchaseId === p.id ? 'Editing' : 'Load'}
                       </button>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
 
       <ConfirmDialog
         isOpen={isDeleteConfirmOpen}

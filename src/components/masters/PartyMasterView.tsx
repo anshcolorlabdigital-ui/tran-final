@@ -11,22 +11,22 @@ export const PartyMasterView: React.FC = () => {
   const { hasPermission } = useAuth();
 
   const parties = useMemo(() => db.getParties(), [refreshKey]);
-  const [selectedPartyId, setSelectedPartyId] = useState<string | null>(parties[0]?.id || null);
+  const [selectedPartyId, setSelectedPartyId] = useState<string | null>(null);
+  const [isTouched, setIsTouched] = useState(false);
   const [search, setSearch] = useState('');
-  const [showDirectory, setShowDirectory] = useState(false);
 
   // Form Fields matching customer screenshot party.jpg
-  const [firmName, setFirmName] = useState(parties[0]?.name || '');
-  const [gstNo, setGstNo] = useState(parties[0]?.gstin || '');
-  const [propName, setPropName] = useState(parties[0]?.propName || '');
-  const [address, setAddress] = useState(parties[0]?.address || '');
-  const [block, setBlock] = useState(parties[0]?.block || '');
-  const [distt, setDistt] = useState(parties[0]?.distt || '');
-  const [city, setCity] = useState(parties[0]?.city || '');
-  const [state, setState] = useState(parties[0]?.state || '');
-  const [mobile1, setMobile1] = useState(parties[0]?.phone || '');
-  const [mobile2, setMobile2] = useState(parties[0]?.phone2 || '');
-  const [mailId, setMailId] = useState(parties[0]?.email || '');
+  const [firmName, setFirmName] = useState('');
+  const [gstNo, setGstNo] = useState('');
+  const [propName, setPropName] = useState('');
+  const [address, setAddress] = useState('');
+  const [block, setBlock] = useState('');
+  const [distt, setDistt] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [mobile1, setMobile1] = useState('');
+  const [mobile2, setMobile2] = useState('');
+  const [mailId, setMailId] = useState('');
 
   // Delete dialog
   const [deleteDialog, setDeleteDialog] = useState<{ isOpen: boolean; id: string; name: string }>({
@@ -35,8 +35,11 @@ export const PartyMasterView: React.FC = () => {
     name: ''
   });
 
+  const isFormActive = Boolean(isTouched || selectedPartyId || firmName.trim() !== '');
+
   const loadPartyIntoForm = (party: Party) => {
     setSelectedPartyId(party.id);
+    setIsTouched(true);
     setFirmName(party.name);
     setGstNo(party.gstin || '');
     setPropName(party.propName || '');
@@ -48,10 +51,13 @@ export const PartyMasterView: React.FC = () => {
     setMobile1(party.phone || '');
     setMobile2(party.phone2 || '');
     setMailId(party.email || '');
+    showToast(`Loaded ${party.name} for editing`, 'info');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleCreateNew = () => {
     setSelectedPartyId(null);
+    setIsTouched(false);
     setFirmName('');
     setGstNo('');
     setPropName('');
@@ -94,6 +100,7 @@ export const PartyMasterView: React.FC = () => {
 
     db.saveParty(partyRecord);
     setSelectedPartyId(partyRecord.id);
+    setIsTouched(false);
     showToast(`Party "${partyRecord.name}" saved successfully!`, 'success');
   };
 
@@ -134,44 +141,48 @@ export const PartyMasterView: React.FC = () => {
     );
   }, [parties, search]);
 
+  const isEditing = Boolean(selectedPartyId);
+  const isCreating = Boolean(!isEditing && (isTouched || firmName.trim() !== ''));
+
+  const cardStateClass = isEditing
+    ? 'is-editing-pink'
+    : isCreating
+    ? 'is-creating-green'
+    : 'is-initial-blue';
+
   return (
     <div className="content-panel-grey">
       {/* Top Header Strip matching party.jpg */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-        <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '8px 48px', minWidth: '160px', textAlign: 'center' }}>
-          PARTY
-        </div>
-
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <button
-            type="button"
-            onClick={() => setShowDirectory(!showDirectory)}
-            style={{
-              padding: '6px 16px',
-              borderRadius: '20px',
-              border: '1.5px solid #6B7280',
-              background: '#FFFFFF',
-              fontWeight: 800,
-              fontSize: '0.85rem',
-              cursor: 'pointer'
-            }}
-          >
-            {showDirectory ? 'Hide Party List' : `View All (${parties.length})`}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleCreateNew}
-            className="btn-customer-new-entry"
-            style={{ fontSize: '0.95rem', padding: '8px 24px' }}
-          >
-            CREATE PARTY
-          </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '8px 48px', minWidth: '160px', textAlign: 'center' }}>
+            PARTY
+          </div>
+          {isEditing ? (
+            <span className="active-mode-indicator is-editing">
+              ● Editing Party ({firmName || 'Saved Party'})
+            </span>
+          ) : isCreating ? (
+            <span className="active-mode-indicator is-creating">
+              ● Creating New Party
+            </span>
+          ) : (
+            <span className="active-mode-indicator is-initial">
+              ● Ready for New Party
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Main White Form Container matching party.jpg */}
-      <div style={{ background: '#FFFFFF', border: '2px solid #000000', borderRadius: '14px', padding: '32px', maxWidth: '850px', margin: '0 auto', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+      {/* Main Form Container: Light Blue on Initial, Light Green on Creating, Light Pink on Editing */}
+      <div
+        className={`dynamic-entry-card ${cardStateClass}`}
+        style={{
+          padding: '32px',
+          maxWidth: '850px',
+          margin: '0 auto'
+        }}
+      >
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           
           {/* Row 1: Firm Name & Gst No. */}
@@ -184,7 +195,10 @@ export const PartyMasterView: React.FC = () => {
                 type="text"
                 className="input-text-clean"
                 value={firmName}
-                onChange={e => setFirmName(e.target.value)}
+                onChange={e => {
+                  setIsTouched(true);
+                  setFirmName(e.target.value);
+                }}
                 placeholder="e.g. Royal Printers & Pack"
                 required
                 style={{ fontWeight: 800 }}
@@ -198,7 +212,10 @@ export const PartyMasterView: React.FC = () => {
                 type="text"
                 className="input-text-clean"
                 value={gstNo}
-                onChange={e => setGstNo(e.target.value)}
+                onChange={e => {
+                  setIsTouched(true);
+                  setGstNo(e.target.value);
+                }}
                 placeholder="e.g. 07AAAAA0000A1Z5"
                 style={{ fontFamily: 'monospace' }}
               />
@@ -214,7 +231,10 @@ export const PartyMasterView: React.FC = () => {
               type="text"
               className="input-text-clean"
               value={propName}
-              onChange={e => setPropName(e.target.value)}
+              onChange={e => {
+                setIsTouched(true);
+                setPropName(e.target.value);
+              }}
               placeholder="e.g. Vikram Singh"
             />
           </div>
@@ -228,7 +248,10 @@ export const PartyMasterView: React.FC = () => {
               type="text"
               className="input-text-clean"
               value={address}
-              onChange={e => setAddress(e.target.value)}
+              onChange={e => {
+                setIsTouched(true);
+                setAddress(e.target.value);
+              }}
               placeholder="e.g. 88, Central Commercial Hub"
             />
           </div>
@@ -243,7 +266,10 @@ export const PartyMasterView: React.FC = () => {
                 type="text"
                 className="input-text-clean"
                 value={block}
-                onChange={e => setBlock(e.target.value)}
+                onChange={e => {
+                  setIsTouched(true);
+                  setBlock(e.target.value);
+                }}
                 placeholder="e.g. Block-C"
               />
             </div>
@@ -255,7 +281,10 @@ export const PartyMasterView: React.FC = () => {
                 type="text"
                 className="input-text-clean"
                 value={distt}
-                onChange={e => setDistt(e.target.value)}
+                onChange={e => {
+                  setIsTouched(true);
+                  setDistt(e.target.value);
+                }}
                 placeholder="e.g. North"
               />
             </div>
@@ -271,7 +300,10 @@ export const PartyMasterView: React.FC = () => {
                 type="text"
                 className="input-text-clean"
                 value={city}
-                onChange={e => setCity(e.target.value)}
+                onChange={e => {
+                  setIsTouched(true);
+                  setCity(e.target.value);
+                }}
                 placeholder="e.g. Noida"
               />
             </div>
@@ -283,7 +315,10 @@ export const PartyMasterView: React.FC = () => {
                 type="text"
                 className="input-text-clean"
                 value={state}
-                onChange={e => setState(e.target.value)}
+                onChange={e => {
+                  setIsTouched(true);
+                  setState(e.target.value);
+                }}
                 placeholder="e.g. Uttar Pradesh"
               />
             </div>
@@ -299,7 +334,10 @@ export const PartyMasterView: React.FC = () => {
                 type="tel"
                 className="input-text-clean"
                 value={mobile1}
-                onChange={e => setMobile1(e.target.value)}
+                onChange={e => {
+                  setIsTouched(true);
+                  setMobile1(e.target.value);
+                }}
                 placeholder="Primary phone"
               />
             </div>
@@ -311,7 +349,10 @@ export const PartyMasterView: React.FC = () => {
                 type="tel"
                 className="input-text-clean"
                 value={mobile2}
-                onChange={e => setMobile2(e.target.value)}
+                onChange={e => {
+                  setIsTouched(true);
+                  setMobile2(e.target.value);
+                }}
                 placeholder="Alternate phone"
               />
             </div>
@@ -326,7 +367,10 @@ export const PartyMasterView: React.FC = () => {
               type="email"
               className="input-text-clean"
               value={mailId}
-              onChange={e => setMailId(e.target.value)}
+              onChange={e => {
+                setIsTouched(true);
+                setMailId(e.target.value);
+              }}
               placeholder="e.g. royalprinters@yahoo.com"
             />
           </div>
@@ -344,8 +388,13 @@ export const PartyMasterView: React.FC = () => {
                 type="button"
                 className="btn-customer-action-pill"
                 onClick={() => {
-                  setShowDirectory(true);
-                  showToast('Select a party from the list below to edit', 'info');
+                  if (parties.length > 0) {
+                    showToast('Select a party from the directory below to edit', 'info');
+                    const el = document.getElementById('party-directory-register');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  } else {
+                    showToast('No saved parties found', 'warning');
+                  }
                 }}
               >
                 Edit
@@ -371,42 +420,53 @@ export const PartyMasterView: React.FC = () => {
         </form>
       </div>
 
-      {/* Quick Select & Party Directory Drawer */}
-      {showDirectory && (
-        <div style={{ marginTop: '28px', background: '#FFFFFF', border: '2px solid #000000', borderRadius: '12px', padding: '20px', maxWidth: '850px', margin: '28px auto 0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-            <h4 style={{ fontWeight: 900, fontSize: '1.05rem', margin: 0 }}>Party Directory</h4>
-            <div style={{ position: 'relative', width: '280px' }}>
-              <Search size={14} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
-              <input
-                type="text"
-                placeholder="Search parties..."
-                className="input-text-clean"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                style={{ paddingLeft: '32px', fontSize: '0.85rem' }}
-              />
-            </div>
+      {/* Party Directory Register in the Downside (Always Visible) */}
+      <div id="party-directory-register" style={{ marginTop: '28px', background: '#FFFFFF', border: '2px solid #000000', borderRadius: '12px', padding: '20px', maxWidth: '850px', margin: '28px auto 0', boxShadow: '0 2px 4px rgba(0,0,0,0.04)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h4 style={{ fontWeight: 900, fontSize: '1.1rem', margin: 0 }}>Party Directory (Register)</h4>
+            <span style={{ fontSize: '0.8rem', background: '#E0E7FF', color: '#3730A3', padding: '2px 10px', borderRadius: '12px', fontWeight: 800 }}>
+              {filteredParties.length} {filteredParties.length === 1 ? 'Party' : 'Parties'}
+            </span>
           </div>
+          <div style={{ position: 'relative', width: '280px' }}>
+            <Search size={14} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
+            <input
+              type="text"
+              placeholder="Search parties..."
+              className="input-text-clean"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ paddingLeft: '32px', fontSize: '0.85rem' }}
+            />
+          </div>
+        </div>
 
-          <div className="custom-table-container">
-            <table className="custom-table">
-              <thead>
+        <div className="custom-table-container">
+          <table className="custom-table">
+            <thead>
+              <tr>
+                <th>Firm Name</th>
+                <th>Prop. Name</th>
+                <th>Mobile</th>
+                <th>CITY / State</th>
+                <th>GST No.</th>
+                <th style={{ textAlign: 'center' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredParties.length === 0 ? (
                 <tr>
-                  <th>Firm Name</th>
-                  <th>Prop. Name</th>
-                  <th>Mobile</th>
-                  <th>CITY / State</th>
-                  <th>GST No.</th>
-                  <th style={{ textAlign: 'center' }}>Select</th>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: '#9CA3AF', fontWeight: 600 }}>
+                    No parties found matching "{search}".
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {filteredParties.map(p => (
+              ) : (
+                filteredParties.map(p => (
                   <tr
                     key={p.id}
                     style={{
-                      backgroundColor: selectedPartyId === p.id ? '#F5F3FF' : 'transparent',
+                      backgroundColor: selectedPartyId === p.id ? '#EFF6FF' : 'transparent',
                       cursor: 'pointer'
                     }}
                     onClick={() => loadPartyIntoForm(p)}
@@ -422,30 +482,28 @@ export const PartyMasterView: React.FC = () => {
                         onClick={e => {
                           e.stopPropagation();
                           loadPartyIntoForm(p);
-                          setShowDirectory(false);
-                          showToast(`Loaded ${p.name}`, 'info');
                         }}
                         style={{
-                          background: '#E2D2F8',
-                          color: '#EA3943',
+                          background: selectedPartyId === p.id ? '#BFDBFE' : '#E2D2F8',
+                          color: selectedPartyId === p.id ? '#1E40AF' : '#EA3943',
                           border: '1px solid #C4B5FD',
                           borderRadius: '12px',
-                          padding: '2px 10px',
+                          padding: '3px 12px',
                           fontWeight: 800,
-                          fontSize: '0.78rem',
+                          fontSize: '0.8rem',
                           cursor: 'pointer'
                         }}
                       >
-                        Load
+                        {selectedPartyId === p.id ? 'Editing' : 'Load'}
                       </button>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
 
       {/* Delete Confirmation */}
       <ConfirmDialog

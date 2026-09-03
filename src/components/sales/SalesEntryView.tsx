@@ -47,6 +47,7 @@ export const SalesEntryView: React.FC = () => {
 
   // Items added to the bill
   const [billItems, setBillItems] = useState<SaleItem[]>([]);
+  const [isTouched, setIsTouched] = useState(false);
 
   // Payment Breakdown
   const [recdCash, setRecdCash] = useState<string>('0');
@@ -75,6 +76,7 @@ export const SalesEntryView: React.FC = () => {
 
   // When selected item changes, auto-populate configured rates
   const handleItemSelect = (itemId: string, unitType: 'unitA' | 'unitB' = 'unitA') => {
+    setIsTouched(true);
     setSelectedItemId(itemId);
     setSelectedUnitType(unitType);
     const found = items.find(i => i.id === itemId);
@@ -118,6 +120,8 @@ export const SalesEntryView: React.FC = () => {
     return calculateBillSummary(billItems);
   }, [billItems]);
 
+  const isFormActive = Boolean(editingSaleId || billItems.length > 0 || selectedItemId || isTouched);
+
   // Auto-balance payment when bill total changes if not manually set
   useEffect(() => {
     if (billItems.length > 0) {
@@ -131,6 +135,7 @@ export const SalesEntryView: React.FC = () => {
 
   // Add or Update Line Item
   const handleAddOrUpdateLineItem = () => {
+    setIsTouched(true);
     if (!selectedItemId) {
       showToast('Please select an item', 'error');
       return;
@@ -145,16 +150,18 @@ export const SalesEntryView: React.FC = () => {
     if (!itemObj) return;
 
     if (numQty > selectedItemCurrentStock) {
-      showToast(`Notice: Available stock is ${selectedItemCurrentStock} for ${itemObj.name}`, 'warning');
+      showToast(`Warning: Available stock is ${selectedItemCurrentStock} for ${itemObj.name}`, 'warning');
     }
 
-    const unitLabel = selectedUnitType === 'unitB' && itemObj.unitB?.unitName ? itemObj.unitB.unitName : itemObj.unitA?.unitName || itemObj.unit;
+    const unitLabel = selectedUnitType === 'unitB' 
+      ? (itemObj.unitB?.unitName || 'Unit B') 
+      : (itemObj.unitA?.unitName || itemObj.unit || 'Unit A');
 
     const newSaleItem: SaleItem = {
       id: `sale-item-${Date.now()}-${Math.random()}`,
       itemId: itemObj.id,
       sno: itemObj.sno,
-      itemName: `${itemObj.name}${unitLabel ? ` (${unitLabel})` : ''}`,
+      itemName: `${itemObj.name} (${unitLabel})`,
       unit: unitLabel,
       basicPrice: calculatedLinePricing.basicPrice,
       gstPercent: calculatedLinePricing.gstPercent,
@@ -171,10 +178,10 @@ export const SalesEntryView: React.FC = () => {
       updated[editingItemIndex] = newSaleItem;
       setBillItems(updated);
       setEditingItemIndex(null);
-      showToast('Item updated in bill table', 'info');
+      showToast('Item updated in sale bill', 'info');
     } else {
       setBillItems(prev => [...prev, newSaleItem]);
-      showToast('Item added to bill table', 'success');
+      showToast('Item added to sale bill', 'success');
     }
 
     // Reset line inputs
@@ -186,18 +193,20 @@ export const SalesEntryView: React.FC = () => {
   };
 
   const handleEditLineItem = (index: number) => {
+    setIsTouched(true);
     const item = billItems[index];
     const foundItem = items.find(i => i.id === item.itemId);
     if (foundItem?.category) setSelectedCategory(foundItem.category);
     setSelectedItemId(item.itemId);
     setBasicPrice(String(item.basicPrice));
     setGstPercent(String(item.gstPercent));
-    setToPercent(String(item.toPercent));
+    setToPercent(String(item.toPercent || 0));
     setQty(String(item.qty));
     setEditingItemIndex(index);
   };
 
   const handleDeleteLineItem = (index: number) => {
+    setIsTouched(true);
     setBillItems(prev => prev.filter((_, i) => i !== index));
     if (editingItemIndex === index) {
       setEditingItemIndex(null);
@@ -207,6 +216,7 @@ export const SalesEntryView: React.FC = () => {
 
   const handleNewEntry = () => {
     setEditingSaleId(null);
+    setIsTouched(false);
     setBillNo(StockEngine.getNextBillNumber('SALE'));
     setBillDate(getTodayDateString());
     if (parties.length > 0) setPartyId(parties[0].id);
@@ -215,12 +225,12 @@ export const SalesEntryView: React.FC = () => {
     setRecdUpi('0');
     setSelectedItemId('');
     setEditingItemIndex(null);
-    showToast('New Sale form ready', 'info');
+    showToast('New Sale entry ready', 'info');
   };
 
   const handleSaveSale = () => {
     if (!partyId) {
-      showToast('Please select a party / customer', 'error');
+      showToast('Please select a customer / party', 'error');
       return;
     }
     if (!billNo.trim()) {
@@ -254,24 +264,26 @@ export const SalesEntryView: React.FC = () => {
     // Save to Database: automatically registers SALE_OUT in universal Stock Ledger!
     db.saveSale(saleRecord);
 
-    showToast(`Sale Invoice ${saleRecord.billNo} saved successfully! Stock updated.`, 'success');
+    showToast(`Sale Invoice ${saleRecord.billNo} saved! Stock updated.`, 'success');
     handleNewEntry();
   };
 
   const handleLoadSaleForEdit = (sale: Sale) => {
     setEditingSaleId(sale.id);
+    setIsTouched(true);
     setBillNo(sale.billNo);
     setBillDate(sale.billDate);
     setPartyId(sale.partyId);
     setBillItems(sale.items);
-    setRecdCash(String(sale.recdCash));
-    setRecdUpi(String(sale.recdUpi));
+    setRecdCash(String(sale.recdCash || 0));
+    setRecdUpi(String(sale.recdUpi || 0));
     showToast(`Loaded invoice ${sale.billNo} for editing`, 'info');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDeleteCurrentSale = () => {
     if (!editingSaleId) {
-      showToast('Please select a saved bill to delete', 'warning');
+      showToast('Please select a saved invoice to delete', 'warning');
       return;
     }
     if (!hasPermission('DELETE_SALE')) {
@@ -284,7 +296,7 @@ export const SalesEntryView: React.FC = () => {
   const confirmDeleteSale = () => {
     if (editingSaleId) {
       db.deleteSale(editingSaleId);
-      showToast(`Sale Invoice deleted. Stock restored.`, 'info');
+      showToast(`Sale invoice deleted. Stock restored.`, 'info');
       handleNewEntry();
     }
   };
@@ -324,58 +336,53 @@ export const SalesEntryView: React.FC = () => {
     return items.find(i => i.id === selectedItemId);
   }, [items, selectedItemId]);
 
+  const isEditing = Boolean(editingSaleId);
+  const isCreating = Boolean(!isEditing && (isTouched || billItems.length > 0 || selectedItemId || (parties.length > 0 && partyId !== parties[0]?.id)));
+
+  const cardStateClass = isEditing
+    ? 'is-editing-pink'
+    : isCreating
+    ? 'is-creating-green'
+    : 'is-initial-blue';
+
   return (
     <div className="content-panel-grey">
       {/* Hidden Print Voucher */}
       <SalesPrintInvoice sale={currentSaleForPrint} />
 
-      {/* Top Header Strip matching sales new.jpg */}
+      {/* Top Header Strip */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-        <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '8px 48px', minWidth: '180px', textAlign: 'center' }}>
-          SALE ENTRY
-        </div>
-
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <button
-            type="button"
-            onClick={() => setShowHistory(!showHistory)}
-            style={{
-              padding: '6px 16px',
-              borderRadius: '20px',
-              border: '1.5px solid #6B7280',
-              background: '#FFFFFF',
-              fontWeight: 800,
-              fontSize: '0.85rem',
-              cursor: 'pointer'
-            }}
-          >
-            {showHistory ? 'Hide History' : `History (${salesHistory.length})`}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleNewEntry}
-            className="btn-customer-new-entry"
-            style={{ fontSize: '0.95rem', padding: '8px 24px' }}
-          >
-            NEW ENTRY
-          </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '8px 36px', minWidth: '220px', textAlign: 'center' }}>
+            SALE ENTRY
+          </div>
+          {isEditing ? (
+            <span className="active-mode-indicator is-editing">
+              ● Editing Sale Invoice ({billNo})
+            </span>
+          ) : isCreating ? (
+            <span className="active-mode-indicator is-creating">
+              ● Creating New Sale Entry
+            </span>
+          ) : (
+            <span className="active-mode-indicator is-initial">
+              ● Ready for New Entry
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Main White Card matching sales new.jpg */}
+      {/* Main Entry Card: Light Blue on Initial, Light Green on Creating, Light Pink on Editing */}
       <div
+        className={`dynamic-entry-card ${cardStateClass}`}
         style={{
-          backgroundColor: '#FFFFFF',
-          border: '2px solid #000000',
           borderRadius: '14px',
           padding: '24px',
           display: 'flex',
           flexDirection: 'column',
           gap: '16px',
           maxWidth: '960px',
-          margin: '0 auto',
-          boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)'
+          margin: '0 auto'
         }}
       >
         {/* Top date and bill no */}
@@ -386,7 +393,7 @@ export const SalesEntryView: React.FC = () => {
               type="date"
               className="input-text-clean"
               value={billDate}
-              onChange={e => setBillDate(e.target.value)}
+              onChange={e => { setIsTouched(true); setBillDate(e.target.value); }}
               style={{ width: '145px' }}
             />
           </div>
@@ -397,19 +404,19 @@ export const SalesEntryView: React.FC = () => {
               type="text"
               className="input-text-clean"
               value={billNo}
-              onChange={e => setBillNo(e.target.value)}
+              onChange={e => { setIsTouched(true); setBillNo(e.target.value); }}
               style={{ width: '140px', fontWeight: 800 }}
             />
           </div>
         </div>
 
-        {/* PARTY SELECTION ROW matching sales new.jpg */}
+        {/* PARTY SELECTION ROW */}
         <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 34px', gap: '10px', alignItems: 'center' }}>
           <label style={{ fontWeight: 900, fontSize: '1.05rem' }}>Party :</label>
           <select
             className="input-text-clean"
             value={partyId}
-            onChange={e => setPartyId(e.target.value)}
+            onChange={e => { setIsTouched(true); setPartyId(e.target.value); }}
             style={{ fontSize: '0.95rem', height: '38px', fontWeight: 700 }}
           >
             <option value="">-- Select Party / Customer --</option>
@@ -423,19 +430,20 @@ export const SalesEntryView: React.FC = () => {
             type="button"
             className="btn-quick-n"
             title="Quick Add Party"
-            onClick={() => openQuickModal('PARTY', (newId) => setPartyId(newId))}
+            onClick={() => openQuickModal('PARTY', (newId) => { setIsTouched(true); setPartyId(newId); })}
           >
             N
           </button>
         </div>
 
-        {/* CATG. ROW matching sales new.jpg */}
+        {/* CATG. ROW */}
         <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 34px', gap: '10px', alignItems: 'center' }}>
           <label style={{ fontWeight: 900, fontSize: '1.05rem' }}>CATG. :</label>
           <select
             className="input-text-clean"
             value={selectedCategory}
             onChange={e => {
+              setIsTouched(true);
               setSelectedCategory(e.target.value);
               setSelectedItemId('');
             }}
@@ -450,13 +458,13 @@ export const SalesEntryView: React.FC = () => {
             type="button"
             className="btn-quick-n"
             title="Quick Create Item/Category"
-            onClick={() => openQuickModal('ITEM')}
+            onClick={() => openQuickModal('ITEM', () => setIsTouched(true))}
           >
             N
           </button>
         </div>
 
-        {/* ITEM SELECTION ROW matching sales new.jpg */}
+        {/* ITEM SELECTION ROW */}
         <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 34px', gap: '10px', alignItems: 'center' }}>
           <label style={{ fontWeight: 900, fontSize: '1.05rem' }}>ITEM :</label>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -518,7 +526,7 @@ export const SalesEntryView: React.FC = () => {
           </button>
         </div>
 
-        {/* PRICING INPUT STRIP matching sales new.jpg */}
+        {/* PRICING INPUT STRIP */}
         <div
           style={{
             display: 'grid',
@@ -531,318 +539,122 @@ export const SalesEntryView: React.FC = () => {
             border: '1px solid #000000'
           }}
         >
-          {/* Basic Price */}
           <div>
-            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
-              Besic Price
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              className="input-text-clean"
-              value={basicPrice}
-              onChange={e => setBasicPrice(e.target.value)}
-              style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }}
-            />
+            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Besic Price</label>
+            <input type="number" step="0.01" className="input-text-clean" value={basicPrice} onChange={e => { setIsTouched(true); setBasicPrice(e.target.value); }} style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }} />
           </div>
-
-          {/* GST % */}
           <div>
-            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
-              GST %
-            </label>
-            <input
-              type="number"
-              className="input-text-clean"
-              value={gstPercent}
-              onChange={e => setGstPercent(e.target.value)}
-              style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }}
-            />
+            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>GST %</label>
+            <input type="number" className="input-text-clean" value={gstPercent} onChange={e => { setIsTouched(true); setGstPercent(e.target.value); }} style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }} />
           </div>
-
-          {/* GST Amt */}
           <div>
-            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
-              GST Amt.
-            </label>
-            <input
-              type="text"
-              readOnly
-              className="input-text-clean"
-              value={calculatedLinePricing.gstAmt}
-              style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }}
-            />
+            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>GST Amt.</label>
+            <input type="text" readOnly className="input-text-clean" value={calculatedLinePricing.gstAmt} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }} />
           </div>
-
-          {/* Nett Price */}
           <div>
-            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
-              Nett Price
-            </label>
-            <input
-              type="text"
-              readOnly
-              className="input-text-clean"
-              value={calculatedLinePricing.nettPrice}
-              style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }}
-            />
+            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Nett Price</label>
+            <input type="text" readOnly className="input-text-clean" value={calculatedLinePricing.nettPrice} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }} />
           </div>
-
-          {/* T&O % */}
           <div>
-            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
-              T&O%
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              className="input-text-clean"
-              value={toPercent}
-              onChange={e => setToPercent(e.target.value)}
-              style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }}
-            />
+            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>T&O%</label>
+            <input type="number" step="0.01" className="input-text-clean" value={toPercent} onChange={e => { setIsTouched(true); setToPercent(e.target.value); }} style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }} />
           </div>
-
-          {/* Sale Price */}
           <div>
-            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
-              Sale Price
-            </label>
-            <input
-              type="text"
-              readOnly
-              className="input-text-clean"
-              value={calculatedLinePricing.salePrice}
-              style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 800 }}
-            />
+            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Sale Price</label>
+            <input type="text" readOnly className="input-text-clean" value={calculatedLinePricing.salePrice} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 800 }} />
           </div>
-
-          {/* Qty */}
           <div>
-            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
-              Qty
-            </label>
-            <input
-              type="number"
-              min="1"
-              className="input-text-clean"
-              value={qty}
-              onChange={e => setQty(e.target.value)}
-              style={{ textAlign: 'center', padding: '4px', fontWeight: 900, color: '#EA3943' }}
-            />
+            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Qty</label>
+            <input type="number" min="1" className="input-text-clean" value={qty} onChange={e => { setIsTouched(true); setQty(e.target.value); }} style={{ textAlign: 'center', padding: '4px', fontWeight: 900, color: '#EA3943' }} />
           </div>
-
-          {/* Amount */}
           <div>
-            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
-              Amount
-            </label>
-            <input
-              type="text"
-              readOnly
-              className="input-text-clean"
-              value={calculatedLinePricing.amount}
-              style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 800 }}
-            />
+            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Amount</label>
+            <input type="text" readOnly className="input-text-clean" value={calculatedLinePricing.amount} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 800 }} />
           </div>
-
-          {/* Actions */}
           <div style={{ display: 'flex', gap: '6px', paddingBottom: '4px' }}>
-            <button
-              type="button"
-              onClick={handleAddOrUpdateLineItem}
-              style={{
-                color: '#EA3943',
-                background: 'transparent',
-                border: 'none',
-                fontWeight: 900,
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                padding: '2px 4px'
-              }}
-            >
-              {editingItemIndex !== null ? 'Update' : 'Add'}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (billItems.length > 0) handleEditLineItem(billItems.length - 1);
-              }}
-              style={{
-                color: '#EA3943',
-                background: 'transparent',
-                border: 'none',
-                fontWeight: 900,
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                padding: '2px 4px'
-              }}
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (billItems.length > 0) handleDeleteLineItem(billItems.length - 1);
-              }}
-              style={{
-                color: '#EA3943',
-                background: 'transparent',
-                border: 'none',
-                fontWeight: 900,
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                padding: '2px 4px'
-              }}
-            >
-              Del
-            </button>
+            <button type="button" onClick={handleAddOrUpdateLineItem} style={{ color: '#EA3943', background: 'transparent', border: 'none', fontWeight: 900, fontSize: '0.9rem', cursor: 'pointer', padding: '2px 4px' }}>{editingItemIndex !== null ? 'Update' : 'Add'}</button>
+            <button type="button" onClick={() => { if (billItems.length > 0) handleEditLineItem(billItems.length - 1); }} style={{ color: '#EA3943', background: 'transparent', border: 'none', fontWeight: 900, fontSize: '0.9rem', cursor: 'pointer', padding: '2px 4px' }}>Edit</button>
+            <button type="button" onClick={() => { if (billItems.length > 0) handleDeleteLineItem(billItems.length - 1); }} style={{ color: '#EA3943', background: 'transparent', border: 'none', fontWeight: 900, fontSize: '0.9rem', cursor: 'pointer', padding: '2px 4px' }}>Del</button>
           </div>
         </div>
 
         {/* ITEMS TABLE matching sales new.jpg */}
-        <div style={{ border: '2px solid #000000', borderRadius: '4px', overflow: 'hidden' }}>
+        <div style={{ border: '2px solid #000000', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#D2BEF6', borderBottom: '2px solid #000000' }}>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 800, borderRight: '1px solid #000000' }}>
-                  Item
-                </th>
-                <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, width: '100px', borderRight: '1px solid #000000' }}>
-                  Qty
-                </th>
-                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '120px', borderRight: '1px solid #000000' }}>
-                  Rate
-                </th>
-                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '140px' }}>
-                  Amount
-                </th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 800, borderRight: '1px solid #000000' }}>Item</th>
+                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '90px', borderRight: '1px solid #000000' }}>Besic Price</th>
+                <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, width: '70px', borderRight: '1px solid #000000' }}>GST</th>
+                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '90px', borderRight: '1px solid #000000' }}>Net Price</th>
+                <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, width: '70px', borderRight: '1px solid #000000' }}>T&O%</th>
+                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '90px', borderRight: '1px solid #000000' }}>Sale Price</th>
+                <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, width: '70px', borderRight: '1px solid #000000' }}>Qty</th>
+                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '120px' }}>Amount</th>
               </tr>
             </thead>
             <tbody>
               {billItems.length === 0 ? (
                 <tr>
-                  <td colSpan={4} style={{ padding: '30px', textAlign: 'center', color: '#9CA3AF', fontWeight: 600 }}>
-                    No items in current bill. Add items using the pricing strip above.
+                  <td colSpan={8} style={{ padding: '30px', textAlign: 'center', color: '#9CA3AF', fontWeight: 600 }}>
+                    No items in current sales invoice. Select item above and click "Add".
                   </td>
                 </tr>
               ) : (
                 billItems.map((item, idx) => (
-                  <tr
-                    key={idx}
-                    onClick={() => handleEditLineItem(idx)}
-                    style={{
-                      borderBottom: '1px solid #E5E7EB',
-                      cursor: 'pointer',
-                      background: editingItemIndex === idx ? '#F3E8FF' : 'transparent'
-                    }}
-                  >
-                    <td style={{ padding: '8px 12px', fontWeight: 800, borderRight: '1px solid #000000' }}>
-                      [{item.sno}] {item.itemName}
-                    </td>
-                    <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, color: '#EA3943', borderRight: '1px solid #000000' }}>
-                      {item.qty}
-                    </td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, borderRight: '1px solid #000000' }}>
-                      {item.salePrice}
-                    </td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800 }}>
-                      {item.amount}
-                    </td>
+                  <tr key={idx} onClick={() => handleEditLineItem(idx)} style={{ borderBottom: '1px solid #E5E7EB', cursor: 'pointer', background: editingItemIndex === idx ? '#F3E8FF' : 'transparent' }}>
+                    <td style={{ padding: '8px 12px', fontWeight: 800, borderRight: '1px solid #000000' }}>[{item.sno}] {item.itemName}</td>
+                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, borderRight: '1px solid #000000' }}>{item.basicPrice}</td>
+                    <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, borderRight: '1px solid #000000' }}>{item.gstPercent}%</td>
+                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, borderRight: '1px solid #000000' }}>{item.nettPrice}</td>
+                    <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, borderRight: '1px solid #000000' }}>{item.toPercent || 0}%</td>
+                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, borderRight: '1px solid #000000' }}>{item.salePrice}</td>
+                    <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, color: '#16A34A', borderRight: '1px solid #000000' }}>{item.qty}</td>
+                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800 }}>{item.amount}</td>
                   </tr>
                 ))
               )}
             </tbody>
             <tfoot>
               <tr style={{ background: '#D2BEF6', borderTop: '2px solid #000000' }}>
-                <td colSpan={3} style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 900, borderRight: '1px solid #000000' }}>
-                  Total
-                </td>
-                <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 900, color: '#002B99' }}>
-                  {billSummary.billTotal}
-                </td>
+                <td colSpan={7} style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 900, borderRight: '1px solid #000000' }}>Total</td>
+                <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 900, color: '#002B99' }}>{billSummary.billTotal}</td>
               </tr>
             </tfoot>
           </table>
         </div>
 
-        {/* BOTTOM SECTION: SUMMARY & AUTHENTIC CUSTOMER BUTTONS */}
+        {/* BOTTOM SECTION */}
         <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '30px', alignItems: 'center', marginTop: '10px' }}>
-          
-          {/* Financial Summary */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '300px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.95rem', fontWeight: 800 }}>
-              <span>Basic</span>
-              <span>{billSummary.basicTotal}</span>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.95rem', fontWeight: 800 }}>
-              <span>Gst</span>
-              <span>{billSummary.gstTotal}</span>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.95rem', fontWeight: 800 }}>
-              <span>Round up</span>
-              <span>{billSummary.roundUp}</span>
-            </div>
-
-            {/* BILL TOTAL */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.95rem', fontWeight: 800 }}><span>Basic</span><span>{billSummary.basicTotal}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.95rem', fontWeight: 800 }}><span>Gst</span><span>{billSummary.gstTotal}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.95rem', fontWeight: 800 }}><span>Round up</span><span>{billSummary.roundUp}</span></div>
             <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', alignItems: 'center', gap: '8px' }}>
               <span style={{ color: '#EA3943', fontWeight: 900, fontSize: '1.05rem' }}>BILL TOTAL</span>
-              <input
-                type="text"
-                readOnly
-                className="input-text-clean"
-                value={billSummary.billTotal}
-                style={{ textAlign: 'right', fontWeight: 900, fontSize: '1.15rem', background: '#FFFFFF', color: '#002B99' }}
-              />
+              <input type="text" readOnly className="input-text-clean" value={billSummary.billTotal} style={{ textAlign: 'right', fontWeight: 900, fontSize: '1.15rem', background: '#FFFFFF', color: '#002B99' }} />
             </div>
-
-            {/* RECD CASH */}
             <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', alignItems: 'center', gap: '8px' }}>
               <span style={{ color: '#EA3943', fontWeight: 900, fontSize: '0.95rem' }}>RECD CASH</span>
-              <input
-                type="number"
-                className="input-text-clean"
-                value={recdCash}
-                onChange={e => setRecdCash(e.target.value)}
-                style={{ textAlign: 'right', fontWeight: 800 }}
-              />
+              <input type="number" className="input-text-clean" value={recdCash} onChange={e => { setIsTouched(true); setRecdCash(e.target.value); }} style={{ textAlign: 'right', fontWeight: 800 }} />
             </div>
-
-            {/* RECD UPI */}
             <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', alignItems: 'center', gap: '8px' }}>
               <span style={{ color: '#EA3943', fontWeight: 900, fontSize: '0.95rem' }}>RECD UPI</span>
-              <input
-                type="number"
-                className="input-text-clean"
-                value={recdUpi}
-                onChange={e => setRecdUpi(e.target.value)}
-                style={{ textAlign: 'right', fontWeight: 800 }}
-              />
+              <input type="number" className="input-text-clean" value={recdUpi} onChange={e => { setIsTouched(true); setRecdUpi(e.target.value); }} style={{ textAlign: 'right', fontWeight: 800 }} />
             </div>
           </div>
 
-          {/* Customer Action Buttons matching sales new.jpg */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-            {/* Top Center: Mint Green Save Button */}
-            <button
-              type="button"
-              onClick={handleSaveSale}
-              className="btn-customer-save"
-            >
-              Save
-            </button>
-
-            {/* Bottom Row: Lavender Action Pills */}
+            <button type="button" onClick={handleSaveSale} className="btn-customer-save">Save</button>
             <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', flexWrap: 'wrap' }}>
               <button
                 type="button"
                 className="btn-customer-action-pill"
                 onClick={() => {
                   if (salesHistory.length > 0) {
-                    setShowHistory(true);
-                    showToast('Select an invoice from history to edit', 'info');
+                    showToast('Select an invoice from the history list below to edit', 'info');
+                    const el = document.getElementById('sales-invoices-register');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
                   } else {
                     showToast('No saved invoices found', 'warning');
                   }
@@ -850,67 +662,49 @@ export const SalesEntryView: React.FC = () => {
               >
                 Edit
               </button>
-
-              <button
-                type="button"
-                className="btn-customer-action-pill"
-                onClick={handleDeleteCurrentSale}
-              >
-                Del
-              </button>
-
-              <button
-                type="button"
-                className="btn-customer-action-pill"
-                onClick={handlePrint}
-              >
-                Print
-              </button>
+              <button type="button" className="btn-customer-action-pill" onClick={handleDeleteCurrentSale}>Del</button>
+              <button type="button" className="btn-customer-action-pill" onClick={handlePrint}>Print</button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Sales History Drawer */}
-      {showHistory && (
-        <div style={{ marginTop: '28px', background: '#FFFFFF', border: '2px solid #000000', borderRadius: '12px', padding: '20px', maxWidth: '960px', margin: '28px auto 0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-            <h4 style={{ fontWeight: 900, fontSize: '1.05rem', margin: 0 }}>Sales Invoices History</h4>
-            <div style={{ position: 'relative', width: '280px' }}>
-              <Search size={14} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
-              <input
-                type="text"
-                placeholder="Search invoice, customer..."
-                className="input-text-clean"
-                value={searchHistory}
-                onChange={e => setSearchHistory(e.target.value)}
-                style={{ paddingLeft: '32px', fontSize: '0.85rem' }}
-              />
-            </div>
+      {/* Sales Invoices History in the Downside (Always Visible) */}
+      <div id="sales-invoices-register" style={{ marginTop: '28px', background: '#FFFFFF', border: '2px solid #000000', borderRadius: '12px', padding: '20px', maxWidth: '960px', margin: '28px auto 0', boxShadow: '0 2px 4px rgba(0,0,0,0.04)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h4 style={{ fontWeight: 900, fontSize: '1.1rem', margin: 0 }}>Sales Invoices Register (History)</h4>
+            <span style={{ fontSize: '0.8rem', background: '#E0E7FF', color: '#3730A3', padding: '2px 10px', borderRadius: '12px', fontWeight: 800 }}>
+              {filteredSales.length} {filteredSales.length === 1 ? 'Record' : 'Records'}
+            </span>
           </div>
-
-          <div className="custom-table-container">
-            <table className="custom-table">
-              <thead>
+          <div style={{ position: 'relative', width: '280px' }}>
+            <Search size={14} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
+            <input type="text" placeholder="Search invoice, customer..." className="input-text-clean" value={searchHistory} onChange={e => setSearchHistory(e.target.value)} style={{ paddingLeft: '32px', fontSize: '0.85rem' }} />
+          </div>
+        </div>
+        <div className="custom-table-container">
+          <table className="custom-table">
+            <thead>
+              <tr>
+                <th>Invoice Date</th>
+                <th>Bill No.</th>
+                <th>Party / Customer</th>
+                <th style={{ textAlign: 'center' }}>Total Items</th>
+                <th style={{ textAlign: 'right' }}>Bill Total</th>
+                <th style={{ textAlign: 'center' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredSales.length === 0 ? (
                 <tr>
-                  <th>Invoice Date</th>
-                  <th>Bill No.</th>
-                  <th>Party / Customer</th>
-                  <th style={{ textAlign: 'center' }}>Total Items</th>
-                  <th style={{ textAlign: 'right' }}>Bill Total</th>
-                  <th style={{ textAlign: 'center' }}>Action</th>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: '#9CA3AF', fontWeight: 600 }}>
+                    No sales invoice records found.
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {filteredSales.map(s => (
-                  <tr
-                    key={s.id}
-                    style={{
-                      backgroundColor: editingSaleId === s.id ? '#F5F3FF' : 'transparent',
-                      cursor: 'pointer'
-                    }}
-                    onClick={() => handleLoadSaleForEdit(s)}
-                  >
+              ) : (
+                filteredSales.map(s => (
+                  <tr key={s.id} style={{ backgroundColor: editingSaleId === s.id ? '#EFF6FF' : 'transparent', cursor: 'pointer' }} onClick={() => handleLoadSaleForEdit(s)}>
                     <td>{s.billDate}</td>
                     <td style={{ fontWeight: 800 }}>{s.billNo}</td>
                     <td>{s.partyName}</td>
@@ -922,29 +716,28 @@ export const SalesEntryView: React.FC = () => {
                         onClick={e => {
                           e.stopPropagation();
                           handleLoadSaleForEdit(s);
-                          setShowHistory(false);
                         }}
                         style={{
-                          background: '#E2D2F8',
-                          color: '#EA3943',
+                          background: editingSaleId === s.id ? '#BFDBFE' : '#E2D2F8',
+                          color: editingSaleId === s.id ? '#1E40AF' : '#EA3943',
                           border: '1px solid #C4B5FD',
                           borderRadius: '12px',
-                          padding: '2px 10px',
+                          padding: '3px 12px',
                           fontWeight: 800,
-                          fontSize: '0.78rem',
+                          fontSize: '0.8rem',
                           cursor: 'pointer'
                         }}
                       >
-                        Load
+                        {editingSaleId === s.id ? 'Editing' : 'Load'}
                       </button>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
 
       <ConfirmDialog
         isOpen={isDeleteConfirmOpen}

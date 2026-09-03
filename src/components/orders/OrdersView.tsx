@@ -6,79 +6,66 @@ import { StockEngine } from '../../db/stockEngine';
 import { formatDateToDisplay, getTodayDateString } from '../../utils/dateUtils';
 import { OrderReceiptModal } from './OrderReceiptModal';
 import { CreateOrderModal } from './CreateOrderModal';
-import { OrderReceiveModal } from './OrderReceiveModal';
 import { ReceiptData } from '../../utils/shareUtils';
-import { Plus, Trash2, CheckCircle2, Share2, PackageCheck } from 'lucide-react';
-import { ConfirmDialog } from '../common/ConfirmDialog';
-
-interface PendingRowState {
-  itemId: string;
-  sno: string;
-  name: string;
-  qty: number;
-  selectedSupplierId: string;
-}
+import { Plus, Share2, ArrowRight, Package, ListOrdered } from 'lucide-react';
 
 export const OrdersView: React.FC = () => {
-  const { refreshKey, showToast, selectedDate } = useApp();
+  const { refreshKey, showToast, selectedDate, setActiveTab } = useApp();
 
   // Modals state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [activeReceiptData, setActiveReceiptData] = useState<ReceiptData | null>(null);
-  const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false);
-  const [selectedOrderForReceive, setSelectedOrderForReceive] = useState<SupplierOrder | null>(null);
 
-  // Delete confirmation
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    isOpen: boolean;
-    orderId?: string;
-    itemId?: string;
-  }>({ isOpen: false });
+  // Staged / Draft Order Items waiting to be placed (keyed by supplierId)
+  const [draftSupplierItems, setDraftSupplierItems] = useState<{
+    [supplierId: string]: {
+      supplier: Supplier;
+      items: OrderItem[];
+    };
+  }>({});
 
-  // Load suppliers and existing orders
+  // Draft remarks per supplier
+  const [draftRemarks, setDraftRemarks] = useState<{ [supplierId: string]: string }>({});
+
+  // Load suppliers, orders, and stock summaries
   const suppliers = useMemo(() => db.getSuppliers().filter(s => s.isActive !== false), [refreshKey]);
-  const existingOrders = useMemo(() => db.getOrders(), [refreshKey]);
+  const allOrders = useMemo(() => db.getOrders(), [refreshKey]);
   const lowStockSummaries = useMemo(() => StockEngine.getLowStockItems(), [refreshKey]);
 
   // Pending quantities map for low-stock items
   const [pendingOverrides, setPendingOverrides] = useState<{ [itemId: string]: number }>({});
 
-  // Active unplaced or active placed orders
-  const placedOrders = useMemo(() => {
-    return existingOrders.filter(o => o.status === 'ORDERED' || o.status === 'PARTIALLY_RECEIVED');
-  }, [existingOrders]);
+  // Active placed orders count
+  const placedOrdersCount = useMemo(() => {
+    return allOrders.filter(o => o.status === 'ORDERED' || o.status === 'PARTIALLY_RECEIVED').length;
+  }, [allOrders]);
 
-  // Low stock items that do NOT have an active placed order
+  // Low stock items that are NOT currently in draft
   const pendingLowStockItems = useMemo(() => {
-    return lowStockSummaries.filter(summary => {
-      const isAlreadyInActiveOrder = placedOrders.some(order =>
-        order.items.some(oi => oi.itemId === summary.item.id)
-      );
-      return !isAlreadyInActiveOrder;
+    const draftItemIds = new Set<string>();
+    Object.values(draftSupplierItems).forEach(group => {
+      group.items.forEach(it => draftItemIds.add(it.itemId));
     });
-  }, [lowStockSummaries, placedOrders]);
 
-  // Handle supplier assignment for a pending item
+    return lowStockSummaries.filter(summary => !draftItemIds.has(summary.item.id));
+  }, [lowStockSummaries, draftSupplierItems]);
+
+  // Assign a pending item to a supplier draft
   const handleAssignSupplierToPending = (summary: ItemStockSummary, supplierId: string) => {
     if (!supplierId) return;
-
     const supplier = suppliers.find(s => s.id === supplierId);
     if (!supplier) return;
 
     const qtyToOrder = pendingOverrides[summary.item.id] ?? Math.max(1, summary.item.minStock * 2 || 10);
     const orderDate = getTodayDateString();
 
-    // Check if there is already an active order draft for this supplier created today
-    const existingSupplierOrder = placedOrders.find(
-      o => o.supplierId === supplierId && o.orderDate === orderDate
-    );
-
     const newOrderItem: OrderItem = {
-      id: `ord-item-${Date.now()}-${Math.random()}`,
+      id: `ord-item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
       sno: summary.item.sno,
       itemId: summary.item.id,
       itemName: summary.item.name,
+      description: summary.item.description,
       orderedQty: qtyToOrder,
       receivedQty: 0,
       supplierId: supplier.id,
@@ -87,66 +74,102 @@ export const OrdersView: React.FC = () => {
       status: 'ORDERED'
     };
 
-    if (existingSupplierOrder) {
-      // Append to existing supplier group
-      existingSupplierOrder.items.push(newOrderItem);
-      db.saveOrder(existingSupplierOrder);
-    } else {
-      // Create new supplier order group
-      const newOrder: SupplierOrder = {
-        id: `ord-${Date.now()}`,
-        orderNumber: StockEngine.getNextBillNumber('ORDER'),
-        orderDate,
-        supplierId: supplier.id,
-        supplierName: supplier.name,
-        status: 'ORDERED',
-        items: [newOrderItem],
-        createdAt: new Date().toISOString()
+    setDraftSupplierItems(prev => {
+      const existing = prev[supplier.id] || { supplier, items: [] };
+      return {
+        ...prev,
+        [supplier.id]: {
+          supplier,
+          items: [...existing.items, newOrderItem]
+        }
       };
-      db.saveOrder(newOrder);
-    }
+    });
 
-    showToast(`Added "${summary.item.name}" to ${supplier.name} order group!`, 'success');
+    showToast(`Added "${summary.item.name}" to ${supplier.name} order draft!`, 'success');
   };
 
-  // Trigger ORDER DONE
-  const handleOrderDone = (order: SupplierOrder) => {
-    // Generate clean receipt (Contains ONLY S.No., Date, Item, Quantity)
+  // Remove an item from the draft
+  const handleRemoveDraftItem = (supplierId: string, itemId: string) => {
+    setDraftSupplierItems(prev => {
+      const group = prev[supplierId];
+      if (!group) return prev;
+      const updatedItems = group.items.filter(it => it.id !== itemId);
+      if (updatedItems.length === 0) {
+        const copy = { ...prev };
+        delete copy[supplierId];
+        return copy;
+      }
+      return {
+        ...prev,
+        [supplierId]: {
+          ...group,
+          items: updatedItems
+        }
+      };
+    });
+    showToast('Item removed from draft.', 'info');
+  };
+
+  // ORDER PLACE: Finalizes draft into a distinct, independent SupplierOrder and opens share popup
+  const handlePlaceOrder = (supplierId: string) => {
+    const draftGroup = draftSupplierItems[supplierId];
+    if (!draftGroup || draftGroup.items.length === 0) return;
+
+    const orderDate = getTodayDateString();
+    const remark = (draftRemarks[supplierId] || '').trim();
+
+    const newOrder: SupplierOrder = {
+      id: `ord-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      orderNumber: StockEngine.getNextBillNumber('ORDER'),
+      orderDate,
+      supplierId: draftGroup.supplier.id,
+      supplierName: draftGroup.supplier.name,
+      status: 'ORDERED',
+      items: [...draftGroup.items],
+      notes: remark,
+      createdAt: new Date().toISOString()
+    };
+
+    // Save independent order to DB
+    db.saveOrder(newOrder);
+
+    // Clear draft for this supplier
+    setDraftSupplierItems(prev => {
+      const copy = { ...prev };
+      delete copy[supplierId];
+      return copy;
+    });
+
+    setDraftRemarks(prev => {
+      const copy = { ...prev };
+      delete copy[supplierId];
+      return copy;
+    });
+
+    // Generate clean receipt (Contains ONLY S.No., Date, Item, Description, Quantity, Remark)
     const receiptData: ReceiptData = {
-      date: order.orderDate,
-      items: order.items.map(item => ({
+      date: newOrder.orderDate,
+      orderNumber: newOrder.orderNumber,
+      supplierName: newOrder.supplierName,
+      items: newOrder.items.map(item => ({
         sno: item.sno,
         itemName: item.itemName,
+        description: item.description,
         qty: item.orderedQty
-      }))
+      })),
+      notes: remark
     };
 
     setActiveReceiptData(receiptData);
     setIsReceiptModalOpen(true);
-    showToast(`Order placed for ${order.supplierName}! Share receipt generated.`, 'success');
+    showToast(`Order #${newOrder.orderNumber} placed! Screenshot slip generated. Moved to ORDERED section.`, 'success');
   };
 
-  // Remove Item from an Order
-  const handleRemoveOrderItem = (order: SupplierOrder, itemId: string) => {
-    order.items = order.items.filter(i => i.id !== itemId);
-    if (order.items.length === 0) {
-      db.deleteOrder(order.id);
-      showToast('Order group removed.', 'info');
-    } else {
-      db.saveOrder(order);
-      showToast('Item removed from order.', 'info');
-    }
-  };
-
-  // Open Receive Modal
-  const handleOpenReceive = (order: SupplierOrder) => {
-    setSelectedOrderForReceive(order);
-    setIsReceiveModalOpen(true);
-  };
+  const draftSupplierList = Object.values(draftSupplierItems);
 
   return (
     <div className="content-panel-grey">
-      {/* Top Header Bar matching Screenshot 32177.jpg */}
+      {/* Top Header Bar */}
       <div
         style={{
           backgroundColor: 'var(--color-lime)',
@@ -156,87 +179,139 @@ export const OrdersView: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          marginBottom: '2px'
+          marginBottom: '2px',
+          flexWrap: 'wrap',
+          gap: '10px'
         }}
       >
-        <h2
-          style={{
-            fontFamily: 'Outfit, sans-serif',
-            fontWeight: 900,
-            fontSize: '1.4rem',
-            color: '#002B99',
-            letterSpacing: '0.06em',
-            textTransform: 'uppercase'
-          }}
-        >
-          ORDER
-        </h2>
-
-        <button
-          onClick={() => setIsCreateModalOpen(true)}
-          className="btn-red-action"
-          style={{ padding: '8px 20px', fontSize: '0.9rem' }}
-        >
-          <Plus size={16} />
-          CREATE NEW ORDER
-        </button>
-      </div>
-
-      {/* Existing Supplier Orders Section */}
-      <div
-        style={{
-          border: '2px solid #000000',
-          borderTop: 'none',
-          backgroundColor: '#FFFFFF',
-          padding: '16px',
-          marginBottom: '28px',
-          borderRadius: '0 0 8px 8px'
-        }}
-      >
-        {/* Table Column Header strip matching Screenshot 32177 */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '80px 110px 1fr 100px 140px 90px',
-            gap: '8px',
-            padding: '8px 12px',
-            background: 'var(--color-lime)',
-            border: '1px solid #000000',
-            borderRadius: '4px',
-            fontFamily: 'Outfit, sans-serif',
-            fontWeight: 800,
-            fontSize: '0.9rem',
-            textTransform: 'uppercase',
-            color: '#000000',
-            marginBottom: '14px'
-          }}
-        >
-          <div>SNO</div>
-          <div>DATE</div>
-          <div>ITEM</div>
-          <div style={{ textAlign: 'center', color: '#EA3943' }}>QTY</div>
-          <div>SUPPLIER</div>
-          <div style={{ textAlign: 'center' }}>REMOVE</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <h2
+            style={{
+              fontFamily: 'Outfit, sans-serif',
+              fontWeight: 900,
+              fontSize: '1.4rem',
+              color: '#002B99',
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              margin: 0
+            }}
+          >
+            ORDER
+          </h2>
+          <span style={{ fontSize: '0.8rem', background: '#FFFFFF', color: '#002B99', padding: '2px 12px', borderRadius: '12px', fontWeight: 800, border: '1px solid #002B99' }}>
+            {pendingLowStockItems.length} Pending Items
+          </span>
         </div>
 
-        {/* Grouped by Supplier Orders */}
-        {placedOrders.length === 0 ? (
-          <div style={{ padding: '24px', textAlign: 'center', color: '#6B7280', fontWeight: 600 }}>
-            No active supplier orders. Items in Pending Order below can be assigned to suppliers.
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          {/* Quick link button to ORDERED section */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('ORDERED')}
+            style={{
+              backgroundColor: '#FFFFFF',
+              color: '#002B99',
+              border: '1.5px solid #002B99',
+              borderRadius: '20px',
+              padding: '6px 16px',
+              fontWeight: 800,
+              fontSize: '0.85rem',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <ListOrdered size={16} />
+            <span>Go to ORDERED Section ({placedOrdersCount})</span>
+            <ArrowRight size={14} />
+          </button>
+
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="btn-red-action"
+            style={{ padding: '8px 20px', fontSize: '0.9rem' }}
+          >
+            <Plus size={16} />
+            CREATE NEW ORDER
+          </button>
+        </div>
+      </div>
+
+      {/* NEW ORDER PLACEMENT / DRAFT SECTION (When supplier is selected for items) */}
+      {draftSupplierList.length > 0 && (
+        <div
+          className="dynamic-entry-card is-creating-green"
+          style={{
+            border: '2px solid #10B981',
+            borderRadius: '0 0 8px 8px',
+            padding: '16px',
+            marginBottom: '28px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span className="active-mode-indicator is-creating">
+                ● Ready to Place Order ({draftSupplierList.length} {draftSupplierList.length === 1 ? 'Supplier' : 'Suppliers'})
+              </span>
+              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#065F46' }}>
+                Add remarks and click "ORDER PLACE" to generate shareable screenshot & move to ORDERED section
+              </span>
+            </div>
           </div>
-        ) : (
-          placedOrders.map(order => (
+
+          {/* Draft Orders per Supplier */}
+          {draftSupplierList.map(group => (
             <div
-              key={order.id}
+              key={group.supplier.id}
               style={{
-                marginBottom: '24px',
-                borderBottom: '2px dashed #D1D5DB',
-                paddingBottom: '20px'
+                background: '#FFFFFF',
+                border: '2px solid #059669',
+                borderRadius: '8px',
+                padding: '16px',
+                marginBottom: '14px',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.04)'
               }}
             >
-              {/* Order Items Rows */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {order.items.map(item => (
+              {/* Supplier Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <span style={{ fontWeight: 900, fontSize: '1.05rem', color: '#065F46' }}>
+                  Supplier: {group.supplier.name}
+                </span>
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#6B7280' }}>
+                  Date: {formatDateToDisplay(getTodayDateString())}
+                </span>
+              </div>
+
+              {/* Table Column Header */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '80px 110px 1fr 100px 140px 90px',
+                  gap: '8px',
+                  padding: '6px 12px',
+                  background: 'var(--color-lime)',
+                  border: '1px solid #000000',
+                  borderRadius: '4px',
+                  fontFamily: 'Outfit, sans-serif',
+                  fontWeight: 800,
+                  fontSize: '0.85rem',
+                  textTransform: 'uppercase',
+                  color: '#000000',
+                  marginBottom: '8px'
+                }}
+              >
+                <div>SNO</div>
+                <div>DATE</div>
+                <div>ITEM & DESCRIPTION</div>
+                <div style={{ textAlign: 'center', color: '#EA3943' }}>QTY</div>
+                <div>SUPPLIER</div>
+                <div style={{ textAlign: 'center' }}>REMOVE</div>
+              </div>
+
+              {/* Item Rows with Description in Smaller Light Grey Font */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {group.items.map(item => (
                   <div
                     key={item.id}
                     style={{
@@ -246,90 +321,32 @@ export const OrdersView: React.FC = () => {
                       alignItems: 'center'
                     }}
                   >
-                    {/* SNO */}
-                    <div
-                      style={{
-                        background: '#ECECEC',
-                        border: '1px solid #000000',
-                        borderRadius: '4px',
-                        padding: '6px 8px',
-                        fontWeight: 700,
-                        fontFamily: 'monospace',
-                        textAlign: 'center',
-                        fontSize: '0.88rem'
-                      }}
-                    >
+                    <div style={{ background: '#ECECEC', border: '1px solid #000000', borderRadius: '4px', padding: '6px 8px', fontWeight: 700, fontFamily: 'monospace', textAlign: 'center', fontSize: '0.88rem' }}>
                       {item.sno}
                     </div>
-
-                    {/* Date */}
-                    <div
-                      style={{
-                        background: '#ECECEC',
-                        border: '1px solid #000000',
-                        borderRadius: '4px',
-                        padding: '6px 8px',
-                        fontWeight: 700,
-                        textAlign: 'center',
-                        fontSize: '0.85rem'
-                      }}
-                    >
-                      {formatDateToDisplay(order.orderDate)}
+                    <div style={{ background: '#ECECEC', border: '1px solid #000000', borderRadius: '4px', padding: '6px 8px', fontWeight: 700, textAlign: 'center', fontSize: '0.85rem' }}>
+                      {formatDateToDisplay(item.orderDate)}
                     </div>
-
-                    {/* Item Name */}
-                    <div
-                      style={{
-                        background: '#ECECEC',
-                        border: '1px solid #000000',
-                        borderRadius: '4px',
-                        padding: '6px 12px',
-                        fontWeight: 800,
-                        fontSize: '0.92rem',
-                        color: '#000000'
-                      }}
-                    >
-                      {item.itemName}
+                    <div style={{ background: '#ECECEC', border: '1px solid #000000', borderRadius: '4px', padding: '6px 12px' }}>
+                      <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#000000' }}>
+                        {item.itemName}
+                      </div>
+                      {item.description && item.description.trim() && (
+                        <div style={{ fontSize: '0.78rem', color: '#6B7280', fontWeight: 500, marginTop: '2px' }}>
+                          {item.description.trim()}
+                        </div>
+                      )}
                     </div>
-
-                    {/* Qty */}
-                    <div
-                      style={{
-                        background: '#ECECEC',
-                        border: '1px solid #000000',
-                        borderRadius: '4px',
-                        padding: '6px 8px',
-                        fontWeight: 900,
-                        fontSize: '1rem',
-                        textAlign: 'center',
-                        color: '#EA3943'
-                      }}
-                    >
+                    <div style={{ background: '#ECECEC', border: '1px solid #000000', borderRadius: '4px', padding: '6px 8px', fontWeight: 900, fontSize: '1rem', textAlign: 'center', color: '#EA3943' }}>
                       {item.orderedQty}
                     </div>
-
-                    {/* Supplier */}
-                    <div
-                      style={{
-                        background: '#FFFFFF',
-                        border: '1px solid #000000',
-                        borderRadius: '4px',
-                        padding: '6px 8px',
-                        fontWeight: 800,
-                        fontSize: '0.88rem',
-                        textAlign: 'center',
-                        color: '#000000',
-                        textTransform: 'uppercase'
-                      }}
-                    >
-                      {order.supplierName}
+                    <div style={{ background: '#FFFFFF', border: '1px solid #000000', borderRadius: '4px', padding: '6px 8px', fontWeight: 800, fontSize: '0.88rem', textAlign: 'center', color: '#000000', textTransform: 'uppercase' }}>
+                      {group.supplier.name}
                     </div>
-
-                    {/* Remove DEL Button */}
                     <div style={{ textAlign: 'center' }}>
                       <button
                         type="button"
-                        onClick={() => handleRemoveOrderItem(order, item.id)}
+                        onClick={() => handleRemoveDraftItem(group.supplier.id, item.id)}
                         style={{
                           background: '#FFFFFF',
                           border: '1px solid #000000',
@@ -348,69 +365,65 @@ export const OrdersView: React.FC = () => {
                 ))}
               </div>
 
-              {/* Action Buttons under each supplier group */}
+              {/* Remark / Note Input before ORDER PLACE */}
               <div
                 style={{
+                  marginTop: '14px',
                   display: 'flex',
-                  justifyContent: 'flex-end',
                   alignItems: 'center',
                   gap: '12px',
-                  marginTop: '12px'
+                  backgroundColor: '#F9FAFB',
+                  border: '1px solid #D1D5DB',
+                  borderRadius: '6px',
+                  padding: '8px 12px'
                 }}
               >
-                <button
-                  type="button"
-                  onClick={() => handleOpenReceive(order)}
-                  style={{
-                    background: '#FFFFFF',
-                    border: '1px solid #16A34A',
-                    color: '#16A34A',
-                    borderRadius: 'var(--radius-pill)',
-                    padding: '8px 18px',
-                    fontWeight: 800,
-                    fontSize: '0.85rem',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <PackageCheck size={16} />
-                  Receive Goods / Inward Stock
-                </button>
+                <label style={{ fontWeight: 800, fontSize: '0.88rem', color: '#1F2937', minWidth: '140px' }}>
+                  Remark / Note:
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Urgent delivery by 5 PM / Grade A quality (will appear on receipt & slip)"
+                  className="input-text-clean"
+                  value={draftRemarks[group.supplier.id] || ''}
+                  onChange={e => setDraftRemarks(prev => ({ ...prev, [group.supplier.id]: e.target.value }))}
+                  style={{ flex: 1, padding: '6px 12px', fontSize: '0.88rem' }}
+                />
+              </div>
 
-                {/* ORDER DONE BUTTON (Matching Screenshot 32177) */}
+              {/* ORDER PLACE Button matching customer requirement */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '14px' }}>
                 <button
                   type="button"
-                  onClick={() => handleOrderDone(order)}
+                  onClick={() => handlePlaceOrder(group.supplier.id)}
                   style={{
                     background: 'var(--color-lime)',
                     border: '2px solid #15803D',
                     color: '#000000',
                     borderRadius: 'var(--radius-pill)',
-                    padding: '8px 24px',
+                    padding: '10px 32px',
                     fontWeight: 900,
-                    fontSize: '0.95rem',
+                    fontSize: '1rem',
                     textTransform: 'uppercase',
                     letterSpacing: '0.04em',
                     cursor: 'pointer',
-                    boxShadow: 'var(--shadow-sm)',
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px'
+                    gap: '8px'
                   }}
                 >
-                  <Share2 size={16} color="#000000" />
-                  ORDER DONE
+                  <Share2 size={18} color="#000000" />
+                  ORDER PLACE
                 </button>
               </div>
             </div>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* PENDING ORDER SECTION (Matching Screenshot 32177) */}
-      <div style={{ marginTop: '20px' }}>
+      <div style={{ marginTop: '10px' }}>
         {/* Lime Header Pill */}
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
           <div
@@ -441,7 +454,7 @@ export const OrdersView: React.FC = () => {
         >
           {pendingLowStockItems.length === 0 ? (
             <div style={{ padding: '24px', textAlign: 'center', color: '#16A34A', fontWeight: 700 }}>
-              ✓ No pending low-stock items. All items are either well-stocked or already assigned to suppliers.
+              ✓ No pending low-stock items. All items are either well-stocked or assigned to order draft.
             </div>
           ) : (
             pendingLowStockItems.map(summary => {
@@ -489,19 +502,23 @@ export const OrdersView: React.FC = () => {
                     {formatDateToDisplay(selectedDate)}
                   </div>
 
-                  {/* Item Name */}
+                  {/* Item Name & Description in Smaller Light Grey Font */}
                   <div
                     style={{
                       background: '#ECECEC',
                       border: '1px solid #000000',
                       borderRadius: '4px',
-                      padding: '6px 12px',
-                      fontWeight: 800,
-                      fontSize: '0.92rem',
-                      color: '#000000'
+                      padding: '6px 12px'
                     }}
                   >
-                    {summary.item.name}
+                    <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#000000' }}>
+                      {summary.item.name}
+                    </div>
+                    {summary.item.description && summary.item.description.trim() && (
+                      <div style={{ fontSize: '0.78rem', color: '#6B7280', fontWeight: 500, marginTop: '2px' }}>
+                        {summary.item.description.trim()}
+                      </div>
+                    )}
                   </div>
 
                   {/* QTY Input (Red Text, Editable) */}
@@ -581,7 +598,20 @@ export const OrdersView: React.FC = () => {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onOrderCreated={order => {
-          handleOrderDone(order);
+          const receiptData: ReceiptData = {
+            date: order.orderDate,
+            orderNumber: order.orderNumber,
+            supplierName: order.supplierName,
+            items: order.items.map(it => ({
+              sno: it.sno,
+              itemName: it.itemName,
+              description: it.description,
+              qty: it.orderedQty
+            })),
+            notes: order.notes
+          };
+          setActiveReceiptData(receiptData);
+          setIsReceiptModalOpen(true);
         }}
       />
 
@@ -589,15 +619,6 @@ export const OrdersView: React.FC = () => {
         isOpen={isReceiptModalOpen}
         onClose={() => setIsReceiptModalOpen(false)}
         receiptData={activeReceiptData}
-      />
-
-      <OrderReceiveModal
-        isOpen={isReceiveModalOpen}
-        onClose={() => {
-          setIsReceiveModalOpen(false);
-          setSelectedOrderForReceive(null);
-        }}
-        order={selectedOrderForReceive}
       />
     </div>
   );

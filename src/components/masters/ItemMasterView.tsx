@@ -16,44 +16,44 @@ export const ItemMasterView: React.FC = () => {
   const suppliers = useMemo(() => db.getSuppliers().filter(s => s.isActive !== false), [refreshKey]);
   const stockSummaries = useMemo(() => StockEngine.getAllItemsStockSummary(), [refreshKey]);
 
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(items[0]?.id || null);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [isTouched, setIsTouched] = useState(false);
   const [search, setSearch] = useState('');
-  const [showDirectory, setShowDirectory] = useState(false);
 
   // Form Fields matching customer screenshot item.jpg
-  const [sno, setSno] = useState(items[0]?.sno || '1456');
-  const [name, setName] = useState(items[0]?.name || 'ASTER - 12X36');
-  const [hsn, setHsn] = useState(items[0]?.hsn || '4802');
-  const [description, setDescription] = useState(items[0]?.description || 'High Quality Glossy Aster Sheets');
-  const [category, setCategory] = useState(items[0]?.category || 'Paper & Sheets');
-  const [supplierId, setSupplierId] = useState(items[0]?.supplierId || suppliers[0]?.id || '');
-  const [isActive, setIsActive] = useState(items[0]?.isActive !== false);
+  const [sno, setSno] = useState('');
+  const [name, setName] = useState('');
+  const [hsn, setHsn] = useState('');
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('');
+  const [supplierId, setSupplierId] = useState('');
+  const [isActive, setIsActive] = useState(true);
 
   // Unit A State
-  const [unitAName, setUnitAName] = useState(items[0]?.unitA?.unitName || 'Roll');
-  const [unitABasicPrice, setUnitABasicPrice] = useState(String(items[0]?.unitA?.basicPrice ?? 1000));
-  const [unitAGstPercent, setUnitAGstPercent] = useState(String(items[0]?.unitA?.gstPercent ?? 18));
-  const [unitATranPercent, setUnitATranPercent] = useState(String(items[0]?.unitA?.tranPercent ?? 10));
-  const [unitAProfPercent, setUnitAProfPercent] = useState(String(items[0]?.unitA?.profPercent ?? 25));
-  const [unitAMisPercent, setUnitAMisPercent] = useState(String(items[0]?.unitA?.misPercent ?? 2));
-  const [unitARoundUp, setUnitARoundUp] = useState(String(items[0]?.unitA?.roundUp ?? 30));
-  const [unitASalePrice, setUnitASalePrice] = useState(String(items[0]?.unitA?.salePrice ?? 500));
-  const [unitAActive, setUnitAActive] = useState(items[0]?.unitA?.isActive !== false);
+  const [unitAName, setUnitAName] = useState('Roll');
+  const [unitABasicPrice, setUnitABasicPrice] = useState('0');
+  const [unitAGstPercent, setUnitAGstPercent] = useState('18');
+  const [unitATranPercent, setUnitATranPercent] = useState('10');
+  const [unitAProfPercent, setUnitAProfPercent] = useState('25');
+  const [unitAMisPercent, setUnitAMisPercent] = useState('2');
+  const [unitARoundUp, setUnitARoundUp] = useState('0');
+  const [unitASalePrice, setUnitASalePrice] = useState('0');
+  const [unitAActive, setUnitAActive] = useState(true);
 
   // Unit B State
-  const [unitBName, setUnitBName] = useState(items[0]?.unitB?.unitName || 'Mt.');
-  const [unitBConversion, setUnitBConversion] = useState(String(items[0]?.unitB?.conversionFactor ?? 40));
-  const [unitBBasicPrice, setUnitBBasicPrice] = useState(String(items[0]?.unitB?.basicPrice ?? 1000));
-  const [unitBGstPercent, setUnitBGstPercent] = useState(String(items[0]?.unitB?.gstPercent ?? 18));
-  const [unitBTranPercent, setUnitBTranPercent] = useState(String(items[0]?.unitB?.tranPercent ?? 10));
-  const [unitBProfPercent, setUnitBProfPercent] = useState(String(items[0]?.unitB?.profPercent ?? 25));
-  const [unitBMisPercent, setUnitBMisPercent] = useState(String(items[0]?.unitB?.misPercent ?? 2));
-  const [unitBRoundUp, setUnitBRoundUp] = useState(String(items[0]?.unitB?.roundUp ?? 30));
-  const [unitBSalePrice, setUnitBSalePrice] = useState(String(items[0]?.unitB?.salePrice ?? 500));
-  const [unitBActive, setUnitBActive] = useState(items[0]?.unitB?.isActive !== false);
+  const [unitBName, setUnitBName] = useState('Mt.');
+  const [unitBConversion, setUnitBConversion] = useState('40');
+  const [unitBBasicPrice, setUnitBBasicPrice] = useState('0');
+  const [unitBGstPercent, setUnitBGstPercent] = useState('18');
+  const [unitBTranPercent, setUnitBTranPercent] = useState('10');
+  const [unitBProfPercent, setUnitBProfPercent] = useState('25');
+  const [unitBMisPercent, setUnitBMisPercent] = useState('2');
+  const [unitBRoundUp, setUnitBRoundUp] = useState('0');
+  const [unitBSalePrice, setUnitBSalePrice] = useState('0');
+  const [unitBActive, setUnitBActive] = useState(true);
 
-  const [minStock, setMinStock] = useState(String(items[0]?.minStock ?? 100));
-  const [openingStock, setOpeningStock] = useState(String(items[0]?.openingStock ?? 50));
+  const [minStock, setMinStock] = useState('100');
+  const [openingStock, setOpeningStock] = useState('0');
 
   // Live Unit A Calculation
   const unitABreakdown = useMemo(() => {
@@ -86,8 +86,11 @@ export const ItemMasterView: React.FC = () => {
     name: ''
   });
 
+  const isFormActive = Boolean(isTouched || selectedItemId || name.trim() !== '' || sno.trim() !== '');
+
   const loadItemIntoForm = (item: Item) => {
     setSelectedItemId(item.id);
+    setIsTouched(true);
     setSno(item.sno);
     setName(item.name);
     setHsn(item.hsn || '');
@@ -146,10 +149,13 @@ export const ItemMasterView: React.FC = () => {
 
     setMinStock(String(item.minStock || 0));
     setOpeningStock(String(item.openingStock || 0));
+    showToast(`Loaded ${item.name} for editing`, 'info');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleCreateNew = () => {
     setSelectedItemId(null);
+    setIsTouched(false);
     setSno(StockEngine.getNextItemSno());
     setName('');
     setHsn('');
@@ -159,24 +165,24 @@ export const ItemMasterView: React.FC = () => {
     setIsActive(true);
 
     setUnitAName('Roll');
-    setUnitABasicPrice('1000');
+    setUnitABasicPrice('0');
     setUnitAGstPercent('18');
     setUnitATranPercent('10');
     setUnitAProfPercent('25');
     setUnitAMisPercent('2');
-    setUnitARoundUp('30');
-    setUnitASalePrice('500');
+    setUnitARoundUp('0');
+    setUnitASalePrice('0');
     setUnitAActive(true);
 
     setUnitBName('Mt.');
     setUnitBConversion('40');
-    setUnitBBasicPrice('1000');
+    setUnitBBasicPrice('0');
     setUnitBGstPercent('18');
     setUnitBTranPercent('10');
     setUnitBProfPercent('25');
     setUnitBMisPercent('2');
-    setUnitBRoundUp('30');
-    setUnitBSalePrice('500');
+    setUnitBRoundUp('0');
+    setUnitBSalePrice('0');
     setUnitBActive(true);
 
     setMinStock('10');
@@ -289,12 +295,36 @@ export const ItemMasterView: React.FC = () => {
     );
   }, [stockSummaries, search]);
 
+  const isEditing = Boolean(selectedItemId);
+  const isCreating = Boolean(!isEditing && (isTouched || name.trim() !== '' || sno.trim() !== ''));
+
+  const cardStateClass = isEditing
+    ? 'is-editing-pink'
+    : isCreating
+    ? 'is-creating-green'
+    : 'is-initial-blue';
+
   return (
     <div className="content-panel-grey">
       {/* Top Header Strip matching item.jpg */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-        <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '8px 48px', minWidth: '160px', textAlign: 'center' }}>
-          ITEM
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '8px 48px', minWidth: '160px', textAlign: 'center' }}>
+            ITEM
+          </div>
+          {isEditing ? (
+            <span className="active-mode-indicator is-editing">
+              ● Editing Item ({name || sno || 'Saved Item'})
+            </span>
+          ) : isCreating ? (
+            <span className="active-mode-indicator is-creating">
+              ● Creating New Item
+            </span>
+          ) : (
+            <span className="active-mode-indicator is-initial">
+              ● Ready for New Item
+            </span>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
@@ -303,43 +333,28 @@ export const ItemMasterView: React.FC = () => {
               type="checkbox"
               id="activeItemCheckbox"
               checked={isActive}
-              onChange={e => setIsActive(e.target.checked)}
+              onChange={e => {
+                setIsTouched(true);
+                setIsActive(e.target.checked);
+              }}
               style={{ width: '16px', height: '16px', cursor: 'pointer' }}
             />
             <label htmlFor="activeItemCheckbox" style={{ fontWeight: 800, fontSize: '0.88rem', cursor: 'pointer' }}>
               Active
             </label>
           </div>
-
-          <button
-            type="button"
-            onClick={() => setShowDirectory(!showDirectory)}
-            style={{
-              padding: '6px 16px',
-              borderRadius: '20px',
-              border: '1.5px solid #6B7280',
-              background: '#FFFFFF',
-              fontWeight: 800,
-              fontSize: '0.85rem',
-              cursor: 'pointer'
-            }}
-          >
-            {showDirectory ? 'Hide Items Table' : `Stock List (${items.length})`}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleCreateNew}
-            className="btn-customer-new-entry"
-            style={{ fontSize: '0.95rem', padding: '8px 24px' }}
-          >
-            CREATE ITEM
-          </button>
         </div>
       </div>
 
-      {/* Main White Form Container matching item.jpg */}
-      <div style={{ background: '#FFFFFF', border: '2px solid #000000', borderRadius: '14px', padding: '28px', maxWidth: '980px', margin: '0 auto', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+      {/* Main Form Container: Light Blue on Initial, Light Green on Creating, Light Pink on Editing */}
+      <div
+        className={`dynamic-entry-card ${cardStateClass}`}
+        style={{
+          padding: '28px',
+          maxWidth: '980px',
+          margin: '0 auto'
+        }}
+      >
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
           {/* Top Fields Grid: Item, Hsn, Description, Category, Supplier */}
@@ -352,7 +367,10 @@ export const ItemMasterView: React.FC = () => {
                 type="text"
                 className="input-text-clean"
                 value={name}
-                onChange={e => setName(e.target.value)}
+                onChange={e => {
+                  setIsTouched(true);
+                  setName(e.target.value);
+                }}
                 placeholder="e.g. ASTER - 12X36"
                 required
                 style={{ fontWeight: 800 }}
@@ -366,7 +384,10 @@ export const ItemMasterView: React.FC = () => {
                 type="text"
                 className="input-text-clean"
                 value={hsn}
-                onChange={e => setHsn(e.target.value)}
+                onChange={e => {
+                  setIsTouched(true);
+                  setHsn(e.target.value);
+                }}
                 placeholder="e.g. 4802"
                 style={{ fontFamily: 'monospace' }}
               />
@@ -382,7 +403,10 @@ export const ItemMasterView: React.FC = () => {
                 type="text"
                 className="input-text-clean"
                 value={description}
-                onChange={e => setDescription(e.target.value)}
+                onChange={e => {
+                  setIsTouched(true);
+                  setDescription(e.target.value);
+                }}
                 placeholder="e.g. High Quality Glossy Aster Sheets"
               />
             </div>
@@ -394,7 +418,10 @@ export const ItemMasterView: React.FC = () => {
                 type="text"
                 className="input-text-clean"
                 value={category}
-                onChange={e => setCategory(e.target.value)}
+                onChange={e => {
+                  setIsTouched(true);
+                  setCategory(e.target.value);
+                }}
                 placeholder="e.g. Paper & Sheets"
               />
             </div>
@@ -409,7 +436,10 @@ export const ItemMasterView: React.FC = () => {
               <select
                 className="input-text-clean"
                 value={supplierId}
-                onChange={e => setSupplierId(e.target.value)}
+                onChange={e => {
+                  setIsTouched(true);
+                  setSupplierId(e.target.value);
+                }}
                 style={{ flex: 1, fontWeight: 700 }}
               >
                 <option value="">-- Select Supplier --</option>
@@ -425,7 +455,10 @@ export const ItemMasterView: React.FC = () => {
                     key={s.id}
                     type="button"
                     className={`supplier-chip-btn ${supplierId === s.id ? 'active' : ''}`}
-                    onClick={() => setSupplierId(s.id)}
+                    onClick={() => {
+                      setIsTouched(true);
+                      setSupplierId(s.id);
+                    }}
                   >
                     {s.name}
                   </button>
@@ -443,7 +476,10 @@ export const ItemMasterView: React.FC = () => {
                   type="text"
                   className="input-text-clean"
                   value={unitAName}
-                  onChange={e => setUnitAName(e.target.value)}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitAName(e.target.value);
+                  }}
                   style={{ width: '100px', color: '#EA3943', fontWeight: 900, textAlign: 'center', fontSize: '0.95rem' }}
                   placeholder="e.g. Roll"
                 />
@@ -454,7 +490,10 @@ export const ItemMasterView: React.FC = () => {
                   type="checkbox"
                   id="unitAActiveCheck"
                   checked={unitAActive}
-                  onChange={e => setUnitAActive(e.target.checked)}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitAActive(e.target.checked);
+                  }}
                   style={{ width: '16px', height: '16px', cursor: 'pointer' }}
                 />
                 <label htmlFor="unitAActiveCheck" style={{ fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer' }}>
@@ -471,7 +510,10 @@ export const ItemMasterView: React.FC = () => {
                   type="number"
                   className="input-text-clean"
                   value={unitABasicPrice}
-                  onChange={e => setUnitABasicPrice(e.target.value)}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitABasicPrice(e.target.value);
+                  }}
                   style={{ textAlign: 'center', fontWeight: 700 }}
                 />
                 <div className="subtext-calc-red">{unitABreakdown.basicPrice}</div>
@@ -483,7 +525,10 @@ export const ItemMasterView: React.FC = () => {
                   type="number"
                   className="input-text-clean"
                   value={unitAGstPercent}
-                  onChange={e => setUnitAGstPercent(e.target.value)}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitAGstPercent(e.target.value);
+                  }}
                   style={{ textAlign: 'center', fontWeight: 700 }}
                 />
                 <div className="subtext-calc-red">{unitABreakdown.gstAmt}</div>
@@ -495,7 +540,10 @@ export const ItemMasterView: React.FC = () => {
                   type="number"
                   className="input-text-clean"
                   value={unitATranPercent}
-                  onChange={e => setUnitATranPercent(e.target.value)}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitATranPercent(e.target.value);
+                  }}
                   style={{ textAlign: 'center', fontWeight: 700 }}
                 />
                 <div className="subtext-calc-red">{unitABreakdown.tranAmt}</div>
@@ -507,7 +555,10 @@ export const ItemMasterView: React.FC = () => {
                   type="number"
                   className="input-text-clean"
                   value={unitAProfPercent}
-                  onChange={e => setUnitAProfPercent(e.target.value)}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitAProfPercent(e.target.value);
+                  }}
                   style={{ textAlign: 'center', fontWeight: 700 }}
                 />
                 <div className="subtext-calc-red">{unitABreakdown.profAmt}</div>
@@ -519,7 +570,10 @@ export const ItemMasterView: React.FC = () => {
                   type="number"
                   className="input-text-clean"
                   value={unitAMisPercent}
-                  onChange={e => setUnitAMisPercent(e.target.value)}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitAMisPercent(e.target.value);
+                  }}
                   style={{ textAlign: 'center', fontWeight: 700 }}
                 />
                 <div className="subtext-calc-red">{unitABreakdown.misAmt}</div>
@@ -531,7 +585,10 @@ export const ItemMasterView: React.FC = () => {
                   type="number"
                   className="input-text-clean"
                   value={unitARoundUp}
-                  onChange={e => setUnitARoundUp(e.target.value)}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitARoundUp(e.target.value);
+                  }}
                   style={{ textAlign: 'center', fontWeight: 700 }}
                 />
                 <div className="subtext-calc-red" style={{ visibility: 'hidden' }}>0</div>
@@ -543,7 +600,10 @@ export const ItemMasterView: React.FC = () => {
                   type="number"
                   className="input-text-clean"
                   value={unitASalePrice}
-                  onChange={e => setUnitASalePrice(e.target.value)}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitASalePrice(e.target.value);
+                  }}
                   style={{ textAlign: 'center', fontWeight: 900, color: '#002B99', fontSize: '0.95rem' }}
                 />
                 <div className="subtext-calc-red" style={{ visibility: 'hidden' }}>0</div>
@@ -560,7 +620,10 @@ export const ItemMasterView: React.FC = () => {
                   type="text"
                   className="input-text-clean"
                   value={unitBName}
-                  onChange={e => setUnitBName(e.target.value)}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitBName(e.target.value);
+                  }}
                   style={{ width: '100px', color: '#EA3943', fontWeight: 900, textAlign: 'center', fontSize: '0.95rem' }}
                   placeholder="e.g. Mt."
                 />
@@ -569,7 +632,10 @@ export const ItemMasterView: React.FC = () => {
                   type="number"
                   className="input-text-clean"
                   value={unitBConversion}
-                  onChange={e => setUnitBConversion(e.target.value)}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitBConversion(e.target.value);
+                  }}
                   style={{ width: '80px', textAlign: 'center', fontWeight: 800 }}
                 />
                 <span style={{ fontWeight: 800, fontSize: '0.9rem' }}>{unitBName || 'Unit B'}</span>
@@ -580,7 +646,10 @@ export const ItemMasterView: React.FC = () => {
                   type="checkbox"
                   id="unitBActiveCheck"
                   checked={unitBActive}
-                  onChange={e => setUnitBActive(e.target.checked)}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitBActive(e.target.checked);
+                  }}
                   style={{ width: '16px', height: '16px', cursor: 'pointer' }}
                 />
                 <label htmlFor="unitBActiveCheck" style={{ fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer' }}>
@@ -597,7 +666,10 @@ export const ItemMasterView: React.FC = () => {
                   type="number"
                   className="input-text-clean"
                   value={unitBBasicPrice}
-                  onChange={e => setUnitBBasicPrice(e.target.value)}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitBBasicPrice(e.target.value);
+                  }}
                   style={{ textAlign: 'center', fontWeight: 700 }}
                 />
                 <div className="subtext-calc-red">{unitBBreakdown.basicPrice}</div>
@@ -609,7 +681,10 @@ export const ItemMasterView: React.FC = () => {
                   type="number"
                   className="input-text-clean"
                   value={unitBGstPercent}
-                  onChange={e => setUnitBGstPercent(e.target.value)}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitBGstPercent(e.target.value);
+                  }}
                   style={{ textAlign: 'center', fontWeight: 700 }}
                 />
                 <div className="subtext-calc-red">{unitBBreakdown.gstAmt}</div>
@@ -621,7 +696,10 @@ export const ItemMasterView: React.FC = () => {
                   type="number"
                   className="input-text-clean"
                   value={unitBTranPercent}
-                  onChange={e => setUnitBTranPercent(e.target.value)}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitBTranPercent(e.target.value);
+                  }}
                   style={{ textAlign: 'center', fontWeight: 700 }}
                 />
                 <div className="subtext-calc-red">{unitBBreakdown.tranAmt}</div>
@@ -633,7 +711,10 @@ export const ItemMasterView: React.FC = () => {
                   type="number"
                   className="input-text-clean"
                   value={unitBProfPercent}
-                  onChange={e => setUnitBProfPercent(e.target.value)}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitBProfPercent(e.target.value);
+                  }}
                   style={{ textAlign: 'center', fontWeight: 700 }}
                 />
                 <div className="subtext-calc-red">{unitBBreakdown.profAmt}</div>
@@ -645,7 +726,10 @@ export const ItemMasterView: React.FC = () => {
                   type="number"
                   className="input-text-clean"
                   value={unitBMisPercent}
-                  onChange={e => setUnitBMisPercent(e.target.value)}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitBMisPercent(e.target.value);
+                  }}
                   style={{ textAlign: 'center', fontWeight: 700 }}
                 />
                 <div className="subtext-calc-red">{unitBBreakdown.misAmt}</div>
@@ -657,7 +741,10 @@ export const ItemMasterView: React.FC = () => {
                   type="number"
                   className="input-text-clean"
                   value={unitBRoundUp}
-                  onChange={e => setUnitBRoundUp(e.target.value)}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitBRoundUp(e.target.value);
+                  }}
                   style={{ textAlign: 'center', fontWeight: 700 }}
                 />
                 <div className="subtext-calc-red" style={{ visibility: 'hidden' }}>0</div>
@@ -669,7 +756,10 @@ export const ItemMasterView: React.FC = () => {
                   type="number"
                   className="input-text-clean"
                   value={unitBSalePrice}
-                  onChange={e => setUnitBSalePrice(e.target.value)}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitBSalePrice(e.target.value);
+                  }}
                   style={{ textAlign: 'center', fontWeight: 900, color: '#002B99', fontSize: '0.95rem' }}
                 />
                 <div className="subtext-calc-red" style={{ visibility: 'hidden' }}>0</div>
@@ -688,7 +778,10 @@ export const ItemMasterView: React.FC = () => {
                 min="0"
                 className="input-text-clean"
                 value={minStock}
-                onChange={e => setMinStock(e.target.value)}
+                onChange={e => {
+                  setIsTouched(true);
+                  setMinStock(e.target.value);
+                }}
               />
             </div>
             <div>
@@ -700,7 +793,10 @@ export const ItemMasterView: React.FC = () => {
                 min="0"
                 className="input-text-clean"
                 value={openingStock}
-                onChange={e => setOpeningStock(e.target.value)}
+                onChange={e => {
+                  setIsTouched(true);
+                  setOpeningStock(e.target.value);
+                }}
               />
             </div>
           </div>
@@ -718,8 +814,13 @@ export const ItemMasterView: React.FC = () => {
                 type="button"
                 className="btn-customer-action-pill"
                 onClick={() => {
-                  setShowDirectory(true);
-                  showToast('Select an item from the table below to edit', 'info');
+                  if (items.length > 0) {
+                    showToast('Select an item from the directory below to edit', 'info');
+                    const el = document.getElementById('item-directory-register');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  } else {
+                    showToast('No items found in master', 'warning');
+                  }
                 }}
               >
                 Edit
@@ -745,44 +846,55 @@ export const ItemMasterView: React.FC = () => {
         </form>
       </div>
 
-      {/* Item Stock Directory Drawer */}
-      {showDirectory && (
-        <div style={{ marginTop: '28px', background: '#FFFFFF', border: '2px solid #000000', borderRadius: '12px', padding: '20px', maxWidth: '980px', margin: '28px auto 0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-            <h4 style={{ fontWeight: 900, fontSize: '1.05rem', margin: 0 }}>Items Master & Live Stock</h4>
-            <div style={{ position: 'relative', width: '280px' }}>
-              <Search size={14} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
-              <input
-                type="text"
-                placeholder="Search items..."
-                className="input-text-clean"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                style={{ paddingLeft: '32px', fontSize: '0.85rem' }}
-              />
-            </div>
+      {/* Item Stock Directory Register in the Downside (Always Visible) */}
+      <div id="item-directory-register" style={{ marginTop: '28px', background: '#FFFFFF', border: '2px solid #000000', borderRadius: '12px', padding: '20px', maxWidth: '980px', margin: '28px auto 0', boxShadow: '0 2px 4px rgba(0,0,0,0.04)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h4 style={{ fontWeight: 900, fontSize: '1.1rem', margin: 0 }}>Items Master & Live Stock (Register)</h4>
+            <span style={{ fontSize: '0.8rem', background: '#E0E7FF', color: '#3730A3', padding: '2px 10px', borderRadius: '12px', fontWeight: 800 }}>
+              {filteredSummaries.length} {filteredSummaries.length === 1 ? 'Item' : 'Items'}
+            </span>
           </div>
+          <div style={{ position: 'relative', width: '280px' }}>
+            <Search size={14} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
+            <input
+              type="text"
+              placeholder="Search items by name, code, category..."
+              className="input-text-clean"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ paddingLeft: '32px', fontSize: '0.85rem' }}
+            />
+          </div>
+        </div>
 
-          <div className="custom-table-container">
-            <table className="custom-table">
-              <thead>
+        <div className="custom-table-container">
+          <table className="custom-table">
+            <thead>
+              <tr>
+                <th style={{ width: '80px' }}>S.No</th>
+                <th>Item Name</th>
+                <th>Supplier</th>
+                <th>Unit-A (Sale Price)</th>
+                <th>Unit-B (Conversion)</th>
+                <th style={{ textAlign: 'center' }}>Live Stock</th>
+                <th style={{ textAlign: 'center' }}>Status</th>
+                <th style={{ textAlign: 'center' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredSummaries.length === 0 ? (
                 <tr>
-                  <th style={{ width: '80px' }}>S.No</th>
-                  <th>Item Name</th>
-                  <th>Supplier</th>
-                  <th>Unit-A (Sale Price)</th>
-                  <th>Unit-B (Conversion)</th>
-                  <th style={{ textAlign: 'center' }}>Live Stock</th>
-                  <th style={{ textAlign: 'center' }}>Status</th>
-                  <th style={{ textAlign: 'center' }}>Select</th>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '24px', color: '#9CA3AF', fontWeight: 600 }}>
+                    No items found matching "{search}".
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {filteredSummaries.map(s => (
+              ) : (
+                filteredSummaries.map(s => (
                   <tr
                     key={s.item.id}
                     style={{
-                      backgroundColor: selectedItemId === s.item.id ? '#F5F3FF' : 'transparent',
+                      backgroundColor: selectedItemId === s.item.id ? '#EFF6FF' : 'transparent',
                       cursor: 'pointer'
                     }}
                     onClick={() => loadItemIntoForm(s.item)}
@@ -819,30 +931,28 @@ export const ItemMasterView: React.FC = () => {
                         onClick={e => {
                           e.stopPropagation();
                           loadItemIntoForm(s.item);
-                          setShowDirectory(false);
-                          showToast(`Loaded ${s.item.name}`, 'info');
                         }}
                         style={{
-                          background: '#E2D2F8',
-                          color: '#EA3943',
+                          background: selectedItemId === s.item.id ? '#BFDBFE' : '#E2D2F8',
+                          color: selectedItemId === s.item.id ? '#1E40AF' : '#EA3943',
                           border: '1px solid #C4B5FD',
                           borderRadius: '12px',
-                          padding: '2px 10px',
+                          padding: '3px 12px',
                           fontWeight: 800,
-                          fontSize: '0.78rem',
+                          fontSize: '0.8rem',
                           cursor: 'pointer'
                         }}
                       >
-                        Load
+                        {selectedItemId === s.item.id ? 'Editing' : 'Load'}
                       </button>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
 
       {/* Delete Confirmation */}
       <ConfirmDialog

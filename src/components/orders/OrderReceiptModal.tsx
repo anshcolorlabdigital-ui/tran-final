@@ -215,7 +215,12 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
                     {item.sno || `${1456 + idx}`}
                   </td>
                   <td style={{ padding: '8px 12px', fontWeight: 700, fontSize: '0.95rem' }}>
-                    {item.itemName}
+                    <div>{item.itemName}</div>
+                    {item.description && item.description.trim() && (
+                      <div style={{ fontSize: '0.78rem', color: '#6B7280', fontWeight: 500, marginTop: '2px' }}>
+                        {item.description.trim()}
+                      </div>
+                    )}
                   </td>
                   <td
                     style={{
@@ -233,8 +238,28 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
             </tbody>
           </table>
 
+          {/* Remark / Note section if provided */}
+          {receiptData.notes && receiptData.notes.trim() && (
+            <div
+              style={{
+                marginTop: '12px',
+                padding: '10px 14px',
+                backgroundColor: '#FEF3C7',
+                border: '1.5px solid #F59E0B',
+                borderRadius: '6px',
+                fontSize: '0.9rem',
+                fontWeight: 700,
+                color: '#92400E',
+                textAlign: 'left'
+              }}
+            >
+              <span style={{ fontWeight: 900, textTransform: 'uppercase', marginRight: '6px' }}>Remark:</span>
+              {receiptData.notes.trim()}
+            </div>
+          )}
+
           {/* Footer note */}
-          <div style={{ textAlign: 'center', fontSize: '0.75rem', color: '#6B7280', paddingTop: '8px', borderTop: '1px dashed #9CA3AF' }}>
+          <div style={{ textAlign: 'center', fontSize: '0.75rem', color: '#6B7280', paddingTop: '10px', marginTop: '12px', borderTop: '1px dashed #9CA3AF' }}>
             Total Items: {receiptData.items.length} | Total Quantity: {receiptData.items.reduce((a, b) => a + Number(b.qty || 0), 0)}
           </div>
         </div>

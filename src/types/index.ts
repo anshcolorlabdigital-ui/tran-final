@@ -132,6 +132,7 @@ export interface OrderItem {
   sno: string; // Clean serial number on receipt
   itemId: string;
   itemName: string;
+  description?: string;
   orderedQty: number;
   receivedQty: number;
   supplierId?: string;
@@ -244,6 +245,7 @@ export interface SelfUse {
   category?: string;
   items: SelfUseItem[];
   totalAmount: number;
+  reason?: string;
   remarks?: string;
   createdAt: string;
 }
@@ -299,6 +301,7 @@ export interface ItemStockSummary {
 export type ActiveNavTab =
   | 'DASHBOARD'
   | 'ORDER'
+  | 'ORDERED'
   | 'PURCHASE'
   | 'SALE'
   | 'SELF_USE'

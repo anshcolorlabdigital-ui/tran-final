@@ -4,12 +4,16 @@ import { formatDateToDisplay } from './dateUtils';
 export interface ReceiptItem {
   sno: string;
   itemName: string;
+  description?: string;
   qty: number;
 }
 
 export interface ReceiptData {
   date: string;
+  orderNumber?: string;
+  supplierName?: string;
   items: ReceiptItem[];
+  notes?: string;
 }
 
 /**
@@ -25,7 +29,15 @@ export function formatReceiptText(data: ReceiptData): string {
     const snoDisplay = (item.sno || `${1456 + index}`).padEnd(7, ' ');
     const nameDisplay = item.itemName.padEnd(24, ' ');
     text += `${snoDisplay} ${nameDisplay} ${item.qty}\n`;
+    if (item.description && item.description.trim()) {
+      text += `        ↳ (${item.description.trim()})\n`;
+    }
   });
+
+  if (data.notes && data.notes.trim()) {
+    text += `-------------------------------------\n`;
+    text += `Remark: ${data.notes.trim()}\n`;
+  }
 
   return text;
 }

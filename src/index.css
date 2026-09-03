@@ -617,6 +617,70 @@ button, input, select, textarea {
   display: none;
 }
 
+/* Dynamic Entry Card Styling:
+   1. Initial / Untouched / Inactive: Light Blue (#EBF5FF)
+   2. Creating New Entry / Touched: Light Green (#ECFDF5)
+   3. Editing Existing Record: Light Pink (#FDF2F8)
+*/
+.dynamic-entry-card {
+  background-color: #EBF5FF; /* Default: Light Blue */
+  border: 2px solid #93C5FD;
+  border-radius: 14px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  transition: background-color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.dynamic-entry-card.is-initial-blue {
+  background-color: #EBF5FF !important; /* Soft light blue */
+  border-color: #93C5FD !important;
+  box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.08) !important;
+}
+
+.dynamic-entry-card.is-creating-green {
+  background-color: #ECFDF5 !important; /* Soft light green for creating new */
+  border-color: #10B981 !important;
+  box-shadow: 0 6px 16px -2px rgba(16, 185, 129, 0.2) !important;
+}
+
+.dynamic-entry-card.is-editing-pink {
+  background-color: #FDF2F8 !important; /* Soft light pink for editing existing */
+  border-color: #EC4899 !important;
+  box-shadow: 0 6px 16px -2px rgba(236, 72, 153, 0.2) !important;
+}
+
+.active-mode-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  transition: all 0.2s ease;
+}
+
+.active-mode-indicator.is-initial {
+  background-color: #DBEAFE;
+  color: #1D4ED8;
+  border: 1px solid #BFDBFE;
+}
+
+.active-mode-indicator.is-creating {
+  background-color: #D1FAE5;
+  color: #047857;
+  border: 1px solid #A7F3D0;
+}
+
+.active-mode-indicator.is-editing {
+  background-color: #FCE7F3;
+  color: #BE185D;
+  border: 1px solid #FBCFE8;
+}
+
 /* Responsive Mobile / Tablet Breakpoints */
 @media (max-width: 900px) {
   .app-body-container {
@@ -645,3 +709,4 @@ button, input, select, textarea {
     justify-content: space-between;
   }
 }
+

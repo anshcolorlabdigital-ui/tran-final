@@ -4,6 +4,7 @@ import { Header } from './components/common/Header';
 import { Sidebar } from './components/common/Sidebar';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { OrdersView } from './components/orders/OrdersView';
+import { OrderedView } from './components/orders/OrderedView';
 import { SalesEntryView } from './components/sales/SalesEntryView';
 import { PurchaseEntryView } from './components/purchase/PurchaseEntryView';
 import { SelfUseView } from './components/selfuse/SelfUseView';
@@ -31,6 +32,8 @@ export const App: React.FC = () => {
         return <DashboardView />;
       case 'ORDER':
         return <OrdersView />;
+      case 'ORDERED':
+        return <OrderedView />;
       case 'PURCHASE':
         return <PurchaseEntryView />;
       case 'SALE':

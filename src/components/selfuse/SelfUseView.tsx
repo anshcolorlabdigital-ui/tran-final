@@ -37,7 +37,7 @@ export const SelfUseView: React.FC = () => {
 
   // Table items
   const [selfUseItems, setSelfUseItems] = useState<SelfUseItem[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
+  const [isTouched, setIsTouched] = useState(false);
   const [searchHistory, setSearchHistory] = useState('');
 
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
@@ -67,7 +67,10 @@ export const SelfUseView: React.FC = () => {
     return selfUseItems.reduce((acc, item) => acc + (Number(item.amount) || 0), 0);
   }, [selfUseItems]);
 
+  const isFormActive = Boolean(editingSelfUseId || selfUseItems.length > 0 || selectedItemId || isTouched);
+
   const handleAddOrUpdateItem = () => {
+    setIsTouched(true);
     if (!selectedItemId) {
       showToast('Please select an item', 'error');
       return;
@@ -114,6 +117,7 @@ export const SelfUseView: React.FC = () => {
   };
 
   const handleEditItem = (index: number) => {
+    setIsTouched(true);
     const item = selfUseItems[index];
     const foundItem = items.find(i => i.id === item.itemId);
     if (foundItem?.category) setSelectedCategory(foundItem.category);
@@ -123,6 +127,7 @@ export const SelfUseView: React.FC = () => {
   };
 
   const handleDeleteItem = (index: number) => {
+    setIsTouched(true);
     setSelfUseItems(prev => prev.filter((_, i) => i !== index));
     if (editingItemIndex === index) {
       setEditingItemIndex(null);
@@ -132,13 +137,14 @@ export const SelfUseView: React.FC = () => {
 
   const handleNewEntry = () => {
     setEditingSelfUseId(null);
+    setIsTouched(false);
     setBillNo(StockEngine.getNextBillNumber('SELF_USE'));
     setBillDate(getTodayDateString());
     setSelfUseItems([]);
     setSelectedItemId('');
     setQty('1');
     setEditingItemIndex(null);
-    showToast('New Self Use form ready', 'info');
+    showToast('New Self Use entry ready', 'info');
   };
 
   const handleSaveSelfUse = () => {
@@ -147,7 +153,7 @@ export const SelfUseView: React.FC = () => {
       return;
     }
     if (selfUseItems.length === 0) {
-      showToast('Please add at least one item', 'error');
+      showToast('Please add at least one item to Self Use', 'error');
       return;
     }
 
@@ -155,25 +161,29 @@ export const SelfUseView: React.FC = () => {
       id: editingSelfUseId || `su-${Date.now()}`,
       billNo: billNo.trim(),
       billDate,
+      category: selectedCategory,
       items: selfUseItems,
       totalAmount,
-      remarks: 'Self Consumption / Internal Use',
+      reason: 'Factory Internal Consumption / Sample',
       createdAt: new Date().toISOString()
     };
 
-    // Save self use: decreases stock in Stock Ledger via SELF_USE_OUT!
+    // Automatically records SELF_USE_OUT stock movements, isolated from Sales
     db.saveSelfUse(selfUseRecord);
 
-    showToast(`Self Use voucher ${selfUseRecord.billNo} recorded! Stock decreased.`, 'success');
+    showToast(`Self Use voucher ${selfUseRecord.billNo} saved! Stock updated.`, 'success');
     handleNewEntry();
   };
 
   const handleLoadSelfUseForEdit = (su: SelfUse) => {
     setEditingSelfUseId(su.id);
+    setIsTouched(true);
     setBillNo(su.billNo);
     setBillDate(su.billDate);
+    if (su.category) setSelectedCategory(su.category);
     setSelfUseItems(su.items);
-    showToast(`Loaded voucher ${su.billNo} for editing`, 'info');
+    showToast(`Loaded Self Use voucher ${su.billNo} for editing`, 'info');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDeleteCurrentSelfUse = () => {
@@ -182,7 +192,7 @@ export const SelfUseView: React.FC = () => {
       return;
     }
     if (!hasPermission('DELETE_SELF_USE')) {
-      showToast('You do not have permission to delete self use records', 'error');
+      showToast('You do not have permission to delete self use vouchers', 'error');
       return;
     }
     setIsDeleteConfirmOpen(true);
@@ -204,9 +214,10 @@ export const SelfUseView: React.FC = () => {
     id: editingSelfUseId || 'temp',
     billNo,
     billDate,
+    category: selectedCategory,
     items: selfUseItems,
     totalAmount,
-    remarks: 'Self Consumption',
+    reason: 'Internal Consumption',
     createdAt: new Date().toISOString()
   };
 
@@ -216,9 +227,19 @@ export const SelfUseView: React.FC = () => {
     return selfUseHistory.filter(
       su =>
         su.billNo.toLowerCase().includes(q) ||
+        (su.category && su.category.toLowerCase().includes(q)) ||
         su.billDate.includes(q)
     );
   }, [selfUseHistory, searchHistory]);
+
+  const isEditing = Boolean(editingSelfUseId);
+  const isCreating = Boolean(!isEditing && (isTouched || selfUseItems.length > 0 || selectedItemId));
+
+  const cardStateClass = isEditing
+    ? 'is-editing-pink'
+    : isCreating
+    ? 'is-creating-green'
+    : 'is-initial-blue';
 
   return (
     <div className="content-panel-grey">
@@ -226,118 +247,110 @@ export const SelfUseView: React.FC = () => {
 
       {/* Top Header Strip matching self use new.jpg */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-        <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '8px 48px', minWidth: '180px', textAlign: 'center' }}>
-          SELF USE
-        </div>
-
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <button
-            type="button"
-            onClick={() => setShowHistory(!showHistory)}
-            style={{
-              padding: '6px 16px',
-              borderRadius: '20px',
-              border: '1.5px solid #6B7280',
-              background: '#FFFFFF',
-              fontWeight: 800,
-              fontSize: '0.85rem',
-              cursor: 'pointer'
-            }}
-          >
-            {showHistory ? 'Hide History' : `History (${selfUseHistory.length})`}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleNewEntry}
-            className="btn-customer-new-entry"
-            style={{ fontSize: '0.95rem', padding: '8px 24px' }}
-          >
-            NEW ENTRY
-          </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '8px 36px', minWidth: '220px', textAlign: 'center' }}>
+            SELF USE
+          </div>
+          {isEditing ? (
+            <span className="active-mode-indicator is-editing">
+              ● Editing Self Use Voucher ({billNo})
+            </span>
+          ) : isCreating ? (
+            <span className="active-mode-indicator is-creating">
+              ● Creating New Self Use Entry
+            </span>
+          ) : (
+            <span className="active-mode-indicator is-initial">
+              ● Ready for New Entry
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Main White Card matching self use new.jpg */}
+      {/* Main Form Container: Light Blue on Initial, Light Green on Creating, Light Pink on Editing */}
       <div
+        className={`dynamic-entry-card ${cardStateClass}`}
         style={{
-          backgroundColor: '#FFFFFF',
-          border: '2px solid #000000',
-          borderRadius: '14px',
-          padding: '28px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '18px',
           maxWidth: '850px',
-          margin: '0 auto',
-          boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)'
+          margin: '0 auto'
         }}
       >
-        {/* Top date and bill no */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '24px', alignItems: 'center', flexWrap: 'wrap' }}>
+        {/* Top Dates & Bill No Row */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <label style={{ fontWeight: 900, fontSize: '0.95rem' }}>BILL DATE</label>
+            <label style={{ fontWeight: 900, fontSize: '0.9rem' }}>BILL DATE</label>
             <input
               type="date"
               className="input-text-clean"
               value={billDate}
-              onChange={e => setBillDate(e.target.value)}
-              style={{ width: '145px' }}
+              onChange={e => {
+                setIsTouched(true);
+                setBillDate(e.target.value);
+              }}
+              style={{ width: '140px' }}
             />
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <label style={{ fontWeight: 900, fontSize: '0.95rem' }}>BILL NO.</label>
+            <label style={{ fontWeight: 900, fontSize: '0.9rem' }}>BILL NO.</label>
             <input
               type="text"
               className="input-text-clean"
               value={billNo}
-              onChange={e => setBillNo(e.target.value)}
+              onChange={e => {
+                setIsTouched(true);
+                setBillNo(e.target.value);
+              }}
               style={{ width: '140px', fontWeight: 800 }}
             />
           </div>
         </div>
 
-        {/* CATG. ROW matching self use new.jpg */}
-        <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 34px', gap: '10px', alignItems: 'center' }}>
+        {/* CATEGORY SELECTION matching self use new.jpg */}
+        <div style={{ display: 'grid', gridTemplateColumns: '85px 1fr 34px', gap: '10px', alignItems: 'center' }}>
           <label style={{ fontWeight: 900, fontSize: '1.05rem' }}>CATG. :</label>
           <select
             className="input-text-clean"
             value={selectedCategory}
             onChange={e => {
+              setIsTouched(true);
               setSelectedCategory(e.target.value);
-              setSelectedItemId('');
             }}
             style={{ fontSize: '0.95rem', height: '38px', fontWeight: 700 }}
           >
             <option value="">-- All Categories --</option>
-            {categories.map(c => (
-              <option key={c} value={c}>{c}</option>
+            {categories.map(cat => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
             ))}
           </select>
           <button
             type="button"
             className="btn-quick-n"
-            title="Quick Create Item/Category"
-            onClick={() => openQuickModal('ITEM')}
+            title="Create Item / Category"
+            onClick={() => openQuickModal('ITEM', () => setIsTouched(true))}
           >
             N
           </button>
         </div>
 
-        {/* ITEM SELECTION ROW matching self use new.jpg */}
-        <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 34px', gap: '10px', alignItems: 'center' }}>
+        {/* ITEM SELECTION matching self use new.jpg */}
+        <div style={{ display: 'grid', gridTemplateColumns: '85px 1fr 34px', gap: '10px', alignItems: 'center' }}>
           <label style={{ fontWeight: 900, fontSize: '1.05rem' }}>ITEM :</label>
           <select
             className="input-text-clean"
             value={selectedItemId}
-            onChange={e => setSelectedItemId(e.target.value)}
+            onChange={e => {
+              setIsTouched(true);
+              setSelectedItemId(e.target.value);
+            }}
             style={{ fontSize: '0.95rem', height: '38px', fontWeight: 700 }}
           >
             <option value="">-- Select Item --</option>
             {filteredCategoryItems.map(i => (
               <option key={i.id} value={i.id}>
-                [{i.sno}] {i.name}
+                [{i.sno}] {i.name} ({i.unit || 'Units'})
               </option>
             ))}
           </select>
@@ -345,7 +358,10 @@ export const SelfUseView: React.FC = () => {
             type="button"
             className="btn-quick-n"
             title="Quick Create Item"
-            onClick={() => openQuickModal('ITEM', (newId) => setSelectedItemId(newId))}
+            onClick={() => openQuickModal('ITEM', (newId) => {
+              setIsTouched(true);
+              setSelectedItemId(newId);
+            })}
           >
             N
           </button>
@@ -359,7 +375,10 @@ export const SelfUseView: React.FC = () => {
             min="1"
             className="input-text-clean"
             value={qty}
-            onChange={e => setQty(e.target.value)}
+            onChange={e => {
+              setIsTouched(true);
+              setQty(e.target.value);
+            }}
             style={{ width: '150px', fontWeight: 900, fontSize: '1rem', color: '#EA3943', textAlign: 'center' }}
           />
 
@@ -393,7 +412,7 @@ export const SelfUseView: React.FC = () => {
         </div>
 
         {/* ITEMS TABLE matching self use new.jpg */}
-        <div style={{ border: '2px solid #000000', borderRadius: '4px', overflow: 'hidden' }}>
+        <div style={{ border: '2px solid #000000', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#D2BEF6', borderBottom: '2px solid #000000' }}>
@@ -460,7 +479,6 @@ export const SelfUseView: React.FC = () => {
 
         {/* CUSTOMER AUTHENTIC ACTION BUTTONS matching self use new.jpg */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', marginTop: '16px' }}>
-          {/* Top Center: Mint Green Save Button */}
           <button
             type="button"
             onClick={handleSaveSelfUse}
@@ -469,15 +487,15 @@ export const SelfUseView: React.FC = () => {
             Save
           </button>
 
-          {/* Bottom Row: Lavender Action Pills */}
           <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', flexWrap: 'wrap' }}>
             <button
               type="button"
               className="btn-customer-action-pill"
               onClick={() => {
                 if (selfUseHistory.length > 0) {
-                  setShowHistory(true);
-                  showToast('Select a voucher from history to edit', 'info');
+                  showToast('Select a voucher from the history list below to edit', 'info');
+                  const el = document.getElementById('self-use-history-register');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
                 } else {
                   showToast('No saved vouchers found', 'warning');
                 }
@@ -505,41 +523,52 @@ export const SelfUseView: React.FC = () => {
         </div>
       </div>
 
-      {/* Self Use History Drawer */}
-      {showHistory && (
-        <div style={{ marginTop: '28px', background: '#FFFFFF', border: '2px solid #000000', borderRadius: '12px', padding: '20px', maxWidth: '850px', margin: '28px auto 0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-            <h4 style={{ fontWeight: 900, fontSize: '1.05rem', margin: 0 }}>Self Use Consumption History</h4>
-            <div style={{ position: 'relative', width: '280px' }}>
-              <Search size={14} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
-              <input
-                type="text"
-                placeholder="Search voucher no..."
-                className="input-text-clean"
-                value={searchHistory}
-                onChange={e => setSearchHistory(e.target.value)}
-                style={{ paddingLeft: '32px', fontSize: '0.85rem' }}
-              />
-            </div>
+      {/* Self Use Consumption History in the Downside (Always Visible) */}
+      <div id="self-use-history-register" style={{ marginTop: '28px', background: '#FFFFFF', border: '2px solid #000000', borderRadius: '12px', padding: '20px', maxWidth: '850px', margin: '28px auto 0', boxShadow: '0 2px 4px rgba(0,0,0,0.04)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h4 style={{ fontWeight: 900, fontSize: '1.1rem', margin: 0 }}>Self Use Consumption Register (History)</h4>
+            <span style={{ fontSize: '0.8rem', background: '#E0E7FF', color: '#3730A3', padding: '2px 10px', borderRadius: '12px', fontWeight: 800 }}>
+              {filteredHistory.length} {filteredHistory.length === 1 ? 'Record' : 'Records'}
+            </span>
           </div>
+          <div style={{ position: 'relative', width: '280px' }}>
+            <Search size={14} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
+            <input
+              type="text"
+              placeholder="Search voucher no..."
+              className="input-text-clean"
+              value={searchHistory}
+              onChange={e => setSearchHistory(e.target.value)}
+              style={{ paddingLeft: '32px', fontSize: '0.85rem' }}
+            />
+          </div>
+        </div>
 
-          <div className="custom-table-container">
-            <table className="custom-table">
-              <thead>
+        <div className="custom-table-container">
+          <table className="custom-table">
+            <thead>
+              <tr>
+                <th>Voucher Date</th>
+                <th>Voucher No.</th>
+                <th style={{ textAlign: 'center' }}>Total Items</th>
+                <th style={{ textAlign: 'right' }}>Total Amount</th>
+                <th style={{ textAlign: 'center' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredHistory.length === 0 ? (
                 <tr>
-                  <th>Voucher Date</th>
-                  <th>Voucher No.</th>
-                  <th style={{ textAlign: 'center' }}>Total Items</th>
-                  <th style={{ textAlign: 'right' }}>Total Amount</th>
-                  <th style={{ textAlign: 'center' }}>Action</th>
+                  <td colSpan={5} style={{ textAlign: 'center', padding: '24px', color: '#9CA3AF', fontWeight: 600 }}>
+                    No self use consumption records found.
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {filteredHistory.map(su => (
+              ) : (
+                filteredHistory.map(su => (
                   <tr
                     key={su.id}
                     style={{
-                      backgroundColor: editingSelfUseId === su.id ? '#F5F3FF' : 'transparent',
+                      backgroundColor: editingSelfUseId === su.id ? '#EFF6FF' : 'transparent',
                       cursor: 'pointer'
                     }}
                     onClick={() => handleLoadSelfUseForEdit(su)}
@@ -554,29 +583,28 @@ export const SelfUseView: React.FC = () => {
                         onClick={e => {
                           e.stopPropagation();
                           handleLoadSelfUseForEdit(su);
-                          setShowHistory(false);
                         }}
                         style={{
-                          background: '#E2D2F8',
-                          color: '#EA3943',
+                          background: editingSelfUseId === su.id ? '#BFDBFE' : '#E2D2F8',
+                          color: editingSelfUseId === su.id ? '#1E40AF' : '#EA3943',
                           border: '1px solid #C4B5FD',
                           borderRadius: '12px',
-                          padding: '2px 10px',
+                          padding: '3px 12px',
                           fontWeight: 800,
-                          fontSize: '0.78rem',
+                          fontSize: '0.8rem',
                           cursor: 'pointer'
                         }}
                       >
-                        Load
+                        {editingSelfUseId === su.id ? 'Editing' : 'Load'}
                       </button>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
 
       <ConfirmDialog
         isOpen={isDeleteConfirmOpen}
