@@ -74,10 +74,10 @@ export function calculateItemUnitBreakdown(
   const profAmt = Number((safeBasic * (safeProf / 100)).toFixed(2));
   const misAmt = Number((safeBasic * (safeMis / 100)).toFixed(2));
 
-  // If manualNettPrice is provided and > 0, respect it; otherwise compute from factors
+  // If manualNettPrice is provided and > 0, respect it; otherwise compute sum of (Basic + GST + Tran + Prof + Mis)
   let nettPrice = manualNett !== undefined && manualNett > 0
     ? Number(manualNett.toFixed(2))
-    : Number((safeBasic + tranAmt + profAmt + misAmt).toFixed(2));
+    : Number((safeBasic + gstAmt + tranAmt + profAmt + misAmt).toFixed(2));
 
   const salePrice = Number((nettPrice + safeRoundUp).toFixed(2));
 

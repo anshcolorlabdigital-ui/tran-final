@@ -5,16 +5,17 @@ import { useAuth } from '../../context/AuthContext';
 import { Item, Supplier, Purchase, PurchaseItem } from '../../types';
 import { StockEngine } from '../../db/stockEngine';
 import { getTodayDateString } from '../../utils/dateUtils';
-import { calculateItemPricing, calculateBillSummary } from '../../utils/calculations';
+import { calculateItemPricing, calculateBillSummary, calculateItemUnitBreakdown, calculateUnitBFromUnitA } from '../../utils/calculations';
 import { PurchasePrintVoucher } from './PurchasePrintVoucher';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { Search } from 'lucide-react';
 
 export const PurchaseEntryView: React.FC = () => {
-  const { showToast, openQuickModal, refreshKey, selectedDate, pendingPurchasePrefill, setPendingPurchasePrefill } = useApp();
+  const { showToast, showAlert, openQuickModal, refreshKey, selectedDate, pendingPurchasePrefill, setPendingPurchasePrefill } = useApp();
   const { hasPermission } = useAuth();
 
   // Masters
+  const settings = useMemo(() => db.getSettings(), [refreshKey]);
   const suppliers = useMemo(() => db.getSuppliers().filter(s => s.isActive !== false), [refreshKey]);
   const items = useMemo(() => db.getItems().filter(i => i.isActive !== false), [refreshKey]);
   const purchasesHistory = useMemo(() => db.getPurchases(), [refreshKey]);
@@ -26,14 +27,19 @@ export const PurchaseEntryView: React.FC = () => {
   const [supplierId, setSupplierId] = useState<string>('');
   const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(null);
   const [associatedOrderId, setAssociatedOrderId] = useState<string | null>(null);
+  const [isJustSaved, setIsJustSaved] = useState(false);
 
-  // Line item strip
+  // Line item selection & dual unit state
   const [selectedItemId, setSelectedItemId] = useState<string>('');
   const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
 
-  const [basicPrice, setBasicPrice] = useState<string>('0');
-  const [gstPercent, setGstPercent] = useState<string>('18');
-  const [qty, setQty] = useState<string>('1');
+  const [unitABasicPrice, setUnitABasicPrice] = useState<string>('0');
+  const [unitAGstPercent, setUnitAGstPercent] = useState<string>(String(settings.defaultGstPercent || 18));
+  const [unitAQty, setUnitAQty] = useState<string>('1');
+
+  const [unitBBasicPrice, setUnitBBasicPrice] = useState<string>('0');
+  const [unitBGstPercent, setUnitBGstPercent] = useState<string>(String(settings.defaultGstPercent || 18));
+  const [unitBQty, setUnitBQty] = useState<string>('1');
 
   // Items added
   const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>([]);
@@ -45,10 +51,11 @@ export const PurchaseEntryView: React.FC = () => {
   // Handle incoming order prefill from ORDERED section
   useEffect(() => {
     if (pendingPurchasePrefill) {
+      setIsJustSaved(false);
       if (pendingPurchasePrefill.supplierId) {
         setSupplierId(pendingPurchasePrefill.supplierId);
       }
-      setBillNo(StockEngine.getNextBillNumber('PURCHASE'));
+      setBillNo(''); // User must enter physical supplier bill number
       setBillDate(pendingPurchasePrefill.orderDate || getTodayDateString());
       setRecdDate(getTodayDateString());
       setAssociatedOrderId(pendingPurchasePrefill.orderId || null);
@@ -58,7 +65,7 @@ export const PurchaseEntryView: React.FC = () => {
         const prefilledList: PurchaseItem[] = pendingPurchasePrefill.items.map((it: any) => {
           const itemObj = items.find(i => i.id === it.itemId);
           const bPrice = itemObj?.unitA?.basicPrice ?? itemObj?.purchaseRate ?? 0;
-          const gPercent = itemObj?.unitA?.gstPercent ?? itemObj?.gstPercent ?? 18;
+          const gPercent = itemObj?.unitA?.gstPercent ?? itemObj?.gstPercent ?? (settings.defaultGstPercent || 18);
           const calc = calculateItemPricing(bPrice, gPercent, 0, Number(it.qty) || 1, 0);
 
           return {
@@ -66,6 +73,7 @@ export const PurchaseEntryView: React.FC = () => {
             itemId: it.itemId,
             sno: it.sno || itemObj?.sno || '',
             itemName: it.itemName || itemObj?.name || 'Item',
+            unit: itemObj?.unitA?.unitName || itemObj?.unit || 'Units',
             basicPrice: calc.basicPrice,
             gstPercent: calc.gstPercent,
             gstAmt: calc.gstAmt,
@@ -74,52 +82,84 @@ export const PurchaseEntryView: React.FC = () => {
             roundup: 0,
             salePrice: calc.salePrice,
             qty: Number(it.qty) || 1,
-            amount: calc.amount
+            amount: calc.amount,
+            conversionFactor: itemObj?.unitB?.conversionFactor || 1,
+            isSecondaryUnit: false,
+            baseQty: Number(it.qty) || 1
           };
         });
 
         setPurchaseItems(prefilledList);
       }
 
-      showToast(`Loaded Order #${pendingPurchasePrefill.orderNumber} into Purchase Entry!`, 'success');
+      showToast(`Loaded Order #${pendingPurchasePrefill.orderNumber} into Purchase Entry! Enter the supplier's Bill No. to complete.`, 'info');
       setPendingPurchasePrefill(null);
     }
-  }, [pendingPurchasePrefill, items]);
+  }, [pendingPurchasePrefill, items, settings]);
 
   useEffect(() => {
     if (!editingPurchaseId && !pendingPurchasePrefill && !associatedOrderId) {
-      setBillNo(StockEngine.getNextBillNumber('PURCHASE'));
       setBillDate(selectedDate || getTodayDateString());
       setRecdDate(selectedDate || getTodayDateString());
-      if (suppliers.length > 0 && !supplierId) {
-        setSupplierId(suppliers[0].id);
-      }
     }
-  }, [editingPurchaseId, selectedDate, suppliers, refreshKey]);
+  }, [editingPurchaseId, selectedDate, refreshKey]);
+
+  const selectedItemObj = useMemo(() => {
+    return items.find(i => i.id === selectedItemId);
+  }, [items, selectedItemId]);
+
+  const hasUnitB = Boolean(
+    selectedItemObj &&
+    (selectedItemObj.hasSecondaryUnit || (selectedItemObj.unitB && selectedItemObj.unitB.isActive !== false && selectedItemObj.unitB.unitName && selectedItemObj.unitB.unitName !== selectedItemObj.unitA?.unitName))
+  );
 
   const handleItemSelect = (itemId: string) => {
     setIsTouched(true);
     setSelectedItemId(itemId);
+    setEditingItemIndex(null);
     const found = items.find(i => i.id === itemId);
     if (found) {
-      const price = found.unitA?.basicPrice ?? found.purchaseRate ?? 0;
-      const gst = found.unitA?.gstPercent ?? found.gstPercent ?? 18;
-      setBasicPrice(String(price));
-      setGstPercent(String(gst));
-      setQty('1');
+      const uA = found.unitA || {
+        basicPrice: found.purchaseRate || 0,
+        gstPercent: found.gstPercent || settings.defaultGstPercent || 18,
+      };
+      setUnitABasicPrice(String(uA.basicPrice || 0));
+      setUnitAGstPercent(String(uA.gstPercent || settings.defaultGstPercent || 18));
+      setUnitAQty('1');
+
+      if (found.unitB) {
+        setUnitBBasicPrice(String(found.unitB.basicPrice || 0));
+        setUnitBGstPercent(String(found.unitB.gstPercent || settings.defaultGstPercent || 18));
+        setUnitBQty('1');
+      }
     }
   };
 
-  // Live computed pricing for the entry strip
-  const calculatedLinePricing = useMemo(() => {
+  // Live computed pricing for Unit A and Unit B
+  const calculatedUnitAPricing = useMemo(() => {
     return calculateItemPricing(
-      Number(basicPrice),
-      Number(gstPercent),
+      Number(unitABasicPrice),
+      Number(unitAGstPercent),
       0,
-      Number(qty),
+      Number(unitAQty),
       0
     );
-  }, [basicPrice, gstPercent, qty]);
+  }, [unitABasicPrice, unitAGstPercent, unitAQty]);
+
+  const calculatedUnitBPricing = useMemo(() => {
+    return calculateItemPricing(
+      Number(unitBBasicPrice),
+      Number(unitBGstPercent),
+      0,
+      Number(unitBQty),
+      0
+    );
+  }, [unitBBasicPrice, unitBGstPercent, unitBQty]);
+
+  const selectedItemCurrentStock = useMemo(() => {
+    if (!selectedItemId) return 0;
+    return StockEngine.getItemCurrentStock(selectedItemId);
+  }, [selectedItemId, refreshKey]);
 
   const billSummary = useMemo(() => {
     return calculateBillSummary(purchaseItems);
@@ -127,35 +167,39 @@ export const PurchaseEntryView: React.FC = () => {
 
   const isFormActive = Boolean(editingPurchaseId || purchaseItems.length > 0 || selectedItemId || isTouched);
 
-  const handleAddOrUpdateLineItem = () => {
+  const handleAddUnitAItem = () => {
     setIsTouched(true);
-    if (!selectedItemId) {
-      showToast('Please select an item', 'error');
+    if (!selectedItemId || !selectedItemObj) {
+      showAlert('Please select an item first.', 'Selection Required', 'warning');
       return;
     }
-    const numQty = Number(qty);
+    const numQty = Number(unitAQty);
     if (!numQty || numQty <= 0) {
-      showToast('Quantity must be greater than 0', 'error');
+      showAlert('Please enter a quantity greater than 0 for Unit A.', 'Invalid Quantity', 'warning');
       return;
     }
 
-    const itemObj = items.find(i => i.id === selectedItemId);
-    if (!itemObj) return;
+    const unitName = selectedItemObj.unitA?.unitName || selectedItemObj.unit || 'Roll';
+    const convFactor = Number(selectedItemObj.unitB?.conversionFactor) || 1;
 
     const newPurchaseItem: PurchaseItem = {
       id: `pur-item-${Date.now()}-${Math.random()}`,
-      itemId: itemObj.id,
-      sno: itemObj.sno,
-      itemName: itemObj.name,
-      basicPrice: calculatedLinePricing.basicPrice,
-      gstPercent: calculatedLinePricing.gstPercent,
-      gstAmt: calculatedLinePricing.gstAmt,
-      nettPrice: calculatedLinePricing.nettPrice,
+      itemId: selectedItemObj.id,
+      sno: selectedItemObj.sno,
+      itemName: hasUnitB ? `${selectedItemObj.name} (${unitName})` : selectedItemObj.name,
+      unit: unitName,
+      basicPrice: calculatedUnitAPricing.basicPrice,
+      gstPercent: calculatedUnitAPricing.gstPercent,
+      gstAmt: calculatedUnitAPricing.gstAmt,
+      nettPrice: calculatedUnitAPricing.nettPrice,
       toPercent: 0,
       roundup: 0,
-      salePrice: calculatedLinePricing.nettPrice,
-      qty: calculatedLinePricing.qty,
-      amount: calculatedLinePricing.amount
+      salePrice: calculatedUnitAPricing.nettPrice,
+      qty: calculatedUnitAPricing.qty,
+      amount: calculatedUnitAPricing.amount,
+      conversionFactor: convFactor,
+      isSecondaryUnit: false,
+      baseQty: numQty
     };
 
     if (editingItemIndex !== null && editingItemIndex >= 0) {
@@ -166,22 +210,75 @@ export const PurchaseEntryView: React.FC = () => {
       showToast('Item updated in purchase table', 'info');
     } else {
       setPurchaseItems(prev => [...prev, newPurchaseItem]);
-      showToast('Item added to purchase table', 'success');
+      showToast(`Added ${numQty} ${unitName} of ${selectedItemObj.name}`, 'success');
     }
 
-    setSelectedItemId('');
-    setBasicPrice('0');
-    setGstPercent('18');
-    setQty('1');
+    setUnitAQty('1');
+  };
+
+  const handleAddUnitBItem = () => {
+    setIsTouched(true);
+    if (!selectedItemId || !selectedItemObj || !selectedItemObj.unitB) {
+      showAlert('Secondary unit not configured for this item.', 'Invalid Action', 'warning');
+      return;
+    }
+    const numQty = Number(unitBQty);
+    if (!numQty || numQty <= 0) {
+      showAlert('Please enter a quantity greater than 0 for Unit B.', 'Invalid Quantity', 'warning');
+      return;
+    }
+
+    const convFactor = Number(selectedItemObj.unitB.conversionFactor) || 1;
+    const unitName = selectedItemObj.unitB.unitName || 'Unit B';
+    const baseQty = Number((numQty / convFactor).toFixed(4));
+
+    const newPurchaseItem: PurchaseItem = {
+      id: `pur-item-${Date.now()}-${Math.random()}`,
+      itemId: selectedItemObj.id,
+      sno: selectedItemObj.sno,
+      itemName: `${selectedItemObj.name} (${unitName})`,
+      unit: unitName,
+      basicPrice: calculatedUnitBPricing.basicPrice,
+      gstPercent: calculatedUnitBPricing.gstPercent,
+      gstAmt: calculatedUnitBPricing.gstAmt,
+      nettPrice: calculatedUnitBPricing.nettPrice,
+      toPercent: 0,
+      roundup: 0,
+      salePrice: calculatedUnitBPricing.nettPrice,
+      qty: calculatedUnitBPricing.qty,
+      amount: calculatedUnitBPricing.amount,
+      conversionFactor: convFactor,
+      isSecondaryUnit: true,
+      baseQty
+    };
+
+    if (editingItemIndex !== null && editingItemIndex >= 0) {
+      const updated = [...purchaseItems];
+      updated[editingItemIndex] = newPurchaseItem;
+      setPurchaseItems(updated);
+      setEditingItemIndex(null);
+      showToast('Item updated in purchase table', 'info');
+    } else {
+      setPurchaseItems(prev => [...prev, newPurchaseItem]);
+      showToast(`Added ${numQty} ${unitName} (${baseQty} primary units) to purchase`, 'success');
+    }
+
+    setUnitBQty('1');
   };
 
   const handleEditLineItem = (index: number) => {
     setIsTouched(true);
     const item = purchaseItems[index];
     setSelectedItemId(item.itemId);
-    setBasicPrice(String(item.basicPrice));
-    setGstPercent(String(item.gstPercent));
-    setQty(String(item.qty));
+    if (item.isSecondaryUnit) {
+      setUnitBBasicPrice(String(item.basicPrice));
+      setUnitBGstPercent(String(item.gstPercent));
+      setUnitBQty(String(item.qty));
+    } else {
+      setUnitABasicPrice(String(item.basicPrice));
+      setUnitAGstPercent(String(item.gstPercent));
+      setUnitAQty(String(item.qty));
+    }
     setEditingItemIndex(index);
   };
 
@@ -196,31 +293,35 @@ export const PurchaseEntryView: React.FC = () => {
 
   const handleNewEntry = () => {
     setEditingPurchaseId(null);
+    setIsJustSaved(false);
     setIsTouched(false);
-    setBillNo(StockEngine.getNextBillNumber('PURCHASE'));
+    setBillNo('');
     setBillDate(getTodayDateString());
     setRecdDate(getTodayDateString());
-    if (suppliers.length > 0) setSupplierId(suppliers[0].id);
+    setSupplierId('');
     setPurchaseItems([]);
     setSelectedItemId('');
-    setBasicPrice('0');
-    setGstPercent('18');
-    setQty('1');
+    setUnitABasicPrice('0');
+    setUnitAGstPercent(String(settings.defaultGstPercent || 18));
+    setUnitAQty('1');
+    setUnitBBasicPrice('0');
+    setUnitBGstPercent(String(settings.defaultGstPercent || 18));
+    setUnitBQty('1');
     setEditingItemIndex(null);
     showToast('New Purchase entry ready', 'info');
   };
 
   const handleSavePurchase = () => {
     if (!supplierId) {
-      showToast('Please select a supplier / party', 'error');
+      showAlert("Please select a Supplier / Vendor first.", 'Validation Error', 'warning');
       return;
     }
     if (!billNo.trim()) {
-      showToast('Bill No. is required', 'error');
+      showAlert("Please enter the Supplier's Bill / Invoice Number first.", 'Validation Error', 'warning');
       return;
     }
     if (purchaseItems.length === 0) {
-      showToast('Please add at least one item to the purchase', 'error');
+      showAlert('Please add at least one item to the purchase bill.', 'Empty Line Items', 'warning');
       return;
     }
 
@@ -245,15 +346,77 @@ export const PurchaseEntryView: React.FC = () => {
       createdAt: new Date().toISOString()
     };
 
+    // Auto-update Item Master base prices & GST % if updated during purchase invoice entry
+    purchaseItems.forEach(pItem => {
+      const currentItem = db.getItemById(pItem.itemId);
+      if (currentItem) {
+        let newUnitABasicPrice = currentItem.unitA?.basicPrice ?? currentItem.purchaseRate ?? 0;
+        let newGstPercent = currentItem.unitA?.gstPercent ?? currentItem.gstPercent ?? 18;
+        let hasChange = false;
+
+        if (pItem.isSecondaryUnit) {
+          const conv = Number(pItem.conversionFactor) || 1;
+          const derivedUnitAPrice = Number((pItem.basicPrice * conv).toFixed(2));
+          if (derivedUnitAPrice !== newUnitABasicPrice || pItem.gstPercent !== newGstPercent) {
+            newUnitABasicPrice = derivedUnitAPrice;
+            newGstPercent = pItem.gstPercent;
+            hasChange = true;
+          }
+        } else {
+          if (pItem.basicPrice !== newUnitABasicPrice || pItem.gstPercent !== newGstPercent) {
+            newUnitABasicPrice = pItem.basicPrice;
+            newGstPercent = pItem.gstPercent;
+            hasChange = true;
+          }
+        }
+
+        if (hasChange) {
+          const updatedItem = { ...currentItem };
+          updatedItem.purchaseRate = newUnitABasicPrice;
+          updatedItem.gstPercent = newGstPercent;
+
+          if (updatedItem.unitA) {
+            const updatedUnitA = calculateItemUnitBreakdown({
+              ...updatedItem.unitA,
+              basicPrice: newUnitABasicPrice,
+              gstPercent: newGstPercent
+            });
+            updatedItem.unitA = updatedUnitA;
+            updatedItem.saleRate = updatedUnitA.salePrice;
+
+            if (updatedItem.hasSecondaryUnit && updatedItem.unitB) {
+              const conv = Number(updatedItem.unitB.conversionFactor) || 1;
+              updatedItem.unitB = {
+                ...calculateUnitBFromUnitA(updatedUnitA, conv),
+                unitName: updatedItem.unitB.unitName,
+                conversionFactor: conv,
+                isActive: updatedItem.unitB.isActive
+              };
+            }
+          }
+
+          db.saveItem(updatedItem);
+        }
+      }
+    });
+
     // Automatically increases Universal Stock Ledger via PURCHASE_IN!
     db.savePurchase(purchaseRecord);
 
-    showToast(`Purchase bill ${purchaseRecord.billNo} saved! Stock increased.`, 'success');
-    setAssociatedOrderId(null);
-    handleNewEntry();
+    if (editingPurchaseId) {
+      setIsJustSaved(true);
+      setIsTouched(false);
+      showToast(`Purchase bill ${purchaseRecord.billNo} updated! Stock adjusted.`, 'success');
+    } else {
+      setIsJustSaved(false);
+      showToast(`Purchase bill ${purchaseRecord.billNo} saved! Item rates and stock updated.`, 'success');
+      setAssociatedOrderId(null);
+      handleNewEntry();
+    }
   };
 
   const handleLoadPurchaseForEdit = (purchase: Purchase) => {
+    setIsJustSaved(false);
     setEditingPurchaseId(purchase.id);
     setIsTouched(true);
     setBillNo(purchase.billNo);
@@ -318,9 +481,11 @@ export const PurchaseEntryView: React.FC = () => {
   }, [purchasesHistory, searchHistory]);
 
   const isEditing = Boolean(editingPurchaseId);
-  const isCreating = Boolean(!isEditing && (isTouched || purchaseItems.length > 0 || selectedItemId || (suppliers.length > 0 && supplierId !== suppliers[0]?.id)));
+  const isCreating = Boolean(!isEditing && !isJustSaved && (isTouched || purchaseItems.length > 0 || selectedItemId || supplierId || billNo.trim()));
 
-  const cardStateClass = isEditing
+  const cardStateClass = isJustSaved
+    ? 'is-saved-yellow'
+    : isEditing
     ? 'is-editing-pink'
     : isCreating
     ? 'is-creating-green'
@@ -336,7 +501,11 @@ export const PurchaseEntryView: React.FC = () => {
           <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '8px 36px', minWidth: '220px', textAlign: 'center' }}>
             PURCHASE ENTRY
           </div>
-          {isEditing ? (
+          {isJustSaved ? (
+            <span className="active-mode-indicator is-saved">
+              ● Saved / Updated Just Now ({billNo})
+            </span>
+          ) : isEditing ? (
             <span className="active-mode-indicator is-editing">
               ● Editing Purchase Bill ({billNo})
             </span>
@@ -463,142 +632,270 @@ export const PurchaseEntryView: React.FC = () => {
           </button>
         </div>
 
-        {/* PRICING INPUT STRIP matching new purchase.jpg */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1.2fr 80px 1fr 1fr 80px 1fr auto',
-            gap: '8px',
-            alignItems: 'flex-end',
-            background: isFormActive ? '#FFFFFF' : '#F9FAFB',
-            padding: '12px 10px',
-            borderRadius: '6px',
-            border: '1px solid #000000'
-          }}
-        >
-          {/* Basic Price */}
-          <div>
-            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.75rem', textAlign: 'center', marginBottom: '2px' }}>
-              Besic Price
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              className="input-text-clean"
-              value={basicPrice}
-              onChange={e => {
-                setIsTouched(true);
-                setBasicPrice(e.target.value);
+        {/* DUAL PRICING INPUT CARDS (UNIT-A & UNIT-B) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {/* Card 1: Unit A (Primary) */}
+          <div
+            style={{
+              background: '#FFFFFF',
+              border: '1.5px solid #000000',
+              borderRadius: '8px',
+              padding: '10px 12px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <span style={{ fontWeight: 900, fontSize: '0.95rem', color: '#1E3A8A' }}>
+                UNIT-A : {selectedItemObj?.unitA?.unitName || selectedItemObj?.unit || 'Roll'} (Primary)
+              </span>
+              <span style={{ fontSize: '0.8rem', color: '#6B7280', fontWeight: 700 }}>
+                Available Stock: {selectedItemCurrentStock} {selectedItemObj?.unitA?.unitName || selectedItemObj?.unit || 'Units'}
+              </span>
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1.2fr 80px 1fr 1fr 90px 1.1fr auto',
+                gap: '8px',
+                alignItems: 'flex-end'
               }}
-              style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }}
-            />
-          </div>
-
-          {/* GST % */}
-          <div>
-            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.75rem', textAlign: 'center', marginBottom: '2px' }}>
-              GST %
-            </label>
-            <input
-              type="number"
-              className="input-text-clean"
-              value={gstPercent}
-              onChange={e => {
-                setIsTouched(true);
-                setGstPercent(e.target.value);
-              }}
-              style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }}
-            />
-          </div>
-
-          {/* GST Amt */}
-          <div>
-            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.75rem', textAlign: 'center', marginBottom: '2px' }}>
-              GST Amt.
-            </label>
-            <input
-              type="text"
-              readOnly
-              className="input-text-clean"
-              value={calculatedLinePricing.gstAmt}
-              style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }}
-            />
-          </div>
-
-          {/* Nett Price */}
-          <div>
-            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.75rem', textAlign: 'center', marginBottom: '2px' }}>
-              Nett Price
-            </label>
-            <input
-              type="text"
-              readOnly
-              className="input-text-clean"
-              value={calculatedLinePricing.nettPrice}
-              style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }}
-            />
-          </div>
-
-          {/* Qty */}
-          <div>
-            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.75rem', textAlign: 'center', marginBottom: '2px' }}>
-              Qty
-            </label>
-            <input
-              type="number"
-              min="1"
-              className="input-text-clean"
-              value={qty}
-              onChange={e => {
-                setIsTouched(true);
-                setQty(e.target.value);
-              }}
-              style={{ textAlign: 'center', padding: '4px', fontWeight: 900, color: '#EA3943' }}
-            />
-          </div>
-
-          {/* Amount */}
-          <div>
-            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.75rem', textAlign: 'center', marginBottom: '2px' }}>
-              Amount
-            </label>
-            <input
-              type="text"
-              readOnly
-              className="input-text-clean"
-              value={calculatedLinePricing.amount}
-              style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 800 }}
-            />
-          </div>
-
-          {/* Actions */}
-          <div style={{ display: 'flex', gap: '6px', paddingBottom: '4px' }}>
-            <button
-              type="button"
-              onClick={handleAddOrUpdateLineItem}
-              style={{ color: '#EA3943', background: 'transparent', border: 'none', fontWeight: 900, fontSize: '0.9rem', cursor: 'pointer', padding: '2px 4px' }}
             >
-              {editingItemIndex !== null ? 'Update' : 'Add'}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (purchaseItems.length > 0) handleEditLineItem(purchaseItems.length - 1);
-              }}
-              style={{ color: '#EA3943', background: 'transparent', border: 'none', fontWeight: 900, fontSize: '0.9rem', cursor: 'pointer', padding: '2px 4px' }}
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (purchaseItems.length > 0) handleDeleteLineItem(purchaseItems.length - 1);
-              }}
-              style={{ color: '#EA3943', background: 'transparent', border: 'none', fontWeight: 900, fontSize: '0.9rem', cursor: 'pointer', padding: '2px 4px' }}
-            >
-              Del
-            </button>
+              <div>
+                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
+                  Besic Price
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="input-text-clean"
+                  value={unitABasicPrice}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitABasicPrice(e.target.value);
+                  }}
+                  style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
+                  GST %
+                </label>
+                <input
+                  type="number"
+                  className="input-text-clean"
+                  value={unitAGstPercent}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitAGstPercent(e.target.value);
+                  }}
+                  style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
+                  GST Amt.
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  className="input-text-clean"
+                  value={calculatedUnitAPricing.gstAmt}
+                  style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
+                  Nett Price
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  className="input-text-clean"
+                  value={calculatedUnitAPricing.nettPrice}
+                  style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
+                  Qty ({selectedItemObj?.unitA?.unitName || 'Unit A'})
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  className="input-text-clean"
+                  value={unitAQty}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitAQty(e.target.value);
+                  }}
+                  style={{ textAlign: 'center', padding: '4px', fontWeight: 900, color: '#EA3943' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
+                  Amount
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  className="input-text-clean"
+                  value={calculatedUnitAPricing.amount}
+                  style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 800 }}
+                />
+              </div>
+
+              <div style={{ paddingBottom: '2px' }}>
+                <button
+                  type="button"
+                  onClick={handleAddUnitAItem}
+                  className="btn-customer-save"
+                  style={{ padding: '6px 14px', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+                >
+                  + Add {selectedItemObj?.unitA?.unitName || 'Unit A'}
+                </button>
+              </div>
+            </div>
           </div>
+
+          {/* Card 2: Unit B (Shown if secondary unit is enabled) */}
+          {hasUnitB && (
+            <div
+              style={{
+                background: '#FFFFFF',
+                border: '1.5px solid #000000',
+                borderRadius: '8px',
+                padding: '10px 12px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontWeight: 900, fontSize: '0.95rem', color: '#047857' }}>
+                    UNIT-B : {selectedItemObj?.unitB?.unitName || 'Unit B'} (Secondary)
+                  </span>
+                  <span style={{ fontSize: '0.8rem', background: '#DCFCE7', color: '#166534', padding: '1px 8px', borderRadius: '10px', fontWeight: 800 }}>
+                    1 {selectedItemObj?.unitA?.unitName || 'Unit A'} = {selectedItemObj?.unitB?.conversionFactor || 40} {selectedItemObj?.unitB?.unitName || 'Unit B'}
+                  </span>
+                </div>
+                <span style={{ fontSize: '0.8rem', color: '#6B7280', fontWeight: 700 }}>
+                  Equivalent in {selectedItemObj?.unitB?.unitName || 'Unit B'}: {Number((selectedItemCurrentStock * (Number(selectedItemObj?.unitB?.conversionFactor) || 1)).toFixed(1))} {selectedItemObj?.unitB?.unitName}
+                </span>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1.2fr 80px 1fr 1fr 90px 1.1fr auto',
+                  gap: '8px',
+                  alignItems: 'flex-end'
+                }}
+              >
+                <div>
+                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
+                    Besic Price
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="input-text-clean"
+                    value={unitBBasicPrice}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitBBasicPrice(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
+                    GST %
+                  </label>
+                  <input
+                    type="number"
+                    className="input-text-clean"
+                    value={unitBGstPercent}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitBGstPercent(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
+                    GST Amt.
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    className="input-text-clean"
+                    value={calculatedUnitBPricing.gstAmt}
+                    style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
+                    Nett Price
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    className="input-text-clean"
+                    value={calculatedUnitBPricing.nettPrice}
+                    style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
+                    Qty ({selectedItemObj?.unitB?.unitName || 'Unit B'})
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    className="input-text-clean"
+                    value={unitBQty}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitBQty(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', padding: '4px', fontWeight: 900, color: '#EA3943' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
+                    Amount
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    className="input-text-clean"
+                    value={calculatedUnitBPricing.amount}
+                    style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 800 }}
+                  />
+                </div>
+
+                <div style={{ paddingBottom: '2px' }}>
+                  <button
+                    type="button"
+                    onClick={handleAddUnitBItem}
+                    className="btn-customer-save"
+                    style={{ padding: '6px 14px', fontSize: '0.82rem', whiteSpace: 'nowrap', background: '#A7F3D0' }}
+                  >
+                    + Add {selectedItemObj?.unitB?.unitName || 'Unit B'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ITEMS TABLE matching new purchase.jpg */}
@@ -702,51 +999,34 @@ export const PurchaseEntryView: React.FC = () => {
             </div>
           </div>
 
-          {/* Customer Action Buttons matching new purchase.jpg */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-            {/* Top Center: Mint Green Save Button */}
+          {/* Customer Action Buttons: Del, Large Save, Print */}
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn-customer-action-pill"
+              onClick={handleDeleteCurrentPurchase}
+              disabled={!isEditing}
+              style={{ opacity: isEditing ? 1 : 0.5, cursor: isEditing ? 'pointer' : 'not-allowed' }}
+            >
+              Del
+            </button>
+
             <button
               type="button"
               onClick={handleSavePurchase}
               className="btn-customer-save"
+              style={{ padding: '10px 48px', fontSize: '1.2rem', minWidth: '160px' }}
             >
               Save
             </button>
 
-            {/* Bottom Row: Lavender Action Pills */}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                className="btn-customer-action-pill"
-                onClick={() => {
-                  if (purchasesHistory.length > 0) {
-                    showToast('Select a purchase from the history list below to edit', 'info');
-                    const el = document.getElementById('purchase-inward-register');
-                    if (el) el.scrollIntoView({ behavior: 'smooth' });
-                  } else {
-                    showToast('No saved purchases found', 'warning');
-                  }
-                }}
-              >
-                Edit
-              </button>
-
-              <button
-                type="button"
-                className="btn-customer-action-pill"
-                onClick={handleDeleteCurrentPurchase}
-              >
-                Del
-              </button>
-
-              <button
-                type="button"
-                className="btn-customer-action-pill"
-                onClick={handlePrint}
-              >
-                Print
-              </button>
-            </div>
+            <button
+              type="button"
+              className="btn-customer-action-pill"
+              onClick={handlePrint}
+            >
+              Print
+            </button>
           </div>
         </div>
       </div>

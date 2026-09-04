@@ -2,6 +2,7 @@ import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { ActiveNavTab } from '../../types';
 import { StockEngine } from '../../db/stockEngine';
+import { db } from '../../db/db';
 
 export const Sidebar: React.FC = () => {
   const { activeTab, setActiveTab, refreshKey } = useApp();
@@ -14,6 +15,10 @@ export const Sidebar: React.FC = () => {
   const pendingOrderCount = React.useMemo(() => {
     return lowStockItems.filter(item => !item.activeOrder).length;
   }, [lowStockItems]);
+
+  const placedOrdersCount = React.useMemo(() => {
+    return db.getOrders().filter(o => o.status === 'ORDERED' || o.status === 'PARTIALLY_RECEIVED').length;
+  }, [refreshKey]);
 
   const navItem = (tab: ActiveNavTab, label: string, badgeCount?: number) => {
     const isActive = activeTab === tab;
@@ -57,6 +62,7 @@ export const Sidebar: React.FC = () => {
           DASHBOARD
         </div>
         {navItem('ORDER', 'ORDER', pendingOrderCount)}
+        {navItem('ORDERED', 'ORDERED Section', placedOrdersCount > 0 ? placedOrdersCount : undefined)}
         {navItem('PURCHASE', 'PURCHASE')}
         {navItem('SALE', 'SALE')}
         {navItem('SELF_USE', 'SELF USE')}

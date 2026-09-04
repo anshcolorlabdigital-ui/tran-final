@@ -7,7 +7,7 @@ import { formatDateToDisplay, getTodayDateString } from '../../utils/dateUtils';
 import { OrderReceiptModal } from './OrderReceiptModal';
 import { CreateOrderModal } from './CreateOrderModal';
 import { ReceiptData } from '../../utils/shareUtils';
-import { Plus, Share2, ArrowRight, Package, ListOrdered } from 'lucide-react';
+import { Plus, Share2, Package } from 'lucide-react';
 
 export const OrdersView: React.FC = () => {
   const { refreshKey, showToast, selectedDate, setActiveTab } = useApp();
@@ -204,29 +204,6 @@ export const OrdersView: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          {/* Quick link button to ORDERED section */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('ORDERED')}
-            style={{
-              backgroundColor: '#FFFFFF',
-              color: '#002B99',
-              border: '1.5px solid #002B99',
-              borderRadius: '20px',
-              padding: '6px 16px',
-              fontWeight: 800,
-              fontSize: '0.85rem',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <ListOrdered size={16} />
-            <span>Go to ORDERED Section ({placedOrdersCount})</span>
-            <ArrowRight size={14} />
-          </button>
-
           <button
             onClick={() => setIsCreateModalOpen(true)}
             className="btn-red-action"

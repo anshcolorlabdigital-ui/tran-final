@@ -33,8 +33,11 @@ export interface Party {
   id: string;
   name: string; // Firm Name
   propName?: string; // Prop. Name
+  propPhone?: string; // Prop. Phone Number
   phone: string; // Mobile 1
   phone2?: string; // Mobile 2
+  contactPerson1?: string; // Contact 1 (Ref for Mobile 1)
+  contactPerson2?: string; // Contact 2 (Ref for Mobile 2)
   email?: string; // Mail id
   address: string;
   block?: string;
@@ -52,8 +55,11 @@ export interface Supplier {
   id: string;
   name: string; // Firm Name
   propName?: string; // Prop. Name
+  propPhone?: string; // Prop. Phone Number
   phone: string; // Mobile 1
   phone2?: string; // Mobile 2
+  contactPerson1?: string; // Contact 1 (Ref for Mobile 1)
+  contactPerson2?: string; // Contact 2 (Ref for Mobile 2)
   email?: string; // Mail id
   address: string;
   block?: string;
@@ -93,6 +99,7 @@ export interface Item {
   supplierId?: string;
   supplierName?: string;
   unit: string; // Primary unit representation
+  hasSecondaryUnit?: boolean; // Optional Unit B toggle (Default OFF)
   minStock: number; // Reorder level threshold
   openingStock: number;
   purchaseRate: number; // Basic Price
@@ -171,6 +178,9 @@ export interface SaleItem {
   salePrice: number;
   qty: number;
   amount: number;
+  conversionFactor?: number;
+  isSecondaryUnit?: boolean;
+  baseQty?: number;
 }
 
 export interface Sale {
@@ -205,6 +215,9 @@ export interface PurchaseItem {
   salePrice?: number;
   qty: number;
   amount: number;
+  conversionFactor?: number;
+  isSecondaryUnit?: boolean;
+  baseQty?: number;
 }
 
 export interface Purchase {
@@ -236,6 +249,9 @@ export interface SelfUseItem {
   rate: number;
   qty: number;
   amount: number;
+  conversionFactor?: number;
+  isSecondaryUnit?: boolean;
+  baseQty?: number;
 }
 
 export interface SelfUse {

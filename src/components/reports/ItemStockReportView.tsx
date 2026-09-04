@@ -48,12 +48,12 @@ export const ItemStockReportView: React.FC = () => {
 
     return {
       count: filteredSummaries.length,
-      totalOpening,
-      totalPurchase,
-      totalSale,
-      totalSelfUse,
-      totalAdjustment,
-      totalClosing,
+      totalOpening: Number(totalOpening.toFixed(2)),
+      totalPurchase: Number(totalPurchase.toFixed(2)),
+      totalSale: Number(totalSale.toFixed(2)),
+      totalSelfUse: Number(totalSelfUse.toFixed(2)),
+      totalAdjustment: Number(totalAdjustment.toFixed(2)),
+      totalClosing: Number(totalClosing.toFixed(2)),
       lowStockCount
     };
   }, [filteredSummaries]);
@@ -227,20 +227,25 @@ export const ItemStockReportView: React.FC = () => {
                         )}
                       </div>
                     </td>
-                    <td style={{ textAlign: 'center', fontWeight: 700 }}>{s.openingStock}</td>
-                    <td style={{ textAlign: 'center', fontWeight: 700, color: '#15803D' }}>+{s.purchaseQty}</td>
-                    <td style={{ textAlign: 'center', fontWeight: 700, color: '#EA3943' }}>-{s.saleQty}</td>
-                    <td style={{ textAlign: 'center', fontWeight: 700, color: '#B45309' }}>-{s.selfUseQty}</td>
-                    <td style={{ textAlign: 'center', fontWeight: 700 }}>{s.adjustmentQty >= 0 ? `+${s.adjustmentQty}` : s.adjustmentQty}</td>
+                    <td style={{ textAlign: 'center', fontWeight: 700 }}>{Number(s.openingStock.toFixed(2))}</td>
+                    <td style={{ textAlign: 'center', fontWeight: 700, color: '#15803D' }}>+{Number(s.purchaseQty.toFixed(2))}</td>
+                    <td style={{ textAlign: 'center', fontWeight: 700, color: '#EA3943' }}>-{Number(s.saleQty.toFixed(2))}</td>
+                    <td style={{ textAlign: 'center', fontWeight: 700, color: '#B45309' }}>-{Number(s.selfUseQty.toFixed(2))}</td>
+                    <td style={{ textAlign: 'center', fontWeight: 700 }}>{s.adjustmentQty >= 0 ? `+${Number(s.adjustmentQty.toFixed(2))}` : Number(s.adjustmentQty.toFixed(2))}</td>
                     <td
                       style={{
                         textAlign: 'center',
                         fontWeight: 900,
-                        fontSize: '1.05rem',
+                        fontSize: '1rem',
                         color: s.isLowStock ? '#EA3943' : '#15803D'
                       }}
                     >
-                      {s.closingStock}
+                      <div>{Number(s.closingStock.toFixed(2))} {s.item.unitA?.unitName || s.item.unit || 'Roll'}</div>
+                      {s.item.hasSecondaryUnit && s.item.unitB && s.item.unitB.unitName && (
+                        <div style={{ fontSize: '0.72rem', color: '#047857', fontWeight: 700 }}>
+                          ({Number((s.closingStock * (Number(s.item.unitB.conversionFactor) || 1)).toFixed(1))} {s.item.unitB.unitName})
+                        </div>
+                      )}
                     </td>
                     <td style={{ textAlign: 'center', fontWeight: 700 }}>{s.item.minStock}</td>
                     <td style={{ textAlign: 'center' }}>

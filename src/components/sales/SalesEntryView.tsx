@@ -11,7 +11,7 @@ import { ConfirmDialog } from '../common/ConfirmDialog';
 import { Search } from 'lucide-react';
 
 export const SalesEntryView: React.FC = () => {
-  const { showToast, openQuickModal, refreshKey, selectedDate } = useApp();
+  const { showToast, showAlert, openQuickModal, refreshKey, selectedDate } = useApp();
   const { hasPermission } = useAuth();
 
   // Master lists
@@ -37,13 +37,19 @@ export const SalesEntryView: React.FC = () => {
 
   // Line Item Input Strip State
   const [selectedItemId, setSelectedItemId] = useState<string>('');
-  const [selectedUnitType, setSelectedUnitType] = useState<'unitA' | 'unitB'>('unitA');
   const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
 
-  const [basicPrice, setBasicPrice] = useState<string>('0');
-  const [gstPercent, setGstPercent] = useState<string>('18');
-  const [toPercent, setToPercent] = useState<string>('0');
-  const [qty, setQty] = useState<string>('1');
+  // Unit A Pricing State
+  const [unitABasicPrice, setUnitABasicPrice] = useState<string>('0');
+  const [unitAGstPercent, setUnitAGstPercent] = useState<string>('18');
+  const [unitAToPercent, setUnitAToPercent] = useState<string>('0');
+  const [unitAQty, setUnitAQty] = useState<string>('1');
+
+  // Unit B Pricing State
+  const [unitBBasicPrice, setUnitBBasicPrice] = useState<string>('0');
+  const [unitBGstPercent, setUnitBGstPercent] = useState<string>('18');
+  const [unitBToPercent, setUnitBToPercent] = useState<string>('0');
+  const [unitBQty, setUnitBQty] = useState<string>('1');
 
   // Items added to the bill
   const [billItems, setBillItems] = useState<SaleItem[]>([]);
@@ -74,40 +80,64 @@ export const SalesEntryView: React.FC = () => {
     return items.filter(i => i.category?.toLowerCase() === selectedCategory.toLowerCase());
   }, [items, selectedCategory]);
 
-  // When selected item changes, auto-populate configured rates
-  const handleItemSelect = (itemId: string, unitType: 'unitA' | 'unitB' = 'unitA') => {
+  const selectedItemObj = useMemo(() => {
+    return items.find(i => i.id === selectedItemId);
+  }, [items, selectedItemId]);
+
+  const hasUnitB = Boolean(
+    selectedItemObj &&
+    (selectedItemObj.hasSecondaryUnit || (selectedItemObj.unitB && selectedItemObj.unitB.isActive !== false && selectedItemObj.unitB.unitName && selectedItemObj.unitB.unitName !== selectedItemObj.unitA?.unitName))
+  );
+
+  // When selected item changes, auto-populate configured rates for Unit A & Unit B
+  const handleItemSelect = (itemId: string) => {
     setIsTouched(true);
     setSelectedItemId(itemId);
-    setSelectedUnitType(unitType);
     const found = items.find(i => i.id === itemId);
     if (found) {
-      const pricing = unitType === 'unitB' && found.unitB ? found.unitB : (found.unitA || {
+      const uA = found.unitA || {
         basicPrice: found.purchaseRate || 0,
         gstPercent: found.gstPercent || 18,
         tranPercent: 0,
         profPercent: 0,
         misPercent: 0,
-        roundUp: 0,
         salePrice: found.saleRate || 0
-      });
+      };
 
-      setBasicPrice(String(pricing.basicPrice || 0));
-      setGstPercent(String(pricing.gstPercent || 18));
-      const totalMargin = (pricing.tranPercent || 0) + (pricing.profPercent || 0) + (pricing.misPercent || 0);
-      setToPercent(String(totalMargin));
-      setQty('1');
+      setUnitABasicPrice(String(uA.basicPrice || 0));
+      setUnitAGstPercent(String(uA.gstPercent || 18));
+      const totalMarginA = (uA.tranPercent || 0) + (uA.profPercent || 0) + (uA.misPercent || 0);
+      setUnitAToPercent(String(totalMarginA));
+      setUnitAQty('1');
+
+      if (found.unitB) {
+        setUnitBBasicPrice(String(found.unitB.basicPrice || 0));
+        setUnitBGstPercent(String(found.unitB.gstPercent || 18));
+        const totalMarginB = (found.unitB.tranPercent || 0) + (found.unitB.profPercent || 0) + (found.unitB.misPercent || 0);
+        setUnitBToPercent(String(totalMarginB));
+        setUnitBQty('1');
+      }
     }
   };
 
-  // Live computed values for pricing strip
-  const calculatedLinePricing = useMemo(() => {
+  // Live computed values for Unit A and Unit B
+  const calculatedUnitAPricing = useMemo(() => {
     return calculateItemPricing(
-      Number(basicPrice),
-      Number(gstPercent),
-      Number(toPercent),
-      Number(qty)
+      Number(unitABasicPrice),
+      Number(unitAGstPercent),
+      Number(unitAToPercent),
+      Number(unitAQty)
     );
-  }, [basicPrice, gstPercent, toPercent, qty]);
+  }, [unitABasicPrice, unitAGstPercent, unitAToPercent, unitAQty]);
+
+  const calculatedUnitBPricing = useMemo(() => {
+    return calculateItemPricing(
+      Number(unitBBasicPrice),
+      Number(unitBGstPercent),
+      Number(unitBToPercent),
+      Number(unitBQty)
+    );
+  }, [unitBBasicPrice, unitBGstPercent, unitBToPercent, unitBQty]);
 
   // Current stock for the selected item
   const selectedItemCurrentStock = useMemo(() => {
@@ -133,16 +163,16 @@ export const SalesEntryView: React.FC = () => {
     }
   }, [billSummary.billTotal]);
 
-  // Add or Update Line Item
-  const handleAddOrUpdateLineItem = () => {
+  // Add Unit A Item
+  const handleAddUnitAItem = () => {
     setIsTouched(true);
     if (!selectedItemId) {
-      showToast('Please select an item', 'error');
+      showAlert('Please select an item first.', 'Validation Error', 'error');
       return;
     }
-    const numQty = Number(qty);
+    const numQty = Number(unitAQty);
     if (!numQty || numQty <= 0) {
-      showToast('Quantity must be greater than 0', 'error');
+      showAlert('Quantity must be greater than 0', 'Validation Error', 'error');
       return;
     }
 
@@ -150,12 +180,52 @@ export const SalesEntryView: React.FC = () => {
     if (!itemObj) return;
 
     if (numQty > selectedItemCurrentStock) {
-      showToast(`Warning: Available stock is ${selectedItemCurrentStock} for ${itemObj.name}`, 'warning');
+      showToast(`Notice: Available stock is ${selectedItemCurrentStock} ${itemObj.unit || 'Units'}`, 'warning');
     }
 
-    const unitLabel = selectedUnitType === 'unitB' 
-      ? (itemObj.unitB?.unitName || 'Unit B') 
-      : (itemObj.unitA?.unitName || itemObj.unit || 'Unit A');
+    const unitLabel = itemObj.unitA?.unitName || itemObj.unit || 'Roll';
+    const newSaleItem: SaleItem = {
+      id: `sale-item-${Date.now()}-${Math.random()}`,
+      itemId: itemObj.id,
+      sno: itemObj.sno,
+      itemName: `${itemObj.name}`,
+      unit: unitLabel,
+      basicPrice: calculatedUnitAPricing.basicPrice,
+      gstPercent: calculatedUnitAPricing.gstPercent,
+      gstAmt: calculatedUnitAPricing.gstAmt,
+      nettPrice: calculatedUnitAPricing.nettPrice,
+      toPercent: calculatedUnitAPricing.toPercent,
+      salePrice: calculatedUnitAPricing.salePrice,
+      qty: calculatedUnitAPricing.qty,
+      amount: calculatedUnitAPricing.amount,
+      isSecondaryUnit: false,
+      conversionFactor: 1,
+      baseQty: calculatedUnitAPricing.qty
+    };
+
+    setBillItems(prev => [...prev, newSaleItem]);
+    showToast(`Added ${numQty} ${unitLabel} of ${itemObj.name}`, 'success');
+  };
+
+  // Add Unit B Item
+  const handleAddUnitBItem = () => {
+    setIsTouched(true);
+    if (!selectedItemId) {
+      showAlert('Please select an item first.', 'Validation Error', 'error');
+      return;
+    }
+    const numQty = Number(unitBQty);
+    if (!numQty || numQty <= 0) {
+      showAlert('Quantity must be greater than 0', 'Validation Error', 'error');
+      return;
+    }
+
+    const itemObj = items.find(i => i.id === selectedItemId);
+    if (!itemObj || !itemObj.unitB) return;
+
+    const convFactor = Number(itemObj.unitB.conversionFactor) || 1;
+    const baseQty = Number((numQty / convFactor).toFixed(3));
+    const unitLabel = itemObj.unitB.unitName || 'Mt.';
 
     const newSaleItem: SaleItem = {
       id: `sale-item-${Date.now()}-${Math.random()}`,
@@ -163,33 +233,21 @@ export const SalesEntryView: React.FC = () => {
       sno: itemObj.sno,
       itemName: `${itemObj.name} (${unitLabel})`,
       unit: unitLabel,
-      basicPrice: calculatedLinePricing.basicPrice,
-      gstPercent: calculatedLinePricing.gstPercent,
-      gstAmt: calculatedLinePricing.gstAmt,
-      nettPrice: calculatedLinePricing.nettPrice,
-      toPercent: calculatedLinePricing.toPercent,
-      salePrice: calculatedLinePricing.salePrice,
-      qty: calculatedLinePricing.qty,
-      amount: calculatedLinePricing.amount
+      basicPrice: calculatedUnitBPricing.basicPrice,
+      gstPercent: calculatedUnitBPricing.gstPercent,
+      gstAmt: calculatedUnitBPricing.gstAmt,
+      nettPrice: calculatedUnitBPricing.nettPrice,
+      toPercent: calculatedUnitBPricing.toPercent,
+      salePrice: calculatedUnitBPricing.salePrice,
+      qty: calculatedUnitBPricing.qty,
+      amount: calculatedUnitBPricing.amount,
+      isSecondaryUnit: true,
+      conversionFactor: convFactor,
+      baseQty
     };
 
-    if (editingItemIndex !== null && editingItemIndex >= 0) {
-      const updated = [...billItems];
-      updated[editingItemIndex] = newSaleItem;
-      setBillItems(updated);
-      setEditingItemIndex(null);
-      showToast('Item updated in sale bill', 'info');
-    } else {
-      setBillItems(prev => [...prev, newSaleItem]);
-      showToast('Item added to sale bill', 'success');
-    }
-
-    // Reset line inputs
-    setSelectedItemId('');
-    setBasicPrice('0');
-    setGstPercent('18');
-    setToPercent('0');
-    setQty('1');
+    setBillItems(prev => [...prev, newSaleItem]);
+    showToast(`Added ${numQty} ${unitLabel} (${baseQty} ${itemObj.unitA?.unitName || 'Roll'}) of ${itemObj.name}`, 'success');
   };
 
   const handleEditLineItem = (index: number) => {
@@ -198,10 +256,17 @@ export const SalesEntryView: React.FC = () => {
     const foundItem = items.find(i => i.id === item.itemId);
     if (foundItem?.category) setSelectedCategory(foundItem.category);
     setSelectedItemId(item.itemId);
-    setBasicPrice(String(item.basicPrice));
-    setGstPercent(String(item.gstPercent));
-    setToPercent(String(item.toPercent || 0));
-    setQty(String(item.qty));
+    if (item.isSecondaryUnit) {
+      setUnitBBasicPrice(String(item.basicPrice));
+      setUnitBGstPercent(String(item.gstPercent));
+      setUnitBToPercent(String(item.toPercent || 0));
+      setUnitBQty(String(item.qty));
+    } else {
+      setUnitABasicPrice(String(item.basicPrice));
+      setUnitAGstPercent(String(item.gstPercent));
+      setUnitAToPercent(String(item.toPercent || 0));
+      setUnitAQty(String(item.qty));
+    }
     setEditingItemIndex(index);
   };
 
@@ -214,8 +279,11 @@ export const SalesEntryView: React.FC = () => {
     }
   };
 
+  const [isJustSaved, setIsJustSaved] = useState(false);
+
   const handleNewEntry = () => {
     setEditingSaleId(null);
+    setIsJustSaved(false);
     setIsTouched(false);
     setBillNo(StockEngine.getNextBillNumber('SALE'));
     setBillDate(getTodayDateString());
@@ -230,15 +298,15 @@ export const SalesEntryView: React.FC = () => {
 
   const handleSaveSale = () => {
     if (!partyId) {
-      showToast('Please select a customer / party', 'error');
+      showAlert('Please select a customer / party.', 'Validation Error', 'error');
       return;
     }
     if (!billNo.trim()) {
-      showToast('Bill No. is required', 'error');
+      showAlert('Bill No. is required', 'Validation Error', 'error');
       return;
     }
     if (billItems.length === 0) {
-      showToast('Please add at least one item to the sale', 'error');
+      showAlert('Please add at least one item to the sale bill.', 'Validation Error', 'error');
       return;
     }
 
@@ -264,11 +332,19 @@ export const SalesEntryView: React.FC = () => {
     // Save to Database: automatically registers SALE_OUT in universal Stock Ledger!
     db.saveSale(saleRecord);
 
-    showToast(`Sale Invoice ${saleRecord.billNo} saved! Stock updated.`, 'success');
-    handleNewEntry();
+    if (editingSaleId) {
+      setIsJustSaved(true);
+      setIsTouched(false);
+      showToast(`Sale Invoice ${saleRecord.billNo} updated! Stock adjusted.`, 'success');
+    } else {
+      setIsJustSaved(false);
+      showToast(`Sale Invoice ${saleRecord.billNo} saved! Stock updated.`, 'success');
+      handleNewEntry();
+    }
   };
 
   const handleLoadSaleForEdit = (sale: Sale) => {
+    setIsJustSaved(false);
     setEditingSaleId(sale.id);
     setIsTouched(true);
     setBillNo(sale.billNo);
@@ -332,14 +408,12 @@ export const SalesEntryView: React.FC = () => {
     );
   }, [salesHistory, searchHistory]);
 
-  const selectedItemObj = useMemo(() => {
-    return items.find(i => i.id === selectedItemId);
-  }, [items, selectedItemId]);
-
   const isEditing = Boolean(editingSaleId);
-  const isCreating = Boolean(!isEditing && (isTouched || billItems.length > 0 || selectedItemId || (parties.length > 0 && partyId !== parties[0]?.id)));
+  const isCreating = Boolean(!isEditing && !isJustSaved && (isTouched || billItems.length > 0 || selectedItemId || (parties.length > 0 && partyId !== parties[0]?.id)));
 
-  const cardStateClass = isEditing
+  const cardStateClass = isJustSaved
+    ? 'is-saved-yellow'
+    : isEditing
     ? 'is-editing-pink'
     : isCreating
     ? 'is-creating-green'
@@ -356,7 +430,11 @@ export const SalesEntryView: React.FC = () => {
           <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '8px 36px', minWidth: '220px', textAlign: 'center' }}>
             SALE ENTRY
           </div>
-          {isEditing ? (
+          {isJustSaved ? (
+            <span className="active-mode-indicator is-saved">
+              ● Saved / Updated Just Now ({billNo})
+            </span>
+          ) : isEditing ? (
             <span className="active-mode-indicator is-editing">
               ● Editing Sale Invoice ({billNo})
             </span>
@@ -471,50 +549,16 @@ export const SalesEntryView: React.FC = () => {
             <select
               className="input-text-clean"
               value={selectedItemId}
-              onChange={e => handleItemSelect(e.target.value, selectedUnitType)}
+              onChange={e => handleItemSelect(e.target.value)}
               style={{ flex: 1, fontSize: '0.95rem', height: '38px', fontWeight: 700 }}
             >
               <option value="">-- Select Item --</option>
               {filteredCategoryItems.map(i => (
                 <option key={i.id} value={i.id}>
-                  [{i.sno}] {i.name}
+                  [{i.sno}] {i.name} {i.hasSecondaryUnit ? `(${i.unitA?.unitName || 'Unit A'} / ${i.unitB?.unitName || 'Unit B'})` : ''}
                 </option>
               ))}
             </select>
-            {selectedItemObj && selectedItemObj.unitB?.unitName && (
-              <div style={{ display: 'flex', gap: '4px', background: '#F3F4F6', padding: '2px 6px', borderRadius: '6px', border: '1px solid #D1D5DB' }}>
-                <button
-                  type="button"
-                  onClick={() => handleItemSelect(selectedItemId, 'unitA')}
-                  style={{
-                    background: selectedUnitType === 'unitA' ? '#D2BEF6' : 'transparent',
-                    border: 'none',
-                    borderRadius: '4px',
-                    padding: '2px 6px',
-                    fontWeight: 800,
-                    fontSize: '0.75rem',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {selectedItemObj.unitA?.unitName || 'Unit A'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleItemSelect(selectedItemId, 'unitB')}
-                  style={{
-                    background: selectedUnitType === 'unitB' ? '#D2BEF6' : 'transparent',
-                    border: 'none',
-                    borderRadius: '4px',
-                    padding: '2px 6px',
-                    fontWeight: 800,
-                    fontSize: '0.75rem',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {selectedItemObj.unitB.unitName}
-                </button>
-              </div>
-            )}
           </div>
           <button
             type="button"
@@ -526,56 +570,156 @@ export const SalesEntryView: React.FC = () => {
           </button>
         </div>
 
-        {/* PRICING INPUT STRIP */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1.2fr 75px 1fr 1fr 75px 1.1fr 75px 1.1fr auto',
-            gap: '6px',
-            alignItems: 'flex-end',
-            background: '#F9FAFB',
-            padding: '12px 8px',
-            borderRadius: '6px',
-            border: '1px solid #000000'
-          }}
-        >
-          <div>
-            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Besic Price</label>
-            <input type="number" step="0.01" className="input-text-clean" value={basicPrice} onChange={e => { setIsTouched(true); setBasicPrice(e.target.value); }} style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }} />
+        {/* DUAL PRICING INPUT CARDS (UNIT-A & UNIT-B) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {/* Card 1: Unit A */}
+          <div
+            style={{
+              background: '#FFFFFF',
+              border: '1.5px solid #000000',
+              borderRadius: '8px',
+              padding: '10px 12px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <span style={{ fontWeight: 900, fontSize: '0.95rem', color: '#1E3A8A' }}>
+                UNIT-A : {selectedItemObj?.unitA?.unitName || selectedItemObj?.unit || 'Roll'} (Primary)
+              </span>
+              <span style={{ fontSize: '0.8rem', color: '#6B7280', fontWeight: 700 }}>
+                Available Stock: {selectedItemCurrentStock} {selectedItemObj?.unitA?.unitName || selectedItemObj?.unit || 'Units'}
+              </span>
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1.2fr 75px 1fr 1fr 75px 1.1fr 85px 1.1fr auto',
+                gap: '6px',
+                alignItems: 'flex-end'
+              }}
+            >
+              <div>
+                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Besic Price</label>
+                <input type="number" step="0.01" className="input-text-clean" value={unitABasicPrice} onChange={e => { setIsTouched(true); setUnitABasicPrice(e.target.value); }} style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>GST %</label>
+                <input type="number" className="input-text-clean" value={unitAGstPercent} onChange={e => { setIsTouched(true); setUnitAGstPercent(e.target.value); }} style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>GST Amt.</label>
+                <input type="text" readOnly className="input-text-clean" value={calculatedUnitAPricing.gstAmt} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Nett Price</label>
+                <input type="text" readOnly className="input-text-clean" value={calculatedUnitAPricing.nettPrice} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>T&O%</label>
+                <input type="number" step="0.01" className="input-text-clean" value={unitAToPercent} onChange={e => { setIsTouched(true); setUnitAToPercent(e.target.value); }} style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Sale Price</label>
+                <input type="text" readOnly className="input-text-clean" value={calculatedUnitAPricing.salePrice} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 800 }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Qty ({selectedItemObj?.unitA?.unitName || 'Unit A'})</label>
+                <input type="number" min="1" className="input-text-clean" value={unitAQty} onChange={e => { setIsTouched(true); setUnitAQty(e.target.value); }} style={{ textAlign: 'center', padding: '4px', fontWeight: 900, color: '#EA3943' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Amount</label>
+                <input type="text" readOnly className="input-text-clean" value={calculatedUnitAPricing.amount} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 800 }} />
+              </div>
+              <div style={{ paddingBottom: '2px' }}>
+                <button
+                  type="button"
+                  onClick={handleAddUnitAItem}
+                  className="btn-customer-save"
+                  style={{ padding: '6px 14px', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+                >
+                  + Add {selectedItemObj?.unitA?.unitName || 'Unit A'}
+                </button>
+              </div>
+            </div>
           </div>
-          <div>
-            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>GST %</label>
-            <input type="number" className="input-text-clean" value={gstPercent} onChange={e => { setIsTouched(true); setGstPercent(e.target.value); }} style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }} />
-          </div>
-          <div>
-            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>GST Amt.</label>
-            <input type="text" readOnly className="input-text-clean" value={calculatedLinePricing.gstAmt} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }} />
-          </div>
-          <div>
-            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Nett Price</label>
-            <input type="text" readOnly className="input-text-clean" value={calculatedLinePricing.nettPrice} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }} />
-          </div>
-          <div>
-            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>T&O%</label>
-            <input type="number" step="0.01" className="input-text-clean" value={toPercent} onChange={e => { setIsTouched(true); setToPercent(e.target.value); }} style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }} />
-          </div>
-          <div>
-            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Sale Price</label>
-            <input type="text" readOnly className="input-text-clean" value={calculatedLinePricing.salePrice} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 800 }} />
-          </div>
-          <div>
-            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Qty</label>
-            <input type="number" min="1" className="input-text-clean" value={qty} onChange={e => { setIsTouched(true); setQty(e.target.value); }} style={{ textAlign: 'center', padding: '4px', fontWeight: 900, color: '#EA3943' }} />
-          </div>
-          <div>
-            <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Amount</label>
-            <input type="text" readOnly className="input-text-clean" value={calculatedLinePricing.amount} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 800 }} />
-          </div>
-          <div style={{ display: 'flex', gap: '6px', paddingBottom: '4px' }}>
-            <button type="button" onClick={handleAddOrUpdateLineItem} style={{ color: '#EA3943', background: 'transparent', border: 'none', fontWeight: 900, fontSize: '0.9rem', cursor: 'pointer', padding: '2px 4px' }}>{editingItemIndex !== null ? 'Update' : 'Add'}</button>
-            <button type="button" onClick={() => { if (billItems.length > 0) handleEditLineItem(billItems.length - 1); }} style={{ color: '#EA3943', background: 'transparent', border: 'none', fontWeight: 900, fontSize: '0.9rem', cursor: 'pointer', padding: '2px 4px' }}>Edit</button>
-            <button type="button" onClick={() => { if (billItems.length > 0) handleDeleteLineItem(billItems.length - 1); }} style={{ color: '#EA3943', background: 'transparent', border: 'none', fontWeight: 900, fontSize: '0.9rem', cursor: 'pointer', padding: '2px 4px' }}>Del</button>
-          </div>
+
+          {/* Card 2: Unit B (Shown if secondary unit is enabled) */}
+          {hasUnitB && (
+            <div
+              style={{
+                background: '#FFFFFF',
+                border: '1.5px solid #000000',
+                borderRadius: '8px',
+                padding: '10px 12px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontWeight: 900, fontSize: '0.95rem', color: '#047857' }}>
+                    UNIT-B : {selectedItemObj?.unitB?.unitName || 'Unit B'} (Secondary)
+                  </span>
+                  <span style={{ fontSize: '0.8rem', background: '#DCFCE7', color: '#166534', padding: '1px 8px', borderRadius: '10px', fontWeight: 800 }}>
+                    1 {selectedItemObj?.unitA?.unitName || 'Unit A'} = {selectedItemObj?.unitB?.conversionFactor || 40} {selectedItemObj?.unitB?.unitName || 'Unit B'}
+                  </span>
+                </div>
+                <span style={{ fontSize: '0.8rem', color: '#6B7280', fontWeight: 700 }}>
+                  Equivalent in {selectedItemObj?.unitB?.unitName || 'Unit B'}: {Number((selectedItemCurrentStock * (Number(selectedItemObj?.unitB?.conversionFactor) || 1)).toFixed(1))} {selectedItemObj?.unitB?.unitName}
+                </span>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1.2fr 75px 1fr 1fr 75px 1.1fr 85px 1.1fr auto',
+                  gap: '6px',
+                  alignItems: 'flex-end'
+                }}
+              >
+                <div>
+                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Besic Price</label>
+                  <input type="number" step="0.01" className="input-text-clean" value={unitBBasicPrice} onChange={e => { setIsTouched(true); setUnitBBasicPrice(e.target.value); }} style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>GST %</label>
+                  <input type="number" className="input-text-clean" value={unitBGstPercent} onChange={e => { setIsTouched(true); setUnitBGstPercent(e.target.value); }} style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>GST Amt.</label>
+                  <input type="text" readOnly className="input-text-clean" value={calculatedUnitBPricing.gstAmt} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Nett Price</label>
+                  <input type="text" readOnly className="input-text-clean" value={calculatedUnitBPricing.nettPrice} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>T&O%</label>
+                  <input type="number" step="0.01" className="input-text-clean" value={unitBToPercent} onChange={e => { setIsTouched(true); setUnitBToPercent(e.target.value); }} style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Sale Price</label>
+                  <input type="text" readOnly className="input-text-clean" value={calculatedUnitBPricing.salePrice} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 800 }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Qty ({selectedItemObj?.unitB?.unitName || 'Unit B'})</label>
+                  <input type="number" min="1" className="input-text-clean" value={unitBQty} onChange={e => { setIsTouched(true); setUnitBQty(e.target.value); }} style={{ textAlign: 'center', padding: '4px', fontWeight: 900, color: '#EA3943' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Amount</label>
+                  <input type="text" readOnly className="input-text-clean" value={calculatedUnitBPricing.amount} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 800 }} />
+                </div>
+                <div style={{ paddingBottom: '2px' }}>
+                  <button
+                    type="button"
+                    onClick={handleAddUnitBItem}
+                    className="btn-customer-save"
+                    style={{ padding: '6px 14px', fontSize: '0.82rem', whiteSpace: 'nowrap', background: '#A7F3D0' }}
+                  >
+                    + Add {selectedItemObj?.unitB?.unitName || 'Unit B'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ITEMS TABLE matching sales new.jpg */}
@@ -644,27 +788,34 @@ export const SalesEntryView: React.FC = () => {
             </div>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-            <button type="button" onClick={handleSaveSale} className="btn-customer-save">Save</button>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                className="btn-customer-action-pill"
-                onClick={() => {
-                  if (salesHistory.length > 0) {
-                    showToast('Select an invoice from the history list below to edit', 'info');
-                    const el = document.getElementById('sales-invoices-register');
-                    if (el) el.scrollIntoView({ behavior: 'smooth' });
-                  } else {
-                    showToast('No saved invoices found', 'warning');
-                  }
-                }}
-              >
-                Edit
-              </button>
-              <button type="button" className="btn-customer-action-pill" onClick={handleDeleteCurrentSale}>Del</button>
-              <button type="button" className="btn-customer-action-pill" onClick={handlePrint}>Print</button>
-            </div>
+          {/* Customer Action Buttons: Del, Large Save, Print */}
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn-customer-action-pill"
+              onClick={handleDeleteCurrentSale}
+              disabled={!isEditing}
+              style={{ opacity: isEditing ? 1 : 0.5, cursor: isEditing ? 'pointer' : 'not-allowed' }}
+            >
+              Del
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSaveSale}
+              className="btn-customer-save"
+              style={{ padding: '10px 48px', fontSize: '1.2rem', minWidth: '160px' }}
+            >
+              Save
+            </button>
+
+            <button
+              type="button"
+              className="btn-customer-action-pill"
+              onClick={handlePrint}
+            >
+              Print
+            </button>
           </div>
         </div>
       </div>

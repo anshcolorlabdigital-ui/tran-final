@@ -7,75 +7,83 @@ import { Search, Plus, Printer } from 'lucide-react';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 
 export const SupplierMasterView: React.FC = () => {
-  const { refreshKey, showToast } = useApp();
+  const { refreshKey, showToast, showAlert } = useApp();
   const { hasPermission } = useAuth();
 
   const suppliers = useMemo(() => db.getSuppliers(), [refreshKey]);
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
+  const [isJustSaved, setIsJustSaved] = useState(false);
   const [isTouched, setIsTouched] = useState(false);
-  const [search, setSearch] = useState('');
 
-  // Form Fields matching customer screenshot supplier.jpg
+  // Form Fields matching Customer Screenshot supplier.jpg
   const [firmName, setFirmName] = useState('');
   const [gstNo, setGstNo] = useState('');
   const [propName, setPropName] = useState('');
+  const [propPhone, setPropPhone] = useState('');
+  const [contactPerson1, setContactPerson1] = useState('');
+  const [mobile1, setMobile1] = useState('');
+  const [contactPerson2, setContactPerson2] = useState('');
+  const [mobile2, setMobile2] = useState('');
   const [address, setAddress] = useState('');
   const [block, setBlock] = useState('');
   const [distt, setDistt] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
-  const [mobile1, setMobile1] = useState('');
-  const [mobile2, setMobile2] = useState('');
   const [mailId, setMailId] = useState('');
 
+  const [search, setSearch] = useState('');
   const [deleteDialog, setDeleteDialog] = useState<{ isOpen: boolean; id: string; name: string }>({
     isOpen: false,
     id: '',
     name: ''
   });
 
-  const isFormActive = Boolean(isTouched || selectedSupplierId || firmName.trim() !== '');
-
   // When selected supplier changes, populate fields
   const loadSupplierIntoForm = (supplier: Supplier) => {
     setSelectedSupplierId(supplier.id);
-    setIsTouched(true);
+    setIsJustSaved(false);
+    setIsTouched(false);
     setFirmName(supplier.name);
     setGstNo(supplier.gstin || '');
     setPropName(supplier.propName || '');
+    setPropPhone(supplier.propPhone || '');
+    setContactPerson1(supplier.contactPerson1 || '');
+    setMobile1(supplier.phone || '');
+    setContactPerson2(supplier.contactPerson2 || '');
+    setMobile2(supplier.phone2 || '');
     setAddress(supplier.address || '');
     setBlock(supplier.block || '');
     setDistt(supplier.distt || '');
     setCity(supplier.city || '');
     setState(supplier.state || '');
-    setMobile1(supplier.phone || '');
-    setMobile2(supplier.phone2 || '');
     setMailId(supplier.email || '');
-    showToast(`Loaded ${supplier.name} for editing`, 'info');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleCreateNew = () => {
     setSelectedSupplierId(null);
+    setIsJustSaved(false);
     setIsTouched(false);
     setFirmName('');
     setGstNo('');
     setPropName('');
+    setPropPhone('');
+    setContactPerson1('');
+    setMobile1('');
+    setContactPerson2('');
+    setMobile2('');
     setAddress('');
     setBlock('');
     setDistt('');
     setCity('');
     setState('');
-    setMobile1('');
-    setMobile2('');
     setMailId('');
-    showToast('Ready to create new supplier', 'info');
   };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!firmName.trim()) {
-      showToast('Firm Name is required', 'error');
+      showAlert('Firm Name is required', 'Validation Error', 'error');
       return;
     }
 
@@ -83,6 +91,7 @@ export const SupplierMasterView: React.FC = () => {
       id: selectedSupplierId || `sup-${Date.now()}`,
       name: firmName.trim().toUpperCase(),
       propName: propName.trim(),
+      propPhone: propPhone.trim(),
       gstin: gstNo.trim().toUpperCase(),
       address: address.trim(),
       block: block.trim(),
@@ -91,6 +100,8 @@ export const SupplierMasterView: React.FC = () => {
       state: state.trim(),
       phone: mobile1.trim(),
       phone2: mobile2.trim(),
+      contactPerson1: contactPerson1.trim(),
+      contactPerson2: contactPerson2.trim(),
       email: mailId.trim(),
       openingBalance: 0,
       isActive: true,
@@ -99,8 +110,17 @@ export const SupplierMasterView: React.FC = () => {
 
     db.saveSupplier(supplierRecord);
     setSelectedSupplierId(supplierRecord.id);
-    setIsTouched(false);
-    showToast(`Supplier "${supplierRecord.name}" saved successfully!`, 'success');
+
+    if (selectedSupplierId) {
+      setIsJustSaved(true);
+      setIsTouched(false);
+      showToast(`Supplier "${supplierRecord.name}" updated successfully!`, 'success');
+    } else {
+      setIsJustSaved(false);
+      setIsTouched(false);
+      showToast(`Supplier "${supplierRecord.name}" created successfully!`, 'success');
+      handleCreateNew();
+    }
   };
 
   const handleDelete = () => {
@@ -141,9 +161,11 @@ export const SupplierMasterView: React.FC = () => {
   }, [suppliers, search]);
 
   const isEditing = Boolean(selectedSupplierId);
-  const isCreating = Boolean(!isEditing && (isTouched || firmName.trim() !== ''));
+  const isCreating = Boolean(!isEditing && !isJustSaved && (isTouched || firmName.trim() !== ''));
 
-  const cardStateClass = isEditing
+  const cardStateClass = isJustSaved
+    ? 'is-saved-yellow'
+    : isEditing
     ? 'is-editing-pink'
     : isCreating
     ? 'is-creating-green'
@@ -157,7 +179,11 @@ export const SupplierMasterView: React.FC = () => {
           <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '8px 36px', minWidth: '160px', textAlign: 'center' }}>
             Supplier
           </div>
-          {isEditing ? (
+          {isJustSaved ? (
+            <span className="active-mode-indicator is-saved">
+              ● Saved / Updated Just Now ({firmName})
+            </span>
+          ) : isEditing ? (
             <span className="active-mode-indicator is-editing">
               ● Editing Supplier ({firmName || 'Saved Supplier'})
             </span>
@@ -182,13 +208,13 @@ export const SupplierMasterView: React.FC = () => {
           margin: '0 auto'
         }}
       >
-        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           
           {/* Row 1: Firm Name (wider) & Gst No. */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '14px' }}>
             <div>
-              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.95rem', marginBottom: '6px' }}>
-                Firm Name
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
+                Firm Name *
               </label>
               <input
                 type="text"
@@ -204,7 +230,7 @@ export const SupplierMasterView: React.FC = () => {
               />
             </div>
             <div>
-              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.95rem', marginBottom: '6px' }}>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 Gst No.
               </label>
               <input
@@ -221,44 +247,127 @@ export const SupplierMasterView: React.FC = () => {
             </div>
           </div>
 
-          {/* Row 2: Prop. Name */}
-          <div>
-            <label style={{ display: 'block', fontWeight: 800, fontSize: '0.95rem', marginBottom: '6px' }}>
-              Prop. Name
-            </label>
-            <input
-              type="text"
-              className="input-text-clean"
-              value={propName}
-              onChange={e => {
-                setIsTouched(true);
-                setPropName(e.target.value);
-              }}
-              placeholder="e.g. Rajesh Agarwal"
-            />
-          </div>
-
-          {/* Row 3: Address */}
-          <div>
-            <label style={{ display: 'block', fontWeight: 800, fontSize: '0.95rem', marginBottom: '6px' }}>
-              Address
-            </label>
-            <input
-              type="text"
-              className="input-text-clean"
-              value={address}
-              onChange={e => {
-                setIsTouched(true);
-                setAddress(e.target.value);
-              }}
-              placeholder="e.g. Plot No 42, Ring Road Depot"
-            />
-          </div>
-
-          {/* Row 4: Block & Distt. */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+          {/* Row 2: Prop. Name & Prop. Phone */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '14px' }}>
             <div>
-              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.95rem', marginBottom: '6px' }}>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
+                Prop. Name
+              </label>
+              <input
+                type="text"
+                className="input-text-clean"
+                value={propName}
+                onChange={e => {
+                  setIsTouched(true);
+                  setPropName(e.target.value);
+                }}
+                placeholder="e.g. Rajesh Agarwal"
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
+                Prop. Phone
+              </label>
+              <input
+                type="tel"
+                className="input-text-clean"
+                value={propPhone}
+                onChange={e => {
+                  setIsTouched(true);
+                  setPropPhone(e.target.value);
+                }}
+                placeholder="Proprietor direct number"
+              />
+            </div>
+          </div>
+
+          {/* Row 3: Contact Person 1 & Mobile 1 */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '14px' }}>
+            <div>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
+                Contact 1 (Person / Ref)
+              </label>
+              <input
+                type="text"
+                className="input-text-clean"
+                value={contactPerson1}
+                onChange={e => {
+                  setIsTouched(true);
+                  setContactPerson1(e.target.value);
+                }}
+                placeholder="e.g. Sales Manager / Desk"
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
+                Mobile 1
+              </label>
+              <input
+                type="tel"
+                className="input-text-clean"
+                value={mobile1}
+                onChange={e => {
+                  setIsTouched(true);
+                  setMobile1(e.target.value);
+                }}
+                placeholder="Primary contact phone"
+              />
+            </div>
+          </div>
+
+          {/* Row 4: Contact Person 2 & Mobile 2 */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '14px' }}>
+            <div>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
+                Contact 2 (Person / Ref)
+              </label>
+              <input
+                type="text"
+                className="input-text-clean"
+                value={contactPerson2}
+                onChange={e => {
+                  setIsTouched(true);
+                  setContactPerson2(e.target.value);
+                }}
+                placeholder="e.g. Logistics / Dispatch"
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
+                Mobile 2
+              </label>
+              <input
+                type="tel"
+                className="input-text-clean"
+                value={mobile2}
+                onChange={e => {
+                  setIsTouched(true);
+                  setMobile2(e.target.value);
+                }}
+                placeholder="Alternate contact phone"
+              />
+            </div>
+          </div>
+
+          {/* Row 5: Address, Block, Distt */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.8fr 0.8fr', gap: '14px' }}>
+            <div>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
+                Address
+              </label>
+              <input
+                type="text"
+                className="input-text-clean"
+                value={address}
+                onChange={e => {
+                  setIsTouched(true);
+                  setAddress(e.target.value);
+                }}
+                placeholder="e.g. Industrial Area Phase-2"
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 Block
               </label>
               <input
@@ -269,11 +378,11 @@ export const SupplierMasterView: React.FC = () => {
                   setIsTouched(true);
                   setBlock(e.target.value);
                 }}
-                placeholder="e.g. Industrial Area"
+                placeholder="e.g. B-Block"
               />
             </div>
             <div>
-              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.95rem', marginBottom: '6px' }}>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 Distt.
               </label>
               <input
@@ -289,10 +398,10 @@ export const SupplierMasterView: React.FC = () => {
             </div>
           </div>
 
-          {/* Row 5: CITY & State */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+          {/* Row 6: CITY, State, Mail ID */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: '14px' }}>
             <div>
-              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.95rem', marginBottom: '6px' }}>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 CITY
               </label>
               <input
@@ -307,7 +416,7 @@ export const SupplierMasterView: React.FC = () => {
               />
             </div>
             <div>
-              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.95rem', marginBottom: '6px' }}>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 State
               </label>
               <input
@@ -318,103 +427,53 @@ export const SupplierMasterView: React.FC = () => {
                   setIsTouched(true);
                   setState(e.target.value);
                 }}
-                placeholder="e.g. Delhi"
-              />
-            </div>
-          </div>
-
-          {/* Row 6: Mobile 1 & Mobile 2 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-            <div>
-              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.95rem', marginBottom: '6px' }}>
-                Mobile 1
-              </label>
-              <input
-                type="tel"
-                className="input-text-clean"
-                value={mobile1}
-                onChange={e => {
-                  setIsTouched(true);
-                  setMobile1(e.target.value);
-                }}
-                placeholder="Primary phone"
+                placeholder="e.g. Delhi NCR"
               />
             </div>
             <div>
-              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.95rem', marginBottom: '6px' }}>
-                Mobile 2
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
+                Mail id
               </label>
               <input
-                type="tel"
+                type="email"
                 className="input-text-clean"
-                value={mobile2}
+                value={mailId}
                 onChange={e => {
                   setIsTouched(true);
-                  setMobile2(e.target.value);
+                  setMailId(e.target.value);
                 }}
-                placeholder="Alternate phone"
+                placeholder="e.g. konarkmaterials@gmail.com"
               />
             </div>
           </div>
 
-          {/* Row 7: Mail id */}
-          <div>
-            <label style={{ display: 'block', fontWeight: 800, fontSize: '0.95rem', marginBottom: '6px' }}>
-              Mail id
-            </label>
-            <input
-              type="email"
-              className="input-text-clean"
-              value={mailId}
-              onChange={e => {
-                setIsTouched(true);
-                setMailId(e.target.value);
-              }}
-              placeholder="e.g. sales@konarkmaterials.com"
-            />
-          </div>
+          {/* Customer Action Buttons: Del, Large Save, Print */}
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', flexWrap: 'wrap', marginTop: '24px' }}>
+            <button
+              type="button"
+              className="btn-customer-action-pill"
+              onClick={handleDelete}
+              disabled={!isEditing}
+              style={{ opacity: isEditing ? 1 : 0.5, cursor: isEditing ? 'pointer' : 'not-allowed' }}
+            >
+              Del
+            </button>
 
-          {/* Customer Authentic Action Buttons */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', marginTop: '24px' }}>
-            {/* Top Center: Mint Green Save Button */}
-            <button type="submit" className="btn-customer-save">
+            <button
+              type="submit"
+              className="btn-customer-save"
+              style={{ padding: '10px 48px', fontSize: '1.2rem', minWidth: '160px' }}
+            >
               Save
             </button>
 
-            {/* Bottom Row: Lavender Action Pills (Edit, Del, Print) */}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                className="btn-customer-action-pill"
-                onClick={() => {
-                  if (suppliers.length > 0) {
-                    showToast('Select a supplier from the directory below to edit', 'info');
-                    const el = document.getElementById('supplier-directory-register');
-                    if (el) el.scrollIntoView({ behavior: 'smooth' });
-                  } else {
-                    showToast('No saved suppliers found', 'warning');
-                  }
-                }}
-              >
-                Edit
-              </button>
-
-              <button
-                type="button"
-                className="btn-customer-action-pill"
-                onClick={handleDelete}
-              >
-                Del
-              </button>
-
-              <button
-                type="button"
-                className="btn-customer-action-pill"
-                onClick={handlePrint}
-              >
-                Print
-              </button>
-            </div>
+            <button
+              type="button"
+              className="btn-customer-action-pill"
+              onClick={handlePrint}
+            >
+              Print
+            </button>
           </div>
         </form>
       </div>

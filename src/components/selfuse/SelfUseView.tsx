@@ -10,7 +10,7 @@ import { ConfirmDialog } from '../common/ConfirmDialog';
 import { Search } from 'lucide-react';
 
 export const SelfUseView: React.FC = () => {
-  const { showToast, openQuickModal, refreshKey, selectedDate } = useApp();
+  const { showToast, showAlert, openQuickModal, refreshKey, selectedDate } = useApp();
   const { hasPermission } = useAuth();
 
   const items = useMemo(() => db.getItems().filter(i => i.isActive !== false), [refreshKey]);
@@ -32,7 +32,12 @@ export const SelfUseView: React.FC = () => {
 
   // Line item state
   const [selectedItemId, setSelectedItemId] = useState<string>('');
-  const [qty, setQty] = useState<string>('1');
+  const [unitAQty, setUnitAQty] = useState<string>('1');
+  const [unitARate, setUnitARate] = useState<string>('0');
+
+  const [unitBQty, setUnitBQty] = useState<string>('1');
+  const [unitBRate, setUnitBRate] = useState<string>('0');
+
   const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
 
   // Table items
@@ -52,6 +57,34 @@ export const SelfUseView: React.FC = () => {
     }
   }, [editingSelfUseId, selectedDate, categories, refreshKey]);
 
+  const selectedItemObj = useMemo(() => {
+    return items.find(i => i.id === selectedItemId);
+  }, [items, selectedItemId]);
+
+  const hasUnitB = Boolean(
+    selectedItemObj?.hasSecondaryUnit &&
+    selectedItemObj?.unitB &&
+    selectedItemObj.unitB.unitName
+  );
+
+  const handleItemSelect = (itemId: string) => {
+    setIsTouched(true);
+    setSelectedItemId(itemId);
+    setEditingItemIndex(null);
+    const item = items.find(i => i.id === itemId);
+    if (item) {
+      const aRate = item.unitA?.basicPrice ?? item.purchaseRate ?? 0;
+      setUnitARate(String(aRate));
+      setUnitAQty('1');
+
+      if (item.hasSecondaryUnit && item.unitB) {
+        const bRate = item.unitB?.basicPrice ?? Number((aRate / (Number(item.unitB.conversionFactor) || 1)).toFixed(2));
+        setUnitBRate(String(bRate));
+        setUnitBQty('1');
+      }
+    }
+  };
+
   // Filter items by category if selected
   const filteredCategoryItems = useMemo(() => {
     if (!selectedCategory) return items;
@@ -64,41 +97,40 @@ export const SelfUseView: React.FC = () => {
   }, [selectedItemId, refreshKey]);
 
   const totalAmount = useMemo(() => {
-    return selfUseItems.reduce((acc, item) => acc + (Number(item.amount) || 0), 0);
+    return Number(selfUseItems.reduce((acc, item) => acc + (Number(item.amount) || 0), 0).toFixed(2));
   }, [selfUseItems]);
 
   const isFormActive = Boolean(editingSelfUseId || selfUseItems.length > 0 || selectedItemId || isTouched);
 
-  const handleAddOrUpdateItem = () => {
+  const handleAddUnitAItem = () => {
     setIsTouched(true);
-    if (!selectedItemId) {
-      showToast('Please select an item', 'error');
+    if (!selectedItemId || !selectedItemObj) {
+      showAlert('Please select an item first.', 'Selection Required', 'warning');
       return;
     }
-    const numQty = Number(qty);
+    const numQty = Number(unitAQty);
     if (!numQty || numQty <= 0) {
-      showToast('Quantity must be greater than 0', 'error');
+      showAlert('Please enter a quantity greater than 0 for Unit A.', 'Invalid Quantity', 'warning');
       return;
     }
 
-    const itemObj = items.find(i => i.id === selectedItemId);
-    if (!itemObj) return;
-
-    if (numQty > selectedItemCurrentStock) {
-      showToast(`Notice: Available stock is ${selectedItemCurrentStock} for ${itemObj.name}`, 'warning');
-    }
-
-    const rate = itemObj.unitA?.basicPrice ?? itemObj.purchaseRate ?? 0;
+    const rate = Number(unitARate) || 0;
     const amount = Number((rate * numQty).toFixed(2));
+    const unitName = selectedItemObj.unitA?.unitName || selectedItemObj.unit || 'Units';
 
     const newItem: SelfUseItem = {
       id: `su-item-${Date.now()}-${Math.random()}`,
-      itemId: itemObj.id,
-      sno: itemObj.sno,
-      itemName: itemObj.name,
+      itemId: selectedItemObj.id,
+      sno: selectedItemObj.sno,
+      itemName: `${selectedItemObj.name} (${unitName})`,
+      unit: unitName,
+      category: selectedItemObj.category,
       rate,
       qty: numQty,
-      amount
+      amount,
+      conversionFactor: selectedItemObj.unitB?.conversionFactor || 1,
+      isSecondaryUnit: false,
+      baseQty: numQty
     };
 
     if (editingItemIndex !== null && editingItemIndex >= 0) {
@@ -109,11 +141,57 @@ export const SelfUseView: React.FC = () => {
       showToast('Item updated in Self Use table', 'info');
     } else {
       setSelfUseItems(prev => [...prev, newItem]);
-      showToast('Item added to Self Use table', 'success');
+      showToast(`Added ${numQty} ${unitName} of ${selectedItemObj.name}`, 'success');
     }
 
-    setSelectedItemId('');
-    setQty('1');
+    setUnitAQty('1');
+  };
+
+  const handleAddUnitBItem = () => {
+    setIsTouched(true);
+    if (!selectedItemId || !selectedItemObj || !selectedItemObj.unitB) {
+      showAlert('Secondary unit not configured for this item.', 'Invalid Action', 'warning');
+      return;
+    }
+    const numQty = Number(unitBQty);
+    if (!numQty || numQty <= 0) {
+      showAlert('Please enter a quantity greater than 0 for Unit B.', 'Invalid Quantity', 'warning');
+      return;
+    }
+
+    const convFactor = Number(selectedItemObj.unitB.conversionFactor) || 1;
+    const rate = Number(unitBRate) || 0;
+    const amount = Number((rate * numQty).toFixed(2));
+    const unitName = selectedItemObj.unitB.unitName || 'Unit B';
+    const baseQty = Number((numQty / convFactor).toFixed(4));
+
+    const newItem: SelfUseItem = {
+      id: `su-item-${Date.now()}-${Math.random()}`,
+      itemId: selectedItemObj.id,
+      sno: selectedItemObj.sno,
+      itemName: `${selectedItemObj.name} (${unitName})`,
+      unit: unitName,
+      category: selectedItemObj.category,
+      rate,
+      qty: numQty,
+      amount,
+      conversionFactor: convFactor,
+      isSecondaryUnit: true,
+      baseQty
+    };
+
+    if (editingItemIndex !== null && editingItemIndex >= 0) {
+      const updated = [...selfUseItems];
+      updated[editingItemIndex] = newItem;
+      setSelfUseItems(updated);
+      setEditingItemIndex(null);
+      showToast('Item updated in Self Use table', 'info');
+    } else {
+      setSelfUseItems(prev => [...prev, newItem]);
+      showToast(`Added ${numQty} ${unitName} (${baseQty} primary units) to Self Use`, 'success');
+    }
+
+    setUnitBQty('1');
   };
 
   const handleEditItem = (index: number) => {
@@ -122,7 +200,13 @@ export const SelfUseView: React.FC = () => {
     const foundItem = items.find(i => i.id === item.itemId);
     if (foundItem?.category) setSelectedCategory(foundItem.category);
     setSelectedItemId(item.itemId);
-    setQty(String(item.qty));
+    if (item.isSecondaryUnit) {
+      setUnitBQty(String(item.qty));
+      setUnitBRate(String(item.rate));
+    } else {
+      setUnitAQty(String(item.qty));
+      setUnitARate(String(item.rate));
+    }
     setEditingItemIndex(index);
   };
 
@@ -135,25 +219,31 @@ export const SelfUseView: React.FC = () => {
     }
   };
 
+  const [isJustSaved, setIsJustSaved] = useState(false);
+
   const handleNewEntry = () => {
     setEditingSelfUseId(null);
+    setIsJustSaved(false);
     setIsTouched(false);
     setBillNo(StockEngine.getNextBillNumber('SELF_USE'));
     setBillDate(getTodayDateString());
     setSelfUseItems([]);
     setSelectedItemId('');
-    setQty('1');
+    setUnitAQty('1');
+    setUnitARate('0');
+    setUnitBQty('1');
+    setUnitBRate('0');
     setEditingItemIndex(null);
     showToast('New Self Use entry ready', 'info');
   };
 
   const handleSaveSelfUse = () => {
     if (!billNo.trim()) {
-      showToast('Bill No. is required', 'error');
+      showAlert("Please enter the Self Use Bill / Voucher Number first.", 'Validation Error', 'warning');
       return;
     }
     if (selfUseItems.length === 0) {
-      showToast('Please add at least one item to Self Use', 'error');
+      showAlert('Please add at least one item to the Self Use voucher.', 'Empty Line Items', 'warning');
       return;
     }
 
@@ -171,11 +261,19 @@ export const SelfUseView: React.FC = () => {
     // Automatically records SELF_USE_OUT stock movements, isolated from Sales
     db.saveSelfUse(selfUseRecord);
 
-    showToast(`Self Use voucher ${selfUseRecord.billNo} saved! Stock updated.`, 'success');
-    handleNewEntry();
+    if (editingSelfUseId) {
+      setIsJustSaved(true);
+      setIsTouched(false);
+      showToast(`Self Use voucher ${selfUseRecord.billNo} updated! Stock adjusted.`, 'success');
+    } else {
+      setIsJustSaved(false);
+      showToast(`Self Use voucher ${selfUseRecord.billNo} saved! Stock updated.`, 'success');
+      handleNewEntry();
+    }
   };
 
   const handleLoadSelfUseForEdit = (su: SelfUse) => {
+    setIsJustSaved(false);
     setEditingSelfUseId(su.id);
     setIsTouched(true);
     setBillNo(su.billNo);
@@ -188,11 +286,11 @@ export const SelfUseView: React.FC = () => {
 
   const handleDeleteCurrentSelfUse = () => {
     if (!editingSelfUseId) {
-      showToast('Please select a saved voucher to delete', 'warning');
+      showAlert('Please select a saved voucher to delete.', 'Selection Required', 'warning');
       return;
     }
     if (!hasPermission('DELETE_SELF_USE')) {
-      showToast('You do not have permission to delete self use vouchers', 'error');
+      showAlert('You do not have permission to delete self use vouchers.', 'Permission Denied', 'error');
       return;
     }
     setIsDeleteConfirmOpen(true);
@@ -233,9 +331,11 @@ export const SelfUseView: React.FC = () => {
   }, [selfUseHistory, searchHistory]);
 
   const isEditing = Boolean(editingSelfUseId);
-  const isCreating = Boolean(!isEditing && (isTouched || selfUseItems.length > 0 || selectedItemId));
+  const isCreating = Boolean(!isEditing && !isJustSaved && (isTouched || selfUseItems.length > 0 || selectedItemId));
 
-  const cardStateClass = isEditing
+  const cardStateClass = isJustSaved
+    ? 'is-saved-yellow'
+    : isEditing
     ? 'is-editing-pink'
     : isCreating
     ? 'is-creating-green'
@@ -251,7 +351,11 @@ export const SelfUseView: React.FC = () => {
           <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '8px 36px', minWidth: '220px', textAlign: 'center' }}>
             SELF USE
           </div>
-          {isEditing ? (
+          {isJustSaved ? (
+            <span className="active-mode-indicator is-saved">
+              ● Saved / Updated Just Now ({billNo})
+            </span>
+          ) : isEditing ? (
             <span className="active-mode-indicator is-editing">
               ● Editing Self Use Voucher ({billNo})
             </span>
@@ -315,6 +419,7 @@ export const SelfUseView: React.FC = () => {
             onChange={e => {
               setIsTouched(true);
               setSelectedCategory(e.target.value);
+              setSelectedItemId('');
             }}
             style={{ fontSize: '0.95rem', height: '38px', fontWeight: 700 }}
           >
@@ -341,16 +446,13 @@ export const SelfUseView: React.FC = () => {
           <select
             className="input-text-clean"
             value={selectedItemId}
-            onChange={e => {
-              setIsTouched(true);
-              setSelectedItemId(e.target.value);
-            }}
+            onChange={e => handleItemSelect(e.target.value)}
             style={{ fontSize: '0.95rem', height: '38px', fontWeight: 700 }}
           >
             <option value="">-- Select Item --</option>
             {filteredCategoryItems.map(i => (
               <option key={i.id} value={i.id}>
-                [{i.sno}] {i.name} ({i.unit || 'Units'})
+                [{i.sno}] {i.name} {i.hasSecondaryUnit ? `(${i.unitA?.unitName || 'Unit A'} / ${i.unitB?.unitName || 'Unit B'})` : `(${i.unit || 'Units'})`}
               </option>
             ))}
           </select>
@@ -358,57 +460,192 @@ export const SelfUseView: React.FC = () => {
             type="button"
             className="btn-quick-n"
             title="Quick Create Item"
-            onClick={() => openQuickModal('ITEM', (newId) => {
-              setIsTouched(true);
-              setSelectedItemId(newId);
-            })}
+            onClick={() => openQuickModal('ITEM', (newId) => handleItemSelect(newId))}
           >
             N
           </button>
         </div>
 
-        {/* QTY ROW & ACTION BUTTONS matching self use new.jpg */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <label style={{ fontWeight: 900, fontSize: '1.05rem', width: '85px' }}>QTY :</label>
-          <input
-            type="number"
-            min="1"
-            className="input-text-clean"
-            value={qty}
-            onChange={e => {
-              setIsTouched(true);
-              setQty(e.target.value);
+        {/* DUAL PRICING / CONSUMPTION INPUT CARDS (UNIT-A & UNIT-B) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {/* Card 1: Unit A (Primary) */}
+          <div
+            style={{
+              background: '#FFFFFF',
+              border: '1.5px solid #000000',
+              borderRadius: '8px',
+              padding: '10px 12px'
             }}
-            style={{ width: '150px', fontWeight: 900, fontSize: '1rem', color: '#EA3943', textAlign: 'center' }}
-          />
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <span style={{ fontWeight: 900, fontSize: '0.95rem', color: '#1E3A8A' }}>
+                UNIT-A : {selectedItemObj?.unitA?.unitName || selectedItemObj?.unit || 'Roll'} (Primary)
+              </span>
+              <span style={{ fontSize: '0.8rem', color: '#6B7280', fontWeight: 700 }}>
+                Available Stock: {selectedItemCurrentStock} {selectedItemObj?.unitA?.unitName || selectedItemObj?.unit || 'Units'}
+              </span>
+            </div>
 
-          <div style={{ display: 'flex', gap: '18px', marginLeft: '16px' }}>
-            <button
-              type="button"
-              onClick={handleAddOrUpdateItem}
-              style={{ color: '#EA3943', background: 'transparent', border: 'none', fontWeight: 900, fontSize: '1.05rem', cursor: 'pointer' }}
-            >
-              {editingItemIndex !== null ? 'Update' : 'Add'}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (selfUseItems.length > 0) handleEditItem(selfUseItems.length - 1);
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1.2fr 1fr 1.2fr auto',
+                gap: '12px',
+                alignItems: 'flex-end'
               }}
-              style={{ color: '#EA3943', background: 'transparent', border: 'none', fontWeight: 900, fontSize: '1.05rem', cursor: 'pointer' }}
             >
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (selfUseItems.length > 0) handleDeleteItem(selfUseItems.length - 1);
-              }}
-              style={{ color: '#EA3943', background: 'transparent', border: 'none', fontWeight: 900, fontSize: '1.05rem', cursor: 'pointer' }}
-            >
-              Del
-            </button>
+              <div>
+                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.75rem', textAlign: 'center', marginBottom: '2px' }}>
+                  Rate (₹)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="input-text-clean"
+                  value={unitARate}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitARate(e.target.value);
+                  }}
+                  style={{ textAlign: 'center', padding: '6px', fontWeight: 700 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.75rem', textAlign: 'center', marginBottom: '2px' }}>
+                  Qty ({selectedItemObj?.unitA?.unitName || 'Unit A'})
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  className="input-text-clean"
+                  value={unitAQty}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitAQty(e.target.value);
+                  }}
+                  style={{ textAlign: 'center', padding: '6px', fontWeight: 900, color: '#EA3943' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.75rem', textAlign: 'center', marginBottom: '2px' }}>
+                  Amount (₹)
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  className="input-text-clean"
+                  value={((Number(unitARate) || 0) * (Number(unitAQty) || 0)).toFixed(2)}
+                  style={{ textAlign: 'center', background: '#F3F4F6', padding: '6px', fontWeight: 800 }}
+                />
+              </div>
+
+              <div>
+                <button
+                  type="button"
+                  onClick={handleAddUnitAItem}
+                  className="btn-customer-save"
+                  style={{ padding: '8px 16px', fontSize: '0.85rem', whiteSpace: 'nowrap' }}
+                >
+                  + Add {selectedItemObj?.unitA?.unitName || 'Unit A'}
+                </button>
+              </div>
+            </div>
           </div>
+
+          {/* Card 2: Unit B (Shown if secondary unit is enabled) */}
+          {hasUnitB && (
+            <div
+              style={{
+                background: '#FFFFFF',
+                border: '1.5px solid #000000',
+                borderRadius: '8px',
+                padding: '10px 12px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontWeight: 900, fontSize: '0.95rem', color: '#047857' }}>
+                    UNIT-B : {selectedItemObj?.unitB?.unitName || 'Unit B'} (Secondary)
+                  </span>
+                  <span style={{ fontSize: '0.8rem', background: '#DCFCE7', color: '#166534', padding: '1px 8px', borderRadius: '10px', fontWeight: 800 }}>
+                    1 {selectedItemObj?.unitA?.unitName || 'Unit A'} = {selectedItemObj?.unitB?.conversionFactor || 40} {selectedItemObj?.unitB?.unitName || 'Unit B'}
+                  </span>
+                </div>
+                <span style={{ fontSize: '0.8rem', color: '#6B7280', fontWeight: 700 }}>
+                  Equivalent in {selectedItemObj?.unitB?.unitName || 'Unit B'}: {Number((selectedItemCurrentStock * (Number(selectedItemObj?.unitB?.conversionFactor) || 1)).toFixed(1))} {selectedItemObj?.unitB?.unitName}
+                </span>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1.2fr 1fr 1.2fr auto',
+                  gap: '12px',
+                  alignItems: 'flex-end'
+                }}
+              >
+                <div>
+                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.75rem', textAlign: 'center', marginBottom: '2px' }}>
+                    Rate (₹)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="input-text-clean"
+                    value={unitBRate}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitBRate(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', padding: '6px', fontWeight: 700 }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.75rem', textAlign: 'center', marginBottom: '2px' }}>
+                    Qty ({selectedItemObj?.unitB?.unitName || 'Unit B'})
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    className="input-text-clean"
+                    value={unitBQty}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitBQty(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', padding: '6px', fontWeight: 900, color: '#EA3943' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.75rem', textAlign: 'center', marginBottom: '2px' }}>
+                    Amount (₹)
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    className="input-text-clean"
+                    value={((Number(unitBRate) || 0) * (Number(unitBQty) || 0)).toFixed(2)}
+                    style={{ textAlign: 'center', background: '#F3F4F6', padding: '6px', fontWeight: 800 }}
+                  />
+                </div>
+
+                <div>
+                  <button
+                    type="button"
+                    onClick={handleAddUnitBItem}
+                    className="btn-customer-save"
+                    style={{ padding: '8px 16px', fontSize: '0.85rem', whiteSpace: 'nowrap', background: '#A7F3D0' }}
+                  >
+                    + Add {selectedItemObj?.unitB?.unitName || 'Unit B'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ITEMS TABLE matching self use new.jpg */}
@@ -477,49 +714,34 @@ export const SelfUseView: React.FC = () => {
           </table>
         </div>
 
-        {/* CUSTOMER AUTHENTIC ACTION BUTTONS matching self use new.jpg */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', marginTop: '16px' }}>
+        {/* Customer Action Buttons: Del, Large Save, Print */}
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', flexWrap: 'wrap', marginTop: '16px' }}>
+          <button
+            type="button"
+            className="btn-customer-action-pill"
+            onClick={handleDeleteCurrentSelfUse}
+            disabled={!isEditing}
+            style={{ opacity: isEditing ? 1 : 0.5, cursor: isEditing ? 'pointer' : 'not-allowed' }}
+          >
+            Del
+          </button>
+
           <button
             type="button"
             onClick={handleSaveSelfUse}
             className="btn-customer-save"
+            style={{ padding: '10px 48px', fontSize: '1.2rem', minWidth: '160px' }}
           >
             Save
           </button>
 
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              className="btn-customer-action-pill"
-              onClick={() => {
-                if (selfUseHistory.length > 0) {
-                  showToast('Select a voucher from the history list below to edit', 'info');
-                  const el = document.getElementById('self-use-history-register');
-                  if (el) el.scrollIntoView({ behavior: 'smooth' });
-                } else {
-                  showToast('No saved vouchers found', 'warning');
-                }
-              }}
-            >
-              Edit
-            </button>
-
-            <button
-              type="button"
-              className="btn-customer-action-pill"
-              onClick={handleDeleteCurrentSelfUse}
-            >
-              Del
-            </button>
-
-            <button
-              type="button"
-              className="btn-customer-action-pill"
-              onClick={handlePrint}
-            >
-              Print
-            </button>
-          </div>
+          <button
+            type="button"
+            className="btn-customer-action-pill"
+            onClick={handlePrint}
+          >
+            Print
+          </button>
         </div>
       </div>
 

@@ -21,10 +21,11 @@ import { UserPermissionsView } from './components/settings/UserPermissionsView';
 import { QuickPartyModal } from './components/common/QuickPartyModal';
 import { QuickItemModal } from './components/common/QuickItemModal';
 import { QuickSupplierModal } from './components/common/QuickSupplierModal';
+import { AlertDialog } from './components/common/AlertDialog';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 
 export const App: React.FC = () => {
-  const { activeTab, toasts, removeToast } = useApp();
+  const { activeTab, toasts, removeToast, alertModal, closeAlert } = useApp();
 
   const renderActiveView = () => {
     switch (activeTab) {
@@ -82,6 +83,15 @@ export const App: React.FC = () => {
       <QuickPartyModal />
       <QuickItemModal />
       <QuickSupplierModal />
+
+      {/* Global Classic Alert Dialog */}
+      <AlertDialog
+        isOpen={alertModal.isOpen}
+        onClose={closeAlert}
+        title={alertModal.title}
+        message={alertModal.message}
+        type={alertModal.type}
+      />
 
       {/* Global Toast Notifications */}
       <div className="toast-container no-print">

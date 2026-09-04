@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../../db/db';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -9,7 +9,7 @@ import { ConfirmDialog } from '../common/ConfirmDialog';
 import { calculateItemUnitBreakdown } from '../../utils/calculations';
 
 export const ItemMasterView: React.FC = () => {
-  const { refreshKey, showToast } = useApp();
+  const { refreshKey, showToast, showAlert } = useApp();
   const { hasPermission } = useAuth();
 
   const items = useMemo(() => db.getItems(), [refreshKey]);
@@ -18,6 +18,8 @@ export const ItemMasterView: React.FC = () => {
 
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [isTouched, setIsTouched] = useState(false);
+  const [isJustSaved, setIsJustSaved] = useState(false);
+  const [hasSecondaryUnit, setHasSecondaryUnit] = useState(false);
   const [search, setSearch] = useState('');
 
   // Form Fields matching customer screenshot item.jpg
@@ -58,26 +60,39 @@ export const ItemMasterView: React.FC = () => {
   // Live Unit A Calculation
   const unitABreakdown = useMemo(() => {
     return calculateItemUnitBreakdown(
-      Number(unitABasicPrice),
-      Number(unitAGstPercent),
-      Number(unitATranPercent),
-      Number(unitAProfPercent),
-      Number(unitAMisPercent),
-      Number(unitARoundUp)
+      Number(unitABasicPrice) || 0,
+      Number(unitAGstPercent) || 0,
+      Number(unitATranPercent) || 0,
+      Number(unitAProfPercent) || 0,
+      Number(unitAMisPercent) || 0,
+      Number(unitARoundUp) || 0
     );
   }, [unitABasicPrice, unitAGstPercent, unitATranPercent, unitAProfPercent, unitAMisPercent, unitARoundUp]);
 
   // Live Unit B Calculation
   const unitBBreakdown = useMemo(() => {
     return calculateItemUnitBreakdown(
-      Number(unitBBasicPrice),
-      Number(unitBGstPercent),
-      Number(unitBTranPercent),
-      Number(unitBProfPercent),
-      Number(unitBMisPercent),
-      Number(unitBRoundUp)
+      Number(unitBBasicPrice) || 0,
+      Number(unitBGstPercent) || 0,
+      Number(unitBTranPercent) || 0,
+      Number(unitBProfPercent) || 0,
+      Number(unitBMisPercent) || 0,
+      Number(unitBRoundUp) || 0
     );
   }, [unitBBasicPrice, unitBGstPercent, unitBTranPercent, unitBProfPercent, unitBMisPercent, unitBRoundUp]);
+
+  // Auto-sync sale price when inputs change
+  useEffect(() => {
+    if (isTouched) {
+      setUnitASalePrice(String(unitABreakdown.salePrice));
+    }
+  }, [unitABreakdown.salePrice, isTouched]);
+
+  useEffect(() => {
+    if (isTouched && hasSecondaryUnit) {
+      setUnitBSalePrice(String(unitBBreakdown.salePrice));
+    }
+  }, [unitBBreakdown.salePrice, isTouched, hasSecondaryUnit]);
 
   // Delete dialog
   const [deleteDialog, setDeleteDialog] = useState<{ isOpen: boolean; id: string; name: string }>({
@@ -90,8 +105,10 @@ export const ItemMasterView: React.FC = () => {
 
   const loadItemIntoForm = (item: Item) => {
     setSelectedItemId(item.id);
-    setIsTouched(true);
-    setSno(item.sno);
+    setIsTouched(false);
+    setIsJustSaved(false);
+    setHasSecondaryUnit(Boolean(item.hasSecondaryUnit || (item.unitB && item.unitB.isActive !== false && item.unitB.unitName && item.unitB.unitName !== item.unitA?.unitName)));
+    setSno(item.sno || '');
     setName(item.name);
     setHsn(item.hsn || '');
     setDescription(item.description || '');
@@ -108,7 +125,7 @@ export const ItemMasterView: React.FC = () => {
       setUnitAProfPercent(String(item.unitA.profPercent ?? 25));
       setUnitAMisPercent(String(item.unitA.misPercent ?? 2));
       setUnitARoundUp(String(item.unitA.roundUp ?? 0));
-      setUnitASalePrice(String(item.unitA.salePrice ?? 0));
+      setUnitASalePrice(String(item.unitA.salePrice ?? item.saleRate ?? 0));
       setUnitAActive(item.unitA.isActive !== false);
     } else {
       setUnitAName(item.unit || 'Roll');
@@ -156,6 +173,8 @@ export const ItemMasterView: React.FC = () => {
   const handleCreateNew = () => {
     setSelectedItemId(null);
     setIsTouched(false);
+    setIsJustSaved(false);
+    setHasSecondaryUnit(false);
     setSno(StockEngine.getNextItemSno());
     setName('');
     setHsn('');
@@ -192,18 +211,17 @@ export const ItemMasterView: React.FC = () => {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!sno.trim()) {
-      showToast('S.No. / Item Code is required', 'error');
-      return;
-    }
     if (!name.trim()) {
-      showToast('Item Name is required', 'error');
+      showAlert('Item Name is required', 'Validation Error', 'warning');
       return;
     }
 
-    const existing = db.getItemBySno(sno.trim());
+    // Auto-generate S.No if not provided
+    const finalSno = sno.trim() || StockEngine.getNextItemSno();
+
+    const existing = db.getItemBySno(finalSno);
     if (existing && existing.id !== selectedItemId) {
-      showToast(`Item Code / S.No. "${sno}" is already used by "${existing.name}"`, 'error');
+      showAlert(`Item Code / S.No. "${finalSno}" is already used by "${existing.name}"`, 'Duplicate Code', 'error');
       return;
     }
 
@@ -211,7 +229,7 @@ export const ItemMasterView: React.FC = () => {
 
     const itemRecord: Item = {
       id: selectedItemId || `item-${Date.now()}`,
-      sno: sno.trim(),
+      sno: finalSno,
       name: name.trim().toUpperCase(),
       hsn: hsn.trim(),
       description: description.trim(),
@@ -219,6 +237,7 @@ export const ItemMasterView: React.FC = () => {
       supplierId: supplierId || undefined,
       supplierName: supObj?.name,
       unit: unitAName.trim() || 'Pcs',
+      hasSecondaryUnit,
       minStock: Number(minStock) || 0,
       openingStock: Number(openingStock) || 0,
       purchaseRate: Number(unitABasicPrice) || 0,
@@ -236,7 +255,7 @@ export const ItemMasterView: React.FC = () => {
         salePrice: Number(unitASalePrice) || unitABreakdown.salePrice,
         isActive: unitAActive
       },
-      unitB: {
+      unitB: hasSecondaryUnit ? {
         unitName: unitBName.trim() || 'Mt.',
         conversionFactor: Number(unitBConversion) || 1,
         basicPrice: Number(unitBBasicPrice) || 0,
@@ -248,14 +267,22 @@ export const ItemMasterView: React.FC = () => {
         roundUp: Number(unitBRoundUp) || 0,
         salePrice: Number(unitBSalePrice) || unitBBreakdown.salePrice,
         isActive: unitBActive
-      },
+      } : undefined,
       isActive,
       createdAt: new Date().toISOString()
     };
 
+    const isUpdating = Boolean(selectedItemId);
     db.saveItem(itemRecord);
-    setSelectedItemId(itemRecord.id);
-    showToast(`Item "${itemRecord.name}" saved successfully!`, 'success');
+    if (isUpdating) {
+      setIsJustSaved(true);
+      setIsTouched(false);
+      showToast(`Item "${itemRecord.name}" updated successfully!`, 'success');
+    } else {
+      setIsJustSaved(false);
+      showToast(`Item "${itemRecord.name}" created successfully!`, 'success');
+      handleCreateNew();
+    }
   };
 
   const handleDelete = () => {
@@ -296,9 +323,11 @@ export const ItemMasterView: React.FC = () => {
   }, [stockSummaries, search]);
 
   const isEditing = Boolean(selectedItemId);
-  const isCreating = Boolean(!isEditing && (isTouched || name.trim() !== '' || sno.trim() !== ''));
+  const isCreating = Boolean(!isEditing && !isJustSaved && (isTouched || name.trim() !== '' || sno.trim() !== ''));
 
-  const cardStateClass = isEditing
+  const cardStateClass = isJustSaved
+    ? 'is-saved-yellow'
+    : isEditing
     ? 'is-editing-pink'
     : isCreating
     ? 'is-creating-green'
@@ -312,7 +341,11 @@ export const ItemMasterView: React.FC = () => {
           <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '8px 48px', minWidth: '160px', textAlign: 'center' }}>
             ITEM
           </div>
-          {isEditing ? (
+          {isJustSaved ? (
+            <span className="active-mode-indicator is-saved">
+              ● Saved / Updated Just Now ({name})
+            </span>
+          ) : isEditing ? (
             <span className="active-mode-indicator is-editing">
               ● Editing Item ({name || sno || 'Saved Item'})
             </span>
@@ -327,7 +360,24 @@ export const ItemMasterView: React.FC = () => {
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          {/* Secondary Unit Toggle (OFF by default) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: hasSecondaryUnit ? '#DCFCE7' : '#FFFFFF', padding: '6px 14px', borderRadius: '20px', border: '1px solid #D1D5DB' }}>
+            <input
+              type="checkbox"
+              id="hasSecondaryUnitCheckbox"
+              checked={hasSecondaryUnit}
+              onChange={e => {
+                setIsTouched(true);
+                setHasSecondaryUnit(e.target.checked);
+              }}
+              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+            />
+            <label htmlFor="hasSecondaryUnitCheckbox" style={{ fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', color: hasSecondaryUnit ? '#166534' : '#4B5563' }}>
+              Secondary Unit (Unit B) {hasSecondaryUnit ? 'ON' : 'OFF'}
+            </label>
+          </div>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#FFFFFF', padding: '6px 14px', borderRadius: '20px', border: '1px solid #D1D5DB' }}>
             <input
               type="checkbox"
@@ -357,10 +407,10 @@ export const ItemMasterView: React.FC = () => {
       >
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
-          {/* Top Fields Grid: Item, Hsn, Description, Category, Supplier */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '16px' }}>
+          {/* Row 1: Item Name, S.No. / Code, HSN (Optional) */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.8fr 0.8fr', gap: '14px' }}>
             <div>
-              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.92rem', marginBottom: '4px' }}>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 Item Name *
               </label>
               <input
@@ -377,8 +427,24 @@ export const ItemMasterView: React.FC = () => {
               />
             </div>
             <div>
-              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.92rem', marginBottom: '4px' }}>
-                Hsn
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
+                S.No. / Code (Optional)
+              </label>
+              <input
+                type="text"
+                className="input-text-clean"
+                value={sno}
+                onChange={e => {
+                  setIsTouched(true);
+                  setSno(e.target.value);
+                }}
+                placeholder="Auto-generated if empty"
+                style={{ fontFamily: 'monospace', fontWeight: 700 }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
+                HSN Code (Optional)
               </label>
               <input
                 type="text"
@@ -394,9 +460,10 @@ export const ItemMasterView: React.FC = () => {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '16px' }}>
+          {/* Row 2: Description, Category, Supplier */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.8fr 1fr', gap: '14px' }}>
             <div>
-              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.92rem', marginBottom: '4px' }}>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 Description
               </label>
               <input
@@ -411,7 +478,7 @@ export const ItemMasterView: React.FC = () => {
               />
             </div>
             <div>
-              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.92rem', marginBottom: '4px' }}>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 Category
               </label>
               <input
@@ -425,14 +492,10 @@ export const ItemMasterView: React.FC = () => {
                 placeholder="e.g. Paper & Sheets"
               />
             </div>
-          </div>
-
-          {/* Supplier Selector with Quick Pills (KONARK, VMS, PAYAL, DELTA) */}
-          <div>
-            <label style={{ display: 'block', fontWeight: 800, fontSize: '0.92rem', marginBottom: '4px' }}>
-              Supplier
-            </label>
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <div>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
+                Supplier
+              </label>
               <select
                 className="input-text-clean"
                 value={supplierId}
@@ -440,30 +503,13 @@ export const ItemMasterView: React.FC = () => {
                   setIsTouched(true);
                   setSupplierId(e.target.value);
                 }}
-                style={{ flex: 1, fontWeight: 700 }}
+                style={{ fontWeight: 700 }}
               >
                 <option value="">-- Select Supplier --</option>
                 {suppliers.map(s => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
-
-              {/* Quick Clickable Supplier Pills from Screenshot */}
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                {suppliers.slice(0, 5).map(s => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    className={`supplier-chip-btn ${supplierId === s.id ? 'active' : ''}`}
-                    onClick={() => {
-                      setIsTouched(true);
-                      setSupplierId(s.id);
-                    }}
-                  >
-                    {s.name}
-                  </button>
-                ))}
-              </div>
             </div>
           </div>
 
@@ -508,6 +554,7 @@ export const ItemMasterView: React.FC = () => {
                 <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Besic Price</label>
                 <input
                   type="number"
+                  step="any"
                   className="input-text-clean"
                   value={unitABasicPrice}
                   onChange={e => {
@@ -523,6 +570,7 @@ export const ItemMasterView: React.FC = () => {
                 <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>GST %</label>
                 <input
                   type="number"
+                  step="any"
                   className="input-text-clean"
                   value={unitAGstPercent}
                   onChange={e => {
@@ -538,6 +586,7 @@ export const ItemMasterView: React.FC = () => {
                 <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>TRAN%</label>
                 <input
                   type="number"
+                  step="any"
                   className="input-text-clean"
                   value={unitATranPercent}
                   onChange={e => {
@@ -553,6 +602,7 @@ export const ItemMasterView: React.FC = () => {
                 <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Prof%</label>
                 <input
                   type="number"
+                  step="any"
                   className="input-text-clean"
                   value={unitAProfPercent}
                   onChange={e => {
@@ -568,6 +618,7 @@ export const ItemMasterView: React.FC = () => {
                 <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Mis.%</label>
                 <input
                   type="number"
+                  step="any"
                   className="input-text-clean"
                   value={unitAMisPercent}
                   onChange={e => {
@@ -583,6 +634,7 @@ export const ItemMasterView: React.FC = () => {
                 <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>ROUND UP</label>
                 <input
                   type="number"
+                  step="any"
                   className="input-text-clean"
                   value={unitARoundUp}
                   onChange={e => {
@@ -591,13 +643,14 @@ export const ItemMasterView: React.FC = () => {
                   }}
                   style={{ textAlign: 'center', fontWeight: 700 }}
                 />
-                <div className="subtext-calc-red" style={{ visibility: 'hidden' }}>0</div>
+                <div className="subtext-calc-red">{unitABreakdown.nettPrice}</div>
               </div>
 
               <div>
                 <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Sale Price</label>
                 <input
                   type="number"
+                  step="any"
                   className="input-text-clean"
                   value={unitASalePrice}
                   onChange={e => {
@@ -606,166 +659,177 @@ export const ItemMasterView: React.FC = () => {
                   }}
                   style={{ textAlign: 'center', fontWeight: 900, color: '#002B99', fontSize: '0.95rem' }}
                 />
-                <div className="subtext-calc-red" style={{ visibility: 'hidden' }}>0</div>
+                <div className="subtext-calc-red">{unitABreakdown.salePrice}</div>
               </div>
             </div>
           </div>
 
-          {/* UNIT-B SECTION matching item.jpg */}
-          <div style={{ background: '#FFFFFF', border: '1.5px solid #000000', borderRadius: '8px', padding: '14px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 900, fontSize: '1rem', color: '#000000' }}>UNIT-B :</span>
-                <input
-                  type="text"
-                  className="input-text-clean"
-                  value={unitBName}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitBName(e.target.value);
-                  }}
-                  style={{ width: '100px', color: '#EA3943', fontWeight: 900, textAlign: 'center', fontSize: '0.95rem' }}
-                  placeholder="e.g. Mt."
-                />
-                <span style={{ fontWeight: 800, fontSize: '0.9rem' }}>1 {unitAName || 'Unit A'} =</span>
-                <input
-                  type="number"
-                  className="input-text-clean"
-                  value={unitBConversion}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitBConversion(e.target.value);
-                  }}
-                  style={{ width: '80px', textAlign: 'center', fontWeight: 800 }}
-                />
-                <span style={{ fontWeight: 800, fontSize: '0.9rem' }}>{unitBName || 'Unit B'}</span>
+          {/* UNIT-B SECTION matching item.jpg - Only shown when Secondary Unit is enabled */}
+          {hasSecondaryUnit && (
+            <div style={{ background: '#FFFFFF', border: '1.5px solid #000000', borderRadius: '8px', padding: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 900, fontSize: '1rem', color: '#000000' }}>UNIT-B :</span>
+                  <input
+                    type="text"
+                    className="input-text-clean"
+                    value={unitBName}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitBName(e.target.value);
+                    }}
+                    style={{ width: '100px', color: '#EA3943', fontWeight: 900, textAlign: 'center', fontSize: '0.95rem' }}
+                    placeholder="e.g. Mt."
+                  />
+                  <span style={{ fontWeight: 800, fontSize: '0.9rem' }}>1 {unitAName || 'Unit A'} =</span>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitBConversion}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitBConversion(e.target.value);
+                    }}
+                    style={{ width: '80px', fontWeight: 800, textAlign: 'center' }}
+                    placeholder="40"
+                  />
+                  <span style={{ fontWeight: 800, fontSize: '0.9rem' }}>{unitBName || 'Unit B'}</span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <input
+                    type="checkbox"
+                    id="unitBActiveCheck"
+                    checked={unitBActive}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitBActive(e.target.checked);
+                    }}
+                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                  />
+                  <label htmlFor="unitBActiveCheck" style={{ fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer' }}>
+                    Active
+                  </label>
+                </div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <input
-                  type="checkbox"
-                  id="unitBActiveCheck"
-                  checked={unitBActive}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitBActive(e.target.checked);
-                  }}
-                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                />
-                <label htmlFor="unitBActiveCheck" style={{ fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer' }}>
-                  Active
-                </label>
+              {/* Pricing Grid for Unit B */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '10px', textAlign: 'center' }}>
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Besic Price</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitBBasicPrice}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitBBasicPrice(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', fontWeight: 700 }}
+                  />
+                  <div className="subtext-calc-red">{unitBBreakdown.basicPrice}</div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>GST %</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitBGstPercent}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitBGstPercent(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', fontWeight: 700 }}
+                  />
+                  <div className="subtext-calc-red">{unitBBreakdown.gstAmt}</div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>TRAN%</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitBTranPercent}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitBTranPercent(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', fontWeight: 700 }}
+                  />
+                  <div className="subtext-calc-red">{unitBBreakdown.tranAmt}</div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Prof%</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitBProfPercent}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitBProfPercent(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', fontWeight: 700 }}
+                  />
+                  <div className="subtext-calc-red">{unitBBreakdown.profAmt}</div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Mis.%</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitBMisPercent}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitBMisPercent(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', fontWeight: 700 }}
+                  />
+                  <div className="subtext-calc-red">{unitBBreakdown.misAmt}</div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>ROUND UP</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitBRoundUp}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitBRoundUp(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', fontWeight: 700 }}
+                  />
+                  <div className="subtext-calc-red">{unitBBreakdown.nettPrice}</div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Sale Price</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitBSalePrice}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitBSalePrice(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', fontWeight: 900, color: '#002B99', fontSize: '0.95rem' }}
+                  />
+                  <div className="subtext-calc-red">{unitBBreakdown.salePrice}</div>
+                </div>
               </div>
             </div>
-
-            {/* Pricing Grid for Unit B */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '10px', textAlign: 'center' }}>
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Besic Price</label>
-                <input
-                  type="number"
-                  className="input-text-clean"
-                  value={unitBBasicPrice}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitBBasicPrice(e.target.value);
-                  }}
-                  style={{ textAlign: 'center', fontWeight: 700 }}
-                />
-                <div className="subtext-calc-red">{unitBBreakdown.basicPrice}</div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>GST %</label>
-                <input
-                  type="number"
-                  className="input-text-clean"
-                  value={unitBGstPercent}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitBGstPercent(e.target.value);
-                  }}
-                  style={{ textAlign: 'center', fontWeight: 700 }}
-                />
-                <div className="subtext-calc-red">{unitBBreakdown.gstAmt}</div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>TRAN%</label>
-                <input
-                  type="number"
-                  className="input-text-clean"
-                  value={unitBTranPercent}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitBTranPercent(e.target.value);
-                  }}
-                  style={{ textAlign: 'center', fontWeight: 700 }}
-                />
-                <div className="subtext-calc-red">{unitBBreakdown.tranAmt}</div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Prof%</label>
-                <input
-                  type="number"
-                  className="input-text-clean"
-                  value={unitBProfPercent}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitBProfPercent(e.target.value);
-                  }}
-                  style={{ textAlign: 'center', fontWeight: 700 }}
-                />
-                <div className="subtext-calc-red">{unitBBreakdown.profAmt}</div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Mis.%</label>
-                <input
-                  type="number"
-                  className="input-text-clean"
-                  value={unitBMisPercent}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitBMisPercent(e.target.value);
-                  }}
-                  style={{ textAlign: 'center', fontWeight: 700 }}
-                />
-                <div className="subtext-calc-red">{unitBBreakdown.misAmt}</div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>ROUND UP</label>
-                <input
-                  type="number"
-                  className="input-text-clean"
-                  value={unitBRoundUp}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitBRoundUp(e.target.value);
-                  }}
-                  style={{ textAlign: 'center', fontWeight: 700 }}
-                />
-                <div className="subtext-calc-red" style={{ visibility: 'hidden' }}>0</div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Sale Price</label>
-                <input
-                  type="number"
-                  className="input-text-clean"
-                  value={unitBSalePrice}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitBSalePrice(e.target.value);
-                  }}
-                  style={{ textAlign: 'center', fontWeight: 900, color: '#002B99', fontSize: '0.95rem' }}
-                />
-                <div className="subtext-calc-red" style={{ visibility: 'hidden' }}>0</div>
-              </div>
-            </div>
-          </div>
+          )}
 
           {/* Stock Thresholds */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '4px' }}>
@@ -775,6 +839,7 @@ export const ItemMasterView: React.FC = () => {
               </label>
               <input
                 type="number"
+                step="any"
                 min="0"
                 className="input-text-clean"
                 value={minStock}
@@ -790,6 +855,7 @@ export const ItemMasterView: React.FC = () => {
               </label>
               <input
                 type="number"
+                step="any"
                 min="0"
                 className="input-text-clean"
                 value={openingStock}
@@ -801,47 +867,33 @@ export const ItemMasterView: React.FC = () => {
             </div>
           </div>
 
-          {/* Customer Authentic Action Buttons */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', marginTop: '20px' }}>
-            {/* Top Center: Mint Green Save Button */}
-            <button type="submit" className="btn-customer-save">
+          {/* Customer Action Buttons: Del, Large Save, Print */}
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', flexWrap: 'wrap', marginTop: '24px' }}>
+            <button
+              type="button"
+              className="btn-customer-action-pill"
+              onClick={handleDelete}
+              disabled={!isEditing}
+              style={{ opacity: isEditing ? 1 : 0.5, cursor: isEditing ? 'pointer' : 'not-allowed' }}
+            >
+              Del
+            </button>
+
+            <button
+              type="submit"
+              className="btn-customer-save"
+              style={{ padding: '10px 48px', fontSize: '1.2rem', minWidth: '160px' }}
+            >
               Save
             </button>
 
-            {/* Bottom Row: Lavender Action Pills (Edit, Del, Print) */}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                className="btn-customer-action-pill"
-                onClick={() => {
-                  if (items.length > 0) {
-                    showToast('Select an item from the directory below to edit', 'info');
-                    const el = document.getElementById('item-directory-register');
-                    if (el) el.scrollIntoView({ behavior: 'smooth' });
-                  } else {
-                    showToast('No items found in master', 'warning');
-                  }
-                }}
-              >
-                Edit
-              </button>
-
-              <button
-                type="button"
-                className="btn-customer-action-pill"
-                onClick={handleDelete}
-              >
-                Del
-              </button>
-
-              <button
-                type="button"
-                className="btn-customer-action-pill"
-                onClick={handlePrint}
-              >
-                Print
-              </button>
-            </div>
+            <button
+              type="button"
+              className="btn-customer-action-pill"
+              onClick={handlePrint}
+            >
+              Print
+            </button>
           </div>
         </form>
       </div>

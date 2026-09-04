@@ -398,16 +398,17 @@ class DatabaseService {
     // Create new stock out movements
     const movements = this.getStockMovements();
     sale.items.forEach(item => {
+      const qtyChange = item.baseQty !== undefined ? -Math.abs(Number(item.baseQty)) : -Math.abs(Number(item.qty) || 0);
       movements.push({
         id: `mov-sale-${sale.id}-${item.id}-${Date.now()}`,
         itemId: item.itemId,
         type: 'SALE_OUT',
-        qtyChange: -Math.abs(Number(item.qty) || 0),
+        qtyChange: Number(qtyChange.toFixed(3)),
         refType: 'SALE',
         refId: sale.id,
         refNo: sale.billNo,
         date: sale.billDate,
-        notes: `Sale to ${sale.partyName} (Rate: ₹${item.salePrice})`,
+        notes: `Sale to ${sale.partyName} (Rate: ₹${item.salePrice}, Unit: ${item.unit || 'Default'})`,
         createdAt: new Date().toISOString()
       });
     });
@@ -449,16 +450,17 @@ class DatabaseService {
     // Create new stock in movements
     const movements = this.getStockMovements();
     purchase.items.forEach(item => {
+      const qtyChange = item.baseQty !== undefined ? Math.abs(Number(item.baseQty)) : Math.abs(Number(item.qty) || 0);
       movements.push({
         id: `mov-pur-${purchase.id}-${item.id}-${Date.now()}`,
         itemId: item.itemId,
         type: 'PURCHASE_IN',
-        qtyChange: Math.abs(Number(item.qty) || 0),
+        qtyChange: Number(qtyChange.toFixed(3)),
         refType: 'PURCHASE',
         refId: purchase.id,
         refNo: purchase.billNo,
         date: purchase.recdDate || purchase.billDate,
-        notes: `Purchase from ${purchase.supplierName}`,
+        notes: `Purchase from ${purchase.supplierName} (Unit: ${item.unit || 'Default'})`,
         createdAt: new Date().toISOString()
       });
     });
@@ -519,16 +521,17 @@ class DatabaseService {
     // Create new stock out movements
     const movements = this.getStockMovements();
     selfUse.items.forEach(item => {
+      const qtyChange = item.baseQty !== undefined ? -Math.abs(Number(item.baseQty)) : -Math.abs(Number(item.qty) || 0);
       movements.push({
         id: `mov-su-${selfUse.id}-${item.id}-${Date.now()}`,
         itemId: item.itemId,
         type: 'SELF_USE_OUT',
-        qtyChange: -Math.abs(Number(item.qty) || 0),
+        qtyChange: Number(qtyChange.toFixed(3)),
         refType: 'SELF_USE',
         refId: selfUse.id,
         refNo: selfUse.billNo,
         date: selfUse.billDate,
-        notes: `Internal Self Use: ${selfUse.remarks || 'Production'}`,
+        notes: `Internal Self Use: ${selfUse.remarks || 'Production'} (Unit: ${item.unit || 'Default'})`,
         createdAt: new Date().toISOString()
       });
     });
@@ -622,6 +625,177 @@ class DatabaseService {
       return false;
     }
   }
+
+  // --- SELECTIVE DATA DELETION ---
+  public getDeletePreviewCounts(options: DeleteFilterOptions): {
+    orders: number;
+    purchases: number;
+    sales: number;
+    selfUse: number;
+    adjustments: number;
+    openingStock: number;
+    items: number;
+    suppliers: number;
+    parties: number;
+    total: number;
+  } {
+    const { fromDate, toDate, modules } = options;
+    const filterByDate = (dateVal?: string) => {
+      if (!dateVal) return true;
+      return dateVal >= fromDate && dateVal <= toDate;
+    };
+
+    const counts = {
+      orders: modules.orders ? this.getOrders().filter(o => filterByDate(o.orderDate)).length : 0,
+      purchases: modules.purchases ? this.getPurchases().filter(p => filterByDate(p.billDate)).length : 0,
+      sales: modules.sales ? this.getSales().filter(s => filterByDate(s.billDate)).length : 0,
+      selfUse: modules.selfUse ? this.getSelfUses().filter(su => filterByDate(su.billDate)).length : 0,
+      adjustments: modules.adjustments ? this.getStockAdjustments().filter(a => filterByDate(a.date)).length : 0,
+      openingStock: modules.openingStock ? this.getStockMovements().filter(m => m.type === 'OPENING').length : 0,
+      items: modules.items ? this.getItems().length : 0,
+      suppliers: modules.suppliers ? this.getSuppliers().length : 0,
+      parties: modules.parties ? this.getParties().length : 0,
+      total: 0
+    };
+
+    counts.total = counts.orders + counts.purchases + counts.sales + counts.selfUse +
+      counts.adjustments + counts.openingStock + counts.items + counts.suppliers + counts.parties;
+
+    return counts;
+  }
+
+  public deleteDataByFilter(options: DeleteFilterOptions): { [key: string]: number } {
+    const { fromDate, toDate, modules } = options;
+    const filterByDate = (dateVal?: string) => {
+      if (!dateVal) return true;
+      return dateVal >= fromDate && dateVal <= toDate;
+    };
+
+    const deletedCounts: { [key: string]: number } = {
+      orders: 0,
+      purchases: 0,
+      sales: 0,
+      selfUse: 0,
+      adjustments: 0,
+      openingStock: 0,
+      items: 0,
+      suppliers: 0,
+      parties: 0
+    };
+
+    // 1. Delete Orders
+    if (modules.orders) {
+      const allOrders = this.getOrders();
+      const remainingOrders = allOrders.filter(o => !filterByDate(o.orderDate));
+      deletedCounts.orders = allOrders.length - remainingOrders.length;
+      this.set(STORAGE_KEYS.ORDERS, remainingOrders);
+    }
+
+    // 2. Delete Purchases
+    if (modules.purchases) {
+      const allPurchases = this.getPurchases();
+      const purchasesToDelete = allPurchases.filter(p => filterByDate(p.billDate));
+      const remainingPurchases = allPurchases.filter(p => !filterByDate(p.billDate));
+      deletedCounts.purchases = purchasesToDelete.length;
+      this.set(STORAGE_KEYS.PURCHASES, remainingPurchases);
+
+      purchasesToDelete.forEach(p => {
+        this.deleteStockMovementsByRef('PURCHASE', p.id);
+      });
+    }
+
+    // 3. Delete Sales
+    if (modules.sales) {
+      const allSales = this.getSales();
+      const salesToDelete = allSales.filter(s => filterByDate(s.billDate));
+      const remainingSales = allSales.filter(s => !filterByDate(s.billDate));
+      deletedCounts.sales = salesToDelete.length;
+      this.set(STORAGE_KEYS.SALES, remainingSales);
+
+      salesToDelete.forEach(s => {
+        this.deleteStockMovementsByRef('SALE', s.id);
+      });
+    }
+
+    // 4. Delete Self Use
+    if (modules.selfUse) {
+      const allSelfUses = this.getSelfUses();
+      const selfUsesToDelete = allSelfUses.filter(su => filterByDate(su.billDate));
+      const remainingSelfUses = allSelfUses.filter(su => !filterByDate(su.billDate));
+      deletedCounts.selfUse = selfUsesToDelete.length;
+      this.set(STORAGE_KEYS.SELF_USES, remainingSelfUses);
+
+      selfUsesToDelete.forEach(su => {
+        this.deleteStockMovementsByRef('SELF_USE', su.id);
+      });
+    }
+
+    // 5. Delete Adjustments
+    if (modules.adjustments) {
+      const allAdjustments = this.getStockAdjustments();
+      const adjustmentsToDelete = allAdjustments.filter(a => filterByDate(a.date));
+      const remainingAdjustments = allAdjustments.filter(a => !filterByDate(a.date));
+      deletedCounts.adjustments = adjustmentsToDelete.length;
+      this.set(STORAGE_KEYS.STOCK_ADJUSTMENTS, remainingAdjustments);
+
+      adjustmentsToDelete.forEach(a => {
+        this.deleteStockMovementsByRef('ADJUSTMENT', a.id);
+      });
+    }
+
+    // 6. Delete Opening Stock
+    if (modules.openingStock) {
+      const movements = this.getStockMovements();
+      const nonOpening = movements.filter(m => m.type !== 'OPENING');
+      deletedCounts.openingStock = movements.length - nonOpening.length;
+      this.set(STORAGE_KEYS.STOCK_MOVEMENTS, nonOpening);
+
+      const items = this.getItems().map(it => ({ ...it, openingStock: 0 }));
+      this.set(STORAGE_KEYS.ITEMS, items);
+    }
+
+    // 7. Delete Items (Only if explicitly checked)
+    if (modules.items) {
+      const items = this.getItems();
+      deletedCounts.items = items.length;
+      this.set(STORAGE_KEYS.ITEMS, []);
+      this.set(STORAGE_KEYS.STOCK_MOVEMENTS, []);
+    }
+
+    // 8. Delete Suppliers (Only if explicitly checked)
+    if (modules.suppliers) {
+      const suppliers = this.getSuppliers();
+      deletedCounts.suppliers = suppliers.length;
+      this.set(STORAGE_KEYS.SUPPLIERS, []);
+    }
+
+    // 9. Delete Parties (Only if explicitly checked)
+    if (modules.parties) {
+      const parties = this.getParties();
+      deletedCounts.parties = parties.length;
+      this.set(STORAGE_KEYS.PARTIES, []);
+    }
+
+    this.notify();
+    return deletedCounts;
+  }
+}
+
+export interface DeleteFilterOptions {
+  fromDate: string;
+  toDate: string;
+  isCustomDate: boolean;
+  modules: {
+    orders: boolean;
+    purchases: boolean;
+    sales: boolean;
+    selfUse: boolean;
+    adjustments: boolean;
+    openingStock?: boolean;
+    items?: boolean;
+    suppliers?: boolean;
+    parties?: boolean;
+  };
 }
 
 export const db = new DatabaseService();

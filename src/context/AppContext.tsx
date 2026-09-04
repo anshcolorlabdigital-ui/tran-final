@@ -15,6 +15,13 @@ interface QuickModalState {
   onSuccess?: (id: string, name: string) => void;
 }
 
+interface AlertModalState {
+  isOpen: boolean;
+  message: string;
+  title?: string;
+  type: 'warning' | 'error' | 'info' | 'success';
+}
+
 interface AppContextType {
   activeTab: ActiveNavTab;
   setActiveTab: (tab: ActiveNavTab) => void;
@@ -25,6 +32,9 @@ interface AppContextType {
   toasts: Toast[];
   showToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
   removeToast: (id: string) => void;
+  alertModal: AlertModalState;
+  showAlert: (message: string, title?: string, type?: 'warning' | 'error' | 'info' | 'success') => void;
+  closeAlert: () => void;
   quickModal: QuickModalState;
   openQuickModal: (type: 'PARTY' | 'ITEM' | 'SUPPLIER', onSuccess?: (id: string, name: string) => void) => void;
   closeQuickModal: () => void;
@@ -43,6 +53,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [refreshKey, setRefreshKey] = useState<number>(0);
   const [pendingPurchasePrefill, setPendingPurchasePrefill] = useState<any | null>(null);
+  const [alertModal, setAlertModal] = useState<AlertModalState>({
+    isOpen: false,
+    message: '',
+    title: undefined,
+    type: 'warning'
+  });
   const [quickModal, setQuickModal] = useState<QuickModalState>({
     isOpen: false,
     type: null
@@ -78,6 +94,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast('Company settings updated successfully!', 'success');
   }, [showToast]);
 
+  const showAlert = useCallback((message: string, title?: string, type: 'warning' | 'error' | 'info' | 'success' = 'warning') => {
+    setAlertModal({
+      isOpen: true,
+      message,
+      title,
+      type
+    });
+  }, []);
+
+  const closeAlert = useCallback(() => {
+    setAlertModal(prev => ({ ...prev, isOpen: false }));
+  }, []);
+
   const openQuickModal = useCallback((type: 'PARTY' | 'ITEM' | 'SUPPLIER', onSuccess?: (id: string, name: string) => void) => {
     setQuickModal({ isOpen: true, type, onSuccess });
   }, []);
@@ -98,6 +127,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toasts,
         showToast,
         removeToast,
+        alertModal,
+        showAlert,
+        closeAlert,
         quickModal,
         openQuickModal,
         closeQuickModal,

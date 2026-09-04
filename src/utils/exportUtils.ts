@@ -6,24 +6,37 @@ import { formatDateToDisplay } from './dateUtils';
 export interface ExportFilterOptions {
   fromDate: string; // YYYY-MM-DD
   toDate: string; // YYYY-MM-DD
-  isFullHistory: boolean;
+  isFullHistory?: boolean;
+  isCustomDate?: boolean;
   modules: {
-    orders: boolean;
-    purchases: boolean;
-    sales: boolean;
-    selfUse: boolean;
-    parties: boolean;
-    suppliers: boolean;
-    items: boolean;
-    adjustments: boolean;
-    settings: boolean;
+    orders?: boolean;
+    order?: boolean;
+    orderedSection?: boolean;
+    purchases?: boolean;
+    purchase?: boolean;
+    sales?: boolean;
+    sale?: boolean;
+    selfUse?: boolean;
+    parties?: boolean;
+    party?: boolean;
+    suppliers?: boolean;
+    supplier?: boolean;
+    items?: boolean;
+    item?: boolean;
+    adjustments?: boolean;
+    openingStock?: boolean;
+    settings?: boolean;
+    reportSales?: boolean;
+    reportPurchases?: boolean;
+    reportSelfUse?: boolean;
+    reportItemStock?: boolean;
   };
 }
 
 /**
  * Filters array of objects by date field
  */
-function filterByDateRange<T>(items: T[], dateField: keyof T, fromDate: string, toDate: string, isFullHistory: boolean): T[] {
+function filterByDateRange<T>(items: T[], dateField: keyof T, fromDate: string, toDate: string, isFullHistory?: boolean): T[] {
   if (isFullHistory) return items;
   return items.filter(item => {
     const itemDate = String(item[dateField] || '');
@@ -48,16 +61,26 @@ export function buildExportDataset(options: ExportFilterOptions) {
   const allSuppliers = db.getSuppliers();
   const settings = db.getSettings();
 
+  const incSales = Boolean(modules.sales || modules.sale || modules.reportSales);
+  const incPurchases = Boolean(modules.purchases || modules.purchase || modules.reportPurchases);
+  const incOrders = Boolean(modules.orders || modules.order || modules.orderedSection);
+  const incSelfUse = Boolean(modules.selfUse || modules.reportSelfUse);
+  const incAdjustments = Boolean(modules.adjustments || modules.reportItemStock);
+  const incItems = Boolean(modules.items || modules.item);
+  const incParties = Boolean(modules.parties || modules.party);
+  const incSuppliers = Boolean(modules.suppliers || modules.supplier);
+  const incSettings = Boolean(modules.settings);
+
   return {
-    sales: modules.sales ? filterByDateRange(allSales, 'billDate', fromDate, toDate, isFullHistory) : [],
-    purchases: modules.purchases ? filterByDateRange(allPurchases, 'billDate', fromDate, toDate, isFullHistory) : [],
-    orders: modules.orders ? filterByDateRange(allOrders, 'orderDate', fromDate, toDate, isFullHistory) : [],
-    selfUses: modules.selfUse ? filterByDateRange(allSelfUses, 'billDate', fromDate, toDate, isFullHistory) : [],
-    adjustments: modules.adjustments ? filterByDateRange(allAdjustments, 'date', fromDate, toDate, isFullHistory) : [],
-    items: modules.items ? allItems : [],
-    parties: modules.parties ? allParties : [],
-    suppliers: modules.suppliers ? allSuppliers : [],
-    settings: modules.settings ? settings : undefined
+    sales: incSales ? filterByDateRange(allSales, 'billDate', fromDate, toDate, isFullHistory) : [],
+    purchases: incPurchases ? filterByDateRange(allPurchases, 'billDate', fromDate, toDate, isFullHistory) : [],
+    orders: incOrders ? filterByDateRange(allOrders, 'orderDate', fromDate, toDate, isFullHistory) : [],
+    selfUses: incSelfUse ? filterByDateRange(allSelfUses, 'billDate', fromDate, toDate, isFullHistory) : [],
+    adjustments: incAdjustments ? filterByDateRange(allAdjustments, 'date', fromDate, toDate, isFullHistory) : [],
+    items: incItems ? allItems : [],
+    parties: incParties ? allParties : [],
+    suppliers: incSuppliers ? allSuppliers : [],
+    settings: incSettings ? settings : undefined
   };
 }
 
