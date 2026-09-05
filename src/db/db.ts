@@ -30,7 +30,9 @@ import {
   deleteDoc,
   collection,
   getDocs,
-  writeBatch
+  writeBatch,
+  onSnapshot,
+  Unsubscribe
 } from 'firebase/firestore';
 
 const STORAGE_KEYS = {
@@ -77,6 +79,7 @@ type DbChangeListener = () => void;
 
 class DatabaseService {
   private listeners: Set<DbChangeListener> = new Set();
+  private unsubs: Unsubscribe[] = [];
   private cloudSyncState: CloudSyncState = {
     status: 'LOCAL',
     lastSync: null,
@@ -108,26 +111,36 @@ class DatabaseService {
     return { ...this.cloudSyncState };
   }
 
+  private updateSyncSuccess(): void {
+    this.cloudSyncState = {
+      status: 'CONNECTED',
+      lastSync: new Date().toLocaleTimeString(),
+      error: null,
+      projectId: 'acl-inventory-mange-final'
+    };
+    this.notify();
+  }
+
+  private handleSyncError(err: any): void {
+    console.warn('Firestore real-time sync status:', err?.message || err);
+    this.cloudSyncState = {
+      status: 'LOCAL',
+      lastSync: this.cloudSyncState.lastSync,
+      error: err?.message || 'Firestore offline or pending connection',
+      projectId: 'acl-inventory-mange-final'
+    };
+    this.notify();
+  }
+
   private async pushDocToFirestore(collectionName: string, docId: string, data: any): Promise<void> {
     try {
       if (typeof window === 'undefined') return;
       const cleanData = JSON.parse(JSON.stringify(data));
       const docRef = doc(firestore, collectionName, String(docId));
       await setDoc(docRef, cleanData, { merge: true });
-      this.cloudSyncState = {
-        status: 'CONNECTED',
-        lastSync: new Date().toLocaleTimeString(),
-        error: null,
-        projectId: 'acl-inventory-mange-final'
-      };
-      this.notify();
+      this.updateSyncSuccess();
     } catch (err: any) {
-      this.cloudSyncState = {
-        status: 'LOCAL',
-        lastSync: this.cloudSyncState.lastSync,
-        error: err?.message || 'Firestore API offline or pending initialization',
-        projectId: 'acl-inventory-mange-final'
-      };
+      this.handleSyncError(err);
     }
   }
 
@@ -136,41 +149,86 @@ class DatabaseService {
       if (typeof window === 'undefined') return;
       const docRef = doc(firestore, collectionName, String(docId));
       await deleteDoc(docRef);
+      this.updateSyncSuccess();
     } catch (err: any) {
       console.warn(`Firestore delete warning for ${collectionName}/${docId}:`, err);
     }
   }
 
-  private async initFirestoreSync(): Promise<void> {
+  private initFirestoreSync(): void {
     if (typeof window === 'undefined') return;
+
+    // Clean up any existing listeners before establishing new ones
+    this.unsubs.forEach(unsub => {
+      try { unsub(); } catch (e) {}
+    });
+    this.unsubs = [];
+
     try {
       this.cloudSyncState.status = 'SYNCING';
-      // Attempt to load settings from cloud
-      const settingsDoc = await getDoc(doc(firestore, 'app_metadata', 'settings'));
-      if (settingsDoc.exists()) {
-        const cloudSettings = settingsDoc.data() as CompanySettings;
-        if (cloudSettings) {
-          this.set(STORAGE_KEYS.SETTINGS, cloudSettings);
-        }
-      } else {
-        // First cloud boot: upload initial settings to firestore
-        await setDoc(doc(firestore, 'app_metadata', 'settings'), this.getSettings(), { merge: true });
-      }
-
-      this.cloudSyncState = {
-        status: 'CONNECTED',
-        lastSync: new Date().toLocaleTimeString(),
-        error: null,
-        projectId: 'acl-inventory-mange-final'
-      };
       this.notify();
-    } catch (err: any) {
-      this.cloudSyncState = {
-        status: 'LOCAL',
-        lastSync: null,
-        error: err?.message || 'Firestore API disabled or network offline',
-        projectId: 'acl-inventory-mange-final'
+
+      // 1. Real-time listener for Settings
+      const settingsUnsub = onSnapshot(doc(firestore, 'app_metadata', 'settings'), (docSnap) => {
+        if (docSnap.exists()) {
+          const cloudSettings = docSnap.data() as CompanySettings;
+          if (cloudSettings) {
+            this.set(STORAGE_KEYS.SETTINGS, cloudSettings);
+            this.updateSyncSuccess();
+          }
+        } else {
+          // Push initial settings if not yet present in Firestore
+          const currentSettings = this.getSettings();
+          setDoc(doc(firestore, 'app_metadata', 'settings'), currentSettings, { merge: true }).catch(() => {});
+        }
+      }, (err) => {
+        this.handleSyncError(err);
+      });
+      this.unsubs.push(settingsUnsub);
+
+      // 2. Generic helper for real-time collection synchronization
+      const setupCollectionSync = <T extends { id: string }>(
+        collectionName: string,
+        storageKey: string,
+        getLocalData: () => T[]
+      ) => {
+        const unsub = onSnapshot(collection(firestore, collectionName), (snapshot) => {
+          if (!snapshot.empty) {
+            const cloudDocs = snapshot.docs.map(d => d.data() as T);
+            this.set(storageKey, cloudDocs);
+            this.updateSyncSuccess();
+          } else {
+            // Auto-push initial local records to cloud if cloud collection is empty
+            const localRecords = getLocalData();
+            if (localRecords && localRecords.length > 0) {
+              localRecords.forEach(rec => {
+                if (rec && rec.id) {
+                  setDoc(doc(firestore, collectionName, String(rec.id)), rec).catch(() => {});
+                }
+              });
+            }
+          }
+        }, (err) => {
+          this.handleSyncError(err);
+        });
+        this.unsubs.push(unsub);
       };
+
+      // Set up real-time bidirectional listeners for all master and transaction entities
+      setupCollectionSync<Item>('items', STORAGE_KEYS.ITEMS, () => this.getItems());
+      setupCollectionSync<Supplier>('suppliers', STORAGE_KEYS.SUPPLIERS, () => this.getSuppliers());
+      setupCollectionSync<Party>('parties', STORAGE_KEYS.PARTIES, () => this.getParties());
+      setupCollectionSync<Sale>('sales', STORAGE_KEYS.SALES, () => this.getSales());
+      setupCollectionSync<Purchase>('purchases', STORAGE_KEYS.PURCHASES, () => this.getPurchases());
+      setupCollectionSync<SupplierOrder>('orders', STORAGE_KEYS.ORDERS, () => this.getOrders());
+      setupCollectionSync<SelfUse>('self_uses', STORAGE_KEYS.SELF_USES, () => this.getSelfUses());
+      setupCollectionSync<StockAdjustment>('stock_adjustments', STORAGE_KEYS.STOCK_ADJUSTMENTS, () => this.getStockAdjustments());
+      setupCollectionSync<PartyLog>('party_logs', STORAGE_KEYS.PARTY_LOGS, () => this.getPartyLogs());
+      setupCollectionSync<User>('users', STORAGE_KEYS.USERS, () => this.getUsers());
+      setupCollectionSync<StockMovement>('stock_movements', STORAGE_KEYS.STOCK_MOVEMENTS, () => this.getStockMovements());
+
+    } catch (err: any) {
+      this.handleSyncError(err);
     }
   }
 
@@ -697,15 +755,21 @@ class DatabaseService {
   }
 
   public deleteStockMovementsByRef(refType: string, refId: string): void {
-    const movements = this.getStockMovements().filter(
+    const allMovements = this.getStockMovements();
+    const toDelete = allMovements.filter(m => m.refType === refType && m.refId === refId);
+    const movements = allMovements.filter(
       m => !(m.refType === refType && m.refId === refId)
     );
     this.set(STORAGE_KEYS.STOCK_MOVEMENTS, movements);
+    toDelete.forEach(m => this.deleteDocFromFirestore('stock_movements', m.id));
   }
 
   private deleteStockMovementsByItemId(itemId: string): void {
-    const movements = this.getStockMovements().filter(m => m.itemId !== itemId);
+    const allMovements = this.getStockMovements();
+    const toDelete = allMovements.filter(m => m.itemId === itemId);
+    const movements = allMovements.filter(m => m.itemId !== itemId);
     this.set(STORAGE_KEYS.STOCK_MOVEMENTS, movements);
+    toDelete.forEach(m => this.deleteDocFromFirestore('stock_movements', m.id));
   }
 
   private updateOpeningStockMovement(itemId: string, newOpeningQty: number): void {
@@ -1160,6 +1224,7 @@ class DatabaseService {
       const remainingOrders = allOrders.filter(o => !filterByDate(o.orderDate));
       deletedCounts.orders = ordersToDelete.length;
       this.set(STORAGE_KEYS.ORDERS, remainingOrders);
+      ordersToDelete.forEach(o => this.deleteDocFromFirestore('orders', o.id));
     }
 
     // 2. Delete Purchases
@@ -1172,6 +1237,7 @@ class DatabaseService {
 
       purchasesToDelete.forEach(p => {
         this.deleteStockMovementsByRef('PURCHASE', p.id);
+        this.deleteDocFromFirestore('purchases', p.id);
       });
     }
 
@@ -1185,6 +1251,8 @@ class DatabaseService {
 
       salesToDelete.forEach(s => {
         this.deleteStockMovementsByRef('SALE', s.id);
+        this.deleteDocFromFirestore('sales', s.id);
+        this.deleteDocFromFirestore('party_logs', `log-sale-${s.id}`);
       });
     }
 
@@ -1198,6 +1266,7 @@ class DatabaseService {
 
       selfUsesToDelete.forEach(su => {
         this.deleteStockMovementsByRef('SELF_USE', su.id);
+        this.deleteDocFromFirestore('self_uses', su.id);
       });
     }
 
@@ -1211,6 +1280,7 @@ class DatabaseService {
 
       adjustmentsToDelete.forEach(a => {
         this.deleteStockMovementsByRef('ADJUSTMENT', a.id);
+        this.deleteDocFromFirestore('stock_adjustments', a.id);
       });
     }
 
@@ -1231,6 +1301,7 @@ class DatabaseService {
       deletedCounts.items = items.length;
       this.set(STORAGE_KEYS.ITEMS, []);
       this.set(STORAGE_KEYS.STOCK_MOVEMENTS, []);
+      items.forEach(i => this.deleteDocFromFirestore('items', i.id));
     }
 
     // 8. Delete Suppliers (Only if explicitly checked)
@@ -1238,6 +1309,7 @@ class DatabaseService {
       const suppliers = this.getSuppliers();
       deletedCounts.suppliers = suppliers.length;
       this.set(STORAGE_KEYS.SUPPLIERS, []);
+      suppliers.forEach(s => this.deleteDocFromFirestore('suppliers', s.id));
     }
 
     // 9. Delete Parties (Only if explicitly checked)
@@ -1246,6 +1318,7 @@ class DatabaseService {
       deletedCounts.parties = parties.length;
       this.set(STORAGE_KEYS.PARTIES, []);
       this.set(STORAGE_KEYS.PARTY_LOGS, []);
+      parties.forEach(p => this.deleteDocFromFirestore('parties', p.id));
     }
 
     this.notify();

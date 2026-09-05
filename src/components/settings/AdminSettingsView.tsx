@@ -1509,14 +1509,17 @@ export const AdminSettingsView: React.FC = () => {
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <h4 style={{ margin: 0, fontWeight: 900, fontSize: '1.05rem', color: '#1E3A8A' }}>
-                      Cloud Firestore Integration
+                      Cloud Firestore Real-Time Live Sync
                     </h4>
                     <span style={{ fontSize: '0.72rem', background: '#DCFCE7', color: '#15803D', border: '1px solid #86EFAC', padding: '2px 8px', borderRadius: '12px', fontWeight: 800 }}>
-                      ● Project: acl-inventory-mange-final
+                      ⚡ Live Auto-Sync Active
+                    </span>
+                    <span style={{ fontSize: '0.72rem', background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
+                      acl-inventory-mange-final
                     </span>
                   </div>
-                  <div style={{ fontSize: '0.8rem', color: '#4B5563', marginTop: '2px' }}>
-                    Automatic bidirectional sync across all sales, purchases, masters, statements, and stock ledgers.
+                  <div style={{ fontSize: '0.8rem', color: '#334155', marginTop: '2px', fontWeight: 600 }}>
+                    ⚡ Real-time automatic sync: Any change on any device syncs instantly across all computers without clicking anything!
                   </div>
                 </div>
               </div>

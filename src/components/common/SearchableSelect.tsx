@@ -1,92 +1,94 @@
 import React, { useState, useRef, useEffect, useMemo, useImperativeHandle, forwardRef } from 'react';
-import { Item } from '../../types';
-import { StockEngine } from '../../db/stockEngine';
 import { Search, X, Check } from 'lucide-react';
 
-export interface ItemSearchSelectProps {
-  items: Item[];
-  selectedItemId: string;
-  onSelectItem?: (item: Item | null) => void;
-  onSelect?: (itemId: string) => void;
+export interface SearchableSelectOption {
+  id: string;
+  label: string;
+  subLabel?: string;
+  badge?: string;
+  badgeBg?: string;
+  badgeColor?: string;
+}
+
+export interface SearchableSelectProps {
+  options: SearchableSelectOption[];
+  value: string;
+  onChange: (value: string) => void;
+  onSelectOption?: (option: SearchableSelectOption | null) => void;
   onEnterNext?: () => void;
-  onQuickAdd?: () => void;
   placeholder?: string;
   disabled?: boolean;
+  onQuickAdd?: () => void;
+  quickAddTitle?: string;
   style?: React.CSSProperties;
+  emptyLabel?: string;
 }
 
-export interface ItemSearchSelectHandle {
+export interface SearchableSelectHandle {
   focus: () => void;
   select: () => void;
-  clear: () => void;
 }
 
-export const ItemSearchSelect = forwardRef<ItemSearchSelectHandle, ItemSearchSelectProps>(({
-  items,
-  selectedItemId,
-  onSelectItem,
-  onSelect,
+export const SearchableSelect = forwardRef<SearchableSelectHandle, SearchableSelectProps>(({
+  options,
+  value,
+  onChange,
+  onSelectOption,
   onEnterNext,
-  onQuickAdd,
-  placeholder = 'Type to search item...',
+  placeholder = 'Type to search...',
   disabled = false,
-  style
+  onQuickAdd,
+  quickAddTitle = 'Quick Add',
+  style,
+  emptyLabel = '-- Select Option --'
 }, ref) => {
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
   const containerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const internalInputRef = useRef<HTMLInputElement>(null);
 
   useImperativeHandle(ref, () => ({
     focus: () => {
-      inputRef.current?.focus();
-      inputRef.current?.select();
+      internalInputRef.current?.focus();
+      internalInputRef.current?.select();
     },
     select: () => {
-      inputRef.current?.select();
-    },
-    clear: () => {
-      setQuery('');
-      setIsOpen(false);
-      if (onSelectItem) onSelectItem(null);
-      if (onSelect) onSelect('');
+      internalInputRef.current?.select();
     }
   }));
 
-  const selectedItem = useMemo(() => {
-    return items.find(i => i.id === selectedItemId) || null;
-  }, [items, selectedItemId]);
+  const selectedOption = useMemo(() => {
+    return options.find(opt => opt.id === value) || null;
+  }, [options, value]);
 
-  // Sync display text with selected item
+  // Sync display text with selected option
   useEffect(() => {
-    if (selectedItem) {
-      setQuery(selectedItem.name);
+    if (selectedOption) {
+      setQuery(selectedOption.label);
     } else {
       setQuery('');
     }
-  }, [selectedItem]);
+  }, [selectedOption]);
 
-  // Filter items matching query
-  const filteredItems = useMemo(() => {
+  // Filter options matching query
+  const filteredOptions = useMemo(() => {
     const q = query.toLowerCase().trim();
-    if (!q) return items;
-    return items.filter(
-      i =>
-        i.name.toLowerCase().includes(q) ||
-        (i.sno && i.sno.toLowerCase().includes(q)) ||
-        (i.category && i.category.toLowerCase().includes(q))
+    if (!q) return options;
+    return options.filter(
+      opt =>
+        opt.label.toLowerCase().includes(q) ||
+        (opt.subLabel && opt.subLabel.toLowerCase().includes(q))
     );
-  }, [items, query]);
+  }, [options, query]);
 
-  // Handle click outside to close dropdown
+  // Click outside listener
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
-        // If query doesn't match selected, restore selected name or clear
-        if (selectedItem) {
-          setQuery(selectedItem.name);
+        if (selectedOption) {
+          setQuery(selectedOption.label);
         } else {
           setQuery('');
         }
@@ -94,12 +96,18 @@ export const ItemSearchSelect = forwardRef<ItemSearchSelectHandle, ItemSearchSel
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [selectedItem]);
+  }, [selectedOption]);
 
-  const handleSelect = (item: Item, advance: boolean = false) => {
-    if (onSelectItem) onSelectItem(item);
-    if (onSelect) onSelect(item.id);
-    setQuery(item.name);
+  const handleSelect = (option: SearchableSelectOption | null, advance: boolean = false) => {
+    if (option) {
+      onChange(option.id);
+      if (onSelectOption) onSelectOption(option);
+      setQuery(option.label);
+    } else {
+      onChange('');
+      if (onSelectOption) onSelectOption(null);
+      setQuery('');
+    }
     setIsOpen(false);
 
     if (advance && onEnterNext) {
@@ -111,57 +119,63 @@ export const ItemSearchSelect = forwardRef<ItemSearchSelectHandle, ItemSearchSel
 
   const handleClear = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (onSelectItem) onSelectItem(null);
-    if (onSelect) onSelect('');
-    setQuery('');
-    setIsOpen(false);
-    inputRef.current?.focus();
+    handleSelect(null, false);
+    internalInputRef.current?.focus();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!isOpen) {
       if (e.key === 'ArrowDown' || e.key === 'Enter') {
-        if (selectedItem && e.key === 'Enter' && onEnterNext) {
-          e.preventDefault();
-          onEnterNext();
-          return;
-        }
         e.preventDefault();
         setIsOpen(true);
-        const idx = filteredItems.findIndex(i => i.id === selectedItemId);
-        setHighlightedIndex(idx >= 0 ? idx : 0);
+        setHighlightedIndex(filteredOptions.findIndex(o => o.id === value) >= 0 ? filteredOptions.findIndex(o => o.id === value) : 0);
         return;
       }
-      return;
+      if (e.key === 'Tab') {
+        return;
+      }
     }
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setHighlightedIndex(prev => (prev < filteredItems.length - 1 ? prev + 1 : 0));
+      if (!isOpen) {
+        setIsOpen(true);
+        setHighlightedIndex(0);
+        return;
+      }
+      setHighlightedIndex(prev => (prev < filteredOptions.length - 1 ? prev + 1 : 0));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setHighlightedIndex(prev => (prev > 0 ? prev - 1 : filteredItems.length - 1));
+      if (!isOpen) {
+        setIsOpen(true);
+        setHighlightedIndex(filteredOptions.length - 1);
+        return;
+      }
+      setHighlightedIndex(prev => (prev > 0 ? prev - 1 : filteredOptions.length - 1));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (highlightedIndex >= 0 && highlightedIndex < filteredItems.length) {
-        handleSelect(filteredItems[highlightedIndex], true);
-      } else if (filteredItems.length === 1) {
-        handleSelect(filteredItems[0], true);
-      } else if (filteredItems.length > 0) {
-        handleSelect(filteredItems[0], true);
-      } else if (selectedItem && onEnterNext) {
+      if (isOpen && highlightedIndex >= 0 && highlightedIndex < filteredOptions.length) {
+        handleSelect(filteredOptions[highlightedIndex], true);
+      } else if (isOpen && filteredOptions.length === 1) {
+        handleSelect(filteredOptions[0], true);
+      } else if (selectedOption) {
+        // Option already selected and dropdown closed, advance to next field
         setIsOpen(false);
-        onEnterNext();
+        if (onEnterNext) onEnterNext();
+      } else if (isOpen && filteredOptions.length > 0) {
+        handleSelect(filteredOptions[0], true);
+      } else if (!isOpen) {
+        if (onEnterNext) onEnterNext();
       }
     } else if (e.key === 'Escape') {
       e.preventDefault();
       setIsOpen(false);
-      if (selectedItem) {
-        setQuery(selectedItem.name);
+      if (selectedOption) {
+        setQuery(selectedOption.label);
       }
     } else if (e.key === 'Tab') {
-      if (highlightedIndex >= 0 && highlightedIndex < filteredItems.length) {
-        handleSelect(filteredItems[highlightedIndex], false);
+      if (isOpen && highlightedIndex >= 0 && highlightedIndex < filteredOptions.length) {
+        handleSelect(filteredOptions[highlightedIndex], false);
       }
       setIsOpen(false);
     }
@@ -171,14 +185,14 @@ export const ItemSearchSelect = forwardRef<ItemSearchSelectHandle, ItemSearchSel
     <div ref={containerRef} style={{ position: 'relative', width: '100%', display: 'flex', gap: '6px', alignItems: 'center', ...style }}>
       <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
         <input
-          ref={inputRef}
+          ref={internalInputRef}
           type="text"
           disabled={disabled}
           placeholder={placeholder}
           value={query}
           onFocus={() => {
             setIsOpen(true);
-            const idx = filteredItems.findIndex(i => i.id === selectedItemId);
+            const idx = filteredOptions.findIndex(o => o.id === value);
             setHighlightedIndex(idx >= 0 ? idx : 0);
           }}
           onChange={e => {
@@ -186,8 +200,8 @@ export const ItemSearchSelect = forwardRef<ItemSearchSelectHandle, ItemSearchSel
             setIsOpen(true);
             setHighlightedIndex(0);
             if (!e.target.value) {
-              if (onSelectItem) onSelectItem(null);
-              if (onSelect) onSelect('');
+              onChange('');
+              if (onSelectOption) onSelectOption(null);
             }
           }}
           onKeyDown={handleKeyDown}
@@ -196,9 +210,9 @@ export const ItemSearchSelect = forwardRef<ItemSearchSelectHandle, ItemSearchSel
             width: '100%',
             height: '38px',
             paddingLeft: '32px',
-            paddingRight: selectedItemId ? '30px' : '10px',
+            paddingRight: value ? '30px' : '10px',
             fontSize: '0.95rem',
-            fontWeight: 800,
+            fontWeight: 700,
             cursor: disabled ? 'not-allowed' : 'text'
           }}
         />
@@ -207,7 +221,7 @@ export const ItemSearchSelect = forwardRef<ItemSearchSelectHandle, ItemSearchSel
           color="#6B7280"
           style={{ position: 'absolute', left: '10px', pointerEvents: 'none' }}
         />
-        {selectedItemId && !disabled && (
+        {value && !disabled && (
           <button
             type="button"
             onClick={handleClear}
@@ -223,7 +237,7 @@ export const ItemSearchSelect = forwardRef<ItemSearchSelectHandle, ItemSearchSel
               padding: '4px',
               color: '#9CA3AF'
             }}
-            title="Clear item selection"
+            title="Clear selection"
           >
             <X size={16} />
           </button>
@@ -234,14 +248,14 @@ export const ItemSearchSelect = forwardRef<ItemSearchSelectHandle, ItemSearchSel
         <button
           type="button"
           className="btn-quick-n"
-          title="Quick Create Item"
+          title={quickAddTitle}
           onClick={onQuickAdd}
         >
           N
         </button>
       )}
 
-      {/* Floating Dropdown List */}
+      {/* Dropdown suggestions list */}
       {isOpen && (
         <div
           style={{
@@ -249,7 +263,7 @@ export const ItemSearchSelect = forwardRef<ItemSearchSelectHandle, ItemSearchSel
             top: 'calc(100% + 4px)',
             left: 0,
             right: onQuickAdd ? '40px' : 0,
-            maxHeight: '260px',
+            maxHeight: '240px',
             overflowY: 'auto',
             background: '#FFFFFF',
             border: '2px solid #000000',
@@ -258,20 +272,19 @@ export const ItemSearchSelect = forwardRef<ItemSearchSelectHandle, ItemSearchSel
             zIndex: 9999
           }}
         >
-          {filteredItems.length === 0 ? (
+          {filteredOptions.length === 0 ? (
             <div style={{ padding: '12px 16px', color: '#6B7280', fontSize: '0.88rem', fontWeight: 600, textAlign: 'center' }}>
-              No matching items found for "{query}".
+              No matches found for "{query}".
             </div>
           ) : (
-            filteredItems.map((item, idx) => {
-              const isSelected = item.id === selectedItemId;
+            filteredOptions.map((opt, idx) => {
+              const isSelected = opt.id === value;
               const isHighlighted = idx === highlightedIndex;
-              const stock = StockEngine.getItemCurrentStock(item.id);
 
               return (
                 <div
-                  key={item.id}
-                  onClick={() => handleSelect(item, true)}
+                  key={opt.id}
+                  onClick={() => handleSelect(opt, true)}
                   onMouseEnter={() => setHighlightedIndex(idx)}
                   style={{
                     padding: '8px 14px',
@@ -286,32 +299,30 @@ export const ItemSearchSelect = forwardRef<ItemSearchSelectHandle, ItemSearchSel
                 >
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <div style={{ fontWeight: 800, fontSize: '0.92rem', color: isSelected ? '#002B99' : '#111827' }}>
-                      {item.name}
-                      {item.hasSecondaryUnit && (
-                        <span style={{ fontSize: '0.78rem', color: '#6B7280', marginLeft: '6px', fontWeight: 600 }}>
-                          ({item.unitA?.unitName || 'Unit A'} / {item.unitB?.unitName || 'Unit B'})
-                        </span>
-                      )}
+                      {opt.label}
                     </div>
-                    <div style={{ display: 'flex', gap: '8px', fontSize: '0.75rem', color: '#6B7280', fontWeight: 600 }}>
-                      {item.sno && <span>Code: {item.sno}</span>}
-                      {item.category && <span>Category: {item.category}</span>}
-                    </div>
+                    {opt.subLabel && (
+                      <span style={{ fontSize: '0.75rem', color: '#6B7280', fontWeight: 600 }}>
+                        {opt.subLabel}
+                      </span>
+                    )}
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span
-                      style={{
-                        fontSize: '0.78rem',
-                        fontWeight: 800,
-                        padding: '2px 8px',
-                        borderRadius: '12px',
-                        background: stock > 0 ? '#DCFCE7' : '#FEE2E2',
-                        color: stock > 0 ? '#15803D' : '#991B1B'
-                      }}
-                    >
-                      Stock: {stock} {item.unitA?.unitName || item.unit || 'Units'}
-                    </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {opt.badge && (
+                      <span
+                        style={{
+                          fontSize: '0.75rem',
+                          fontWeight: 800,
+                          padding: '2px 8px',
+                          borderRadius: '10px',
+                          background: opt.badgeBg || '#E0E7FF',
+                          color: opt.badgeColor || '#3730A3'
+                        }}
+                      >
+                        {opt.badge}
+                      </span>
+                    )}
                     {isSelected && <Check size={16} color="#002B99" />}
                   </div>
                 </div>
@@ -324,4 +335,4 @@ export const ItemSearchSelect = forwardRef<ItemSearchSelectHandle, ItemSearchSel
   );
 });
 
-ItemSearchSelect.displayName = 'ItemSearchSelect';
+SearchableSelect.displayName = 'SearchableSelect';

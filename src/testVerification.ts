@@ -1179,10 +1179,76 @@ function runVerificationSuite() {
   }
   console.log('Step 55 PASS? true: assets/ITEM.xls (569 items, 29 suppliers, 14 categories) verified seamlessly across Import, Inspection, and Restore.');
 
+  // 56. Keyboard-First Entry & Editable Bill Summary Round-Up Invariant Verification
+  console.log('\nStep 56: Verifying Keyboard-First Navigation Pricing Engine & Editable Bill Summary Round-Up...');
+  const testBillItems = [
+    {
+      basicPrice: 152.54,
+      gstAmt: 27.46,
+      salePrice: 180.00,
+      qty: 3,
+      amount: 540.00
+    },
+    {
+      basicPrice: 211.86,
+      gstAmt: 38.14,
+      salePrice: 250.00,
+      qty: 2,
+      amount: 500.00
+    },
+    {
+      basicPrice: 84.75,
+      gstAmt: 15.25,
+      salePrice: 100.00,
+      qty: 1,
+      amount: 100.00
+    }
+  ];
+
+  // 1. Default auto round-up computation: Total 1140.00 -> roundUp = 0, billTotal = 1140
+  const summaryAuto = calculateBillSummary(testBillItems);
+  console.log(`Auto Summary: BasicTotal=${summaryAuto.basicTotal}, GSTTotal=${summaryAuto.gstTotal}, RoundUp=${summaryAuto.roundUp}, BillTotal=${summaryAuto.billTotal}`);
+  if (summaryAuto.billTotal !== 1140 || summaryAuto.roundUp !== 0) {
+    throw new Error(`Expected auto billTotal 1140, got ${summaryAuto.billTotal}`);
+  }
+
+  // 2. Fractional item test:
+  const fractionalBillItems = [
+    {
+      basicPrice: 100.33,
+      gstAmt: 18.06,
+      salePrice: 118.39,
+      qty: 1,
+      amount: 118.39
+    }
+  ];
+  const summaryFractional = calculateBillSummary(fractionalBillItems);
+  console.log(`Fractional Auto Summary: RawTotal=${summaryFractional.rawTotal}, AutoRoundUp=${summaryFractional.roundUp}, BillTotal=${summaryFractional.billTotal}`);
+  if (summaryFractional.billTotal !== 118 || summaryFractional.roundUp !== -0.39) {
+    throw new Error(`Expected fractional auto roundUp -0.39 and billTotal 118, got ${summaryFractional.roundUp} / ${summaryFractional.billTotal}`);
+  }
+
+  // 3. User manual round-up override (+1.61 to make bill exactly 120):
+  const summaryManual = calculateBillSummary(fractionalBillItems, 1.61);
+  console.log(`Manual Round-Up Summary (+1.61): RoundUp=${summaryManual.roundUp}, BillTotal=${summaryManual.billTotal}`);
+  if (summaryManual.billTotal !== 120 || summaryManual.roundUp !== 1.61) {
+    throw new Error(`Expected manual billTotal 120, got ${summaryManual.billTotal}`);
+  }
+
+  // 4. Negative manual round-up override (-3.39 to make bill 115):
+  const summaryManualNegative = calculateBillSummary(fractionalBillItems, -3.39);
+  console.log(`Manual Negative Round-Up Summary (-3.39): RoundUp=${summaryManualNegative.roundUp}, BillTotal=${summaryManualNegative.billTotal}`);
+  if (summaryManualNegative.billTotal !== 115 || summaryManualNegative.roundUp !== -3.39) {
+    throw new Error(`Expected manual billTotal 115, got ${summaryManualNegative.billTotal}`);
+  }
+
+  console.log('Step 56 PASS? true: Keyboard-First Bill Summary Engine supports precise auto-rounding and user-customizable manual Round Up overrides.');
+
   console.log('\n====================================================');
-  console.log('ALL 55 CUSTOMER WORKFLOW STEPS & INVARIANTS PASSED!');
+  console.log('ALL 56 CUSTOMER WORKFLOW STEPS & INVARIANTS PASSED!');
   console.log('====================================================\n');
 }
 
 runVerificationSuite();
+
 

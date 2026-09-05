@@ -162,7 +162,7 @@ export function calculateItemPricing(
 }
 
 /**
- * Calculates Bill Summary totals
+ * Calculates Bill Summary totals with support for optional user-edited round-up
  */
 export function calculateBillSummary(
   items: Array<{
@@ -171,7 +171,8 @@ export function calculateBillSummary(
     salePrice?: number;
     qty?: number;
     amount?: number;
-  }>
+  }>,
+  customRoundUp?: number
 ) {
   let basicTotal = 0;
   let gstTotal = 0;
@@ -184,14 +185,20 @@ export function calculateBillSummary(
     rawTotal += Number(item.amount) || 0;
   });
 
-  const roundedTotal = Math.round(rawTotal);
-  const roundUp = Number((roundedTotal - rawTotal).toFixed(2));
+  const defaultRoundedTotal = Math.round(rawTotal);
+  const defaultRoundUp = Number((defaultRoundedTotal - rawTotal).toFixed(2));
+  const finalRoundUp = customRoundUp !== undefined && !isNaN(Number(customRoundUp))
+    ? Number(Number(customRoundUp).toFixed(2))
+    : defaultRoundUp;
+  const billTotal = Number((rawTotal + finalRoundUp).toFixed(2));
 
   return {
     basicTotal: Number(basicTotal.toFixed(2)),
     gstTotal: Number(gstTotal.toFixed(2)),
-    roundUp,
-    billTotal: roundedTotal
+    rawTotal: Number(rawTotal.toFixed(2)),
+    roundUp: finalRoundUp,
+    defaultRoundUp,
+    billTotal
   };
 }
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '../../db/db';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -8,8 +8,9 @@ import { getTodayDateString } from '../../utils/dateUtils';
 import { calculateItemPricing, calculateBillSummary, calculateUnitBFromUnitA, calculateItemUnitBreakdown } from '../../utils/calculations';
 import { PurchasePrintVoucher } from './PurchasePrintVoucher';
 import { ConfirmDialog } from '../common/ConfirmDialog';
-import { ItemSearchSelect } from '../common/ItemSearchSelect';
-import { Search } from 'lucide-react';
+import { ItemSearchSelect, ItemSearchSelectHandle } from '../common/ItemSearchSelect';
+import { SearchableSelect, SearchableSelectHandle } from '../common/SearchableSelect';
+import { Search, Keyboard } from 'lucide-react';
 
 export const PurchaseEntryView: React.FC = () => {
   const { showToast, showAlert, openQuickModal, refreshKey, selectedDate, pendingPurchasePrefill, setPendingPurchasePrefill } = useApp();
@@ -29,6 +30,32 @@ export const PurchaseEntryView: React.FC = () => {
     });
     return Array.from(set);
   }, [items]);
+
+  // Options for SearchableSelects
+  const supplierOptions = useMemo(() => {
+    return suppliers.map(s => ({
+      id: s.id,
+      label: s.name,
+      subLabel: s.phone ? `${s.phone}${s.city ? ` • ${s.city}` : ''}` : s.city,
+      badge: s.gstin ? 'GST' : undefined,
+      badgeBg: s.gstin ? '#DCFCE7' : undefined,
+      badgeColor: s.gstin ? '#15803D' : undefined
+    }));
+  }, [suppliers]);
+
+  const categoryOptions = useMemo(() => {
+    const allOpt = [{ id: '', label: '-- All Categories --', subLabel: 'Show all catalog items' }];
+    const catOpts = categories.map(c => {
+      const count = items.filter(i => i.category?.toLowerCase() === c.toLowerCase()).length;
+      return {
+        id: c,
+        label: c,
+        subLabel: `${count} items in category`,
+        badge: `${count}`
+      };
+    });
+    return [...allOpt, ...catOpts];
+  }, [categories, items]);
 
   // Header State
   const [billDate, setBillDate] = useState<string>(getTodayDateString());
@@ -52,10 +79,24 @@ export const PurchaseEntryView: React.FC = () => {
 
   // Items added to the bill
   const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>([]);
+  const [manualRoundUp, setManualRoundUp] = useState<string | null>(null);
   const [isTouched, setIsTouched] = useState(false);
   const [searchHistory, setSearchHistory] = useState('');
 
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+
+  // Focus Refs for 100% Keyboard-Driven Navigation
+  const billDateInputRef = useRef<HTMLInputElement>(null);
+  const billNoInputRef = useRef<HTMLInputElement>(null);
+  const recdDateInputRef = useRef<HTMLInputElement>(null);
+  const supplierSelectRef = useRef<SearchableSelectHandle>(null);
+  const categorySelectRef = useRef<SearchableSelectHandle>(null);
+  const itemSearchRef = useRef<ItemSearchSelectHandle>(null);
+  const unitABasicPriceInputRef = useRef<HTMLInputElement>(null);
+  const unitAGstPercentInputRef = useRef<HTMLInputElement>(null);
+  const unitAQtyInputRef = useRef<HTMLInputElement>(null);
+  const roundUpInputRef = useRef<HTMLInputElement>(null);
+  const saveButtonRef = useRef<HTMLButtonElement>(null);
 
   // Filter items by category if selected
   const filteredCategoryItems = useMemo(() => {
@@ -109,6 +150,7 @@ export const PurchaseEntryView: React.FC = () => {
 
       showToast(`Loaded Order #${pendingPurchasePrefill.orderNumber} into Purchase Entry! Enter the supplier's Bill No. to complete.`, 'info');
       setPendingPurchasePrefill(null);
+      setTimeout(() => billNoInputRef.current?.focus(), 50);
     }
   }, [pendingPurchasePrefill, items, settings]);
 
@@ -157,8 +199,11 @@ export const PurchaseEntryView: React.FC = () => {
   }, [selectedItemId, refreshKey]);
 
   const billSummary = useMemo(() => {
-    return calculateBillSummary(purchaseItems);
-  }, [purchaseItems]);
+    return calculateBillSummary(
+      purchaseItems,
+      manualRoundUp !== null ? Number(manualRoundUp) : undefined
+    );
+  }, [purchaseItems, manualRoundUp]);
 
   const isFormActive = Boolean(editingPurchaseId || purchaseItems.length > 0 || selectedItemId || isTouched);
 
@@ -166,11 +211,13 @@ export const PurchaseEntryView: React.FC = () => {
     setIsTouched(true);
     if (!selectedItemId || !selectedItemObj) {
       showAlert('Please select an item first.', 'Selection Required', 'warning');
+      itemSearchRef.current?.focus();
       return;
     }
     const numQty = Number(unitAQty);
     if (!numQty || numQty <= 0) {
       showAlert('Please enter a quantity greater than 0 for Unit A.', 'Invalid Quantity', 'warning');
+      unitAQtyInputRef.current?.focus();
       return;
     }
 
@@ -208,7 +255,12 @@ export const PurchaseEntryView: React.FC = () => {
       showToast(`Added ${numQty} ${unitName} of ${selectedItemObj.name}`, 'success');
     }
 
+    // Reset item input and immediately focus ItemSearchSelect for the next product!
+    setSelectedItemId('');
     setUnitAQty('1');
+    setTimeout(() => {
+      itemSearchRef.current?.focus();
+    }, 40);
   };
 
   const handleEditLineItem = (index: number) => {
@@ -221,6 +273,10 @@ export const PurchaseEntryView: React.FC = () => {
     setUnitAGstPercent(String(item.gstPercent));
     setUnitAQty(String(item.qty));
     setEditingItemIndex(index);
+    setTimeout(() => {
+      unitABasicPriceInputRef.current?.focus();
+      unitABasicPriceInputRef.current?.select();
+    }, 40);
   };
 
   const handleDeleteLineItem = (index: number) => {
@@ -241,11 +297,16 @@ export const PurchaseEntryView: React.FC = () => {
     setBillDate(getTodayDateString());
     setRecdDate(getTodayDateString());
     setSupplierId('');
+    setSelectedCategory('');
     setPurchaseItems([]);
     setSelectedItemId('');
     setEditingItemIndex(null);
     setAssociatedOrderId(null);
+    setManualRoundUp(null);
     showToast('New Purchase entry ready', 'info');
+    setTimeout(() => {
+      billDateInputRef.current?.focus();
+    }, 40);
   };
 
   const handleSavePurchase = () => {
@@ -255,14 +316,17 @@ export const PurchaseEntryView: React.FC = () => {
     }
     if (!billNo.trim()) {
       showAlert('Please enter the Supplier Bill No.', 'Validation Error', 'error');
+      billNoInputRef.current?.focus();
       return;
     }
     if (!supplierId) {
       showAlert('Please select a Supplier.', 'Validation Error', 'error');
+      supplierSelectRef.current?.focus();
       return;
     }
     if (purchaseItems.length === 0) {
       showAlert('Please add at least one item to the purchase bill.', 'Validation Error', 'error');
+      itemSearchRef.current?.focus();
       return;
     }
 
@@ -351,6 +415,7 @@ export const PurchaseEntryView: React.FC = () => {
     setRecdDate(purchase.recdDate || purchase.billDate);
     setSupplierId(purchase.supplierId);
     setPurchaseItems(purchase.items);
+    setManualRoundUp(purchase.roundUp !== undefined ? String(purchase.roundUp) : null);
     setAssociatedOrderId(purchase.orderId || null);
     showToast(viewOnly ? `Viewing purchase bill ${purchase.billNo}` : `Loaded purchase bill ${purchase.billNo} for editing`, 'info');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -379,6 +444,24 @@ export const PurchaseEntryView: React.FC = () => {
   const handlePrint = () => {
     window.print();
   };
+
+  // Global Keyboard Shortcuts (Ctrl+S / Alt+S to save, Alt+N for new, Alt+P for print)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey || e.altKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSavePurchase();
+      } else if (e.altKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        handleNewEntry();
+      } else if (e.altKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        handlePrint();
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [billNo, supplierId, purchaseItems, billSummary, isViewOnly]);
 
   const currentPurchaseForPrint: Purchase = {
     id: editingPurchaseId || 'temp',
@@ -428,7 +511,7 @@ export const PurchaseEntryView: React.FC = () => {
       <PurchasePrintVoucher purchase={currentPurchaseForPrint} />
 
       {/* Top Header Strip */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '8px 36px', minWidth: '220px', textAlign: 'center' }}>
             PURCHASE ENTRY
@@ -454,6 +537,16 @@ export const PurchaseEntryView: React.FC = () => {
               ● Ready for New Entry
             </span>
           )}
+        </div>
+
+        {/* Keyboard shortcuts badge */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.78rem', color: '#4B5563', background: '#FFFFFF', padding: '5px 12px', borderRadius: '8px', border: '1px solid #E5E7EB' }}>
+          <Keyboard size={15} color="#4F46E5" />
+          <span><b>Enter:</b> Next Field / Add Item</span>
+          <span style={{ color: '#D1D5DB' }}>|</span>
+          <span><b>Ctrl+S:</b> Save</span>
+          <span style={{ color: '#D1D5DB' }}>|</span>
+          <span><b>Alt+N:</b> New</span>
         </div>
       </div>
 
@@ -524,12 +617,20 @@ export const PurchaseEntryView: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <label style={{ fontWeight: 900, fontSize: '0.9rem' }}>BILL DATE</label>
             <input
+              ref={billDateInputRef}
               type="date"
               className="input-text-clean"
               value={billDate}
               onChange={e => {
                 setIsTouched(true);
                 setBillDate(e.target.value);
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  billNoInputRef.current?.focus();
+                  billNoInputRef.current?.select();
+                }
               }}
               style={{ width: '140px' }}
             />
@@ -538,6 +639,7 @@ export const PurchaseEntryView: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <label style={{ fontWeight: 900, fontSize: '0.9rem' }}>BILL NO.</label>
             <input
+              ref={billNoInputRef}
               type="text"
               placeholder="Supplier Bill #"
               className="input-text-clean"
@@ -546,6 +648,12 @@ export const PurchaseEntryView: React.FC = () => {
                 setIsTouched(true);
                 setBillNo(e.target.value);
               }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  recdDateInputRef.current?.focus();
+                }
+              }}
               style={{ width: '150px', fontWeight: 800 }}
             />
           </div>
@@ -553,6 +661,7 @@ export const PurchaseEntryView: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <label style={{ fontWeight: 900, fontSize: '0.9rem' }}>RECD. DATE</label>
             <input
+              ref={recdDateInputRef}
               type="date"
               className="input-text-clean"
               value={recdDate}
@@ -560,88 +669,77 @@ export const PurchaseEntryView: React.FC = () => {
                 setIsTouched(true);
                 setRecdDate(e.target.value);
               }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  supplierSelectRef.current?.focus();
+                }
+              }}
               style={{ width: '140px' }}
             />
           </div>
         </div>
 
         {/* PARTY / SUPPLIER SELECTION */}
-        <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 34px', gap: '10px', alignItems: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: '10px', alignItems: 'center' }}>
           <label style={{ fontWeight: 900, fontSize: '1.05rem' }}>Party :</label>
-          <select
-            className="input-text-clean"
+          <SearchableSelect
+            ref={supplierSelectRef}
+            options={supplierOptions}
             value={supplierId}
-            onChange={e => {
+            onChange={val => {
               setIsTouched(true);
-              setSupplierId(e.target.value);
+              setSupplierId(val);
             }}
-            style={{ fontSize: '0.95rem', height: '38px', fontWeight: 700 }}
-          >
-            <option value="">-- Select Supplier / Vendor --</option>
-            {suppliers.map(s => (
-              <option key={s.id} value={s.id}>
-                {s.name} {s.phone ? `(${s.phone})` : ''}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="btn-quick-n"
-            title="Quick Create Supplier"
-            onClick={() => openQuickModal('SUPPLIER', (newId) => {
+            onEnterNext={() => {
+              categorySelectRef.current?.focus();
+            }}
+            placeholder="Type supplier name / phone or use arrows..."
+            onQuickAdd={() => openQuickModal('SUPPLIER', (newId) => {
               setIsTouched(true);
               setSupplierId(newId);
+              setTimeout(() => categorySelectRef.current?.focus(), 40);
             })}
-          >
-            N
-          </button>
+            quickAddTitle="Quick Create Supplier"
+          />
         </div>
 
         {/* CATEGORY SELECTION */}
-        <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 34px', gap: '10px', alignItems: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: '10px', alignItems: 'center' }}>
           <label style={{ fontWeight: 900, fontSize: '1.05rem' }}>CATG. :</label>
-          <select
-            className="input-text-clean"
+          <SearchableSelect
+            ref={categorySelectRef}
+            options={categoryOptions}
             value={selectedCategory}
-            onChange={e => {
+            onChange={val => {
               setIsTouched(true);
-              setSelectedCategory(e.target.value);
+              setSelectedCategory(val);
               setSelectedItemId('');
             }}
-            style={{ fontSize: '0.95rem', height: '38px', fontWeight: 700 }}
-          >
-            <option value="">-- All Categories --</option>
-            {categories.map(c => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="btn-quick-n"
-            title="Quick Create Item / Category"
-            onClick={() => openQuickModal('ITEM', () => setIsTouched(true))}
-          >
-            N
-          </button>
+            onEnterNext={() => {
+              itemSearchRef.current?.focus();
+            }}
+            placeholder="Type category or press Enter to choose item..."
+            onQuickAdd={() => openQuickModal('ITEM', () => setIsTouched(true))}
+            quickAddTitle="Quick Create Item / Category"
+          />
         </div>
 
         {/* SEARCHABLE ITEM SELECTION */}
-        <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 34px', gap: '10px', alignItems: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: '10px', alignItems: 'center' }}>
           <label style={{ fontWeight: 900, fontSize: '1.05rem' }}>ITEM :</label>
           <ItemSearchSelect
+            ref={itemSearchRef}
             items={filteredCategoryItems}
             selectedItemId={selectedItemId}
             onSelectItem={(item) => handleItemSelect(item ? item.id : '')}
-            placeholder="Type item name to search..."
+            onEnterNext={() => {
+              unitABasicPriceInputRef.current?.focus();
+              unitABasicPriceInputRef.current?.select();
+            }}
+            placeholder="Type item name/code to search or use arrow keys..."
+            onQuickAdd={() => openQuickModal('ITEM', (newId) => handleItemSelect(newId))}
           />
-          <button
-            type="button"
-            className="btn-quick-n"
-            title="Quick Create Item"
-            onClick={() => openQuickModal('ITEM', (newId) => handleItemSelect(newId))}
-          >
-            N
-          </button>
         </div>
 
         {/* PRICING INPUT CARD (UNIT-A ONLY FOR PURCHASES) */}
@@ -676,6 +774,7 @@ export const PurchaseEntryView: React.FC = () => {
                   Besic Price
                 </label>
                 <input
+                  ref={unitABasicPriceInputRef}
                   type="number"
                   step="0.01"
                   className="input-text-clean"
@@ -683,6 +782,13 @@ export const PurchaseEntryView: React.FC = () => {
                   onChange={e => {
                     setIsTouched(true);
                     setUnitABasicPrice(e.target.value);
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      unitAGstPercentInputRef.current?.focus();
+                      unitAGstPercentInputRef.current?.select();
+                    }
                   }}
                   style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }}
                 />
@@ -693,12 +799,20 @@ export const PurchaseEntryView: React.FC = () => {
                   GST %
                 </label>
                 <input
+                  ref={unitAGstPercentInputRef}
                   type="number"
                   className="input-text-clean"
                   value={unitAGstPercent}
                   onChange={e => {
                     setIsTouched(true);
                     setUnitAGstPercent(e.target.value);
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      unitAQtyInputRef.current?.focus();
+                      unitAQtyInputRef.current?.select();
+                    }
                   }}
                   style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }}
                 />
@@ -735,6 +849,7 @@ export const PurchaseEntryView: React.FC = () => {
                   Qty ({selectedItemObj?.unitA?.unitName || selectedItemObj?.unit || 'Unit A'})
                 </label>
                 <input
+                  ref={unitAQtyInputRef}
                   type="number"
                   min="1"
                   className="input-text-clean"
@@ -742,6 +857,12 @@ export const PurchaseEntryView: React.FC = () => {
                   onChange={e => {
                     setIsTouched(true);
                     setUnitAQty(e.target.value);
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddUnitAItem();
+                    }
                   }}
                   style={{ textAlign: 'center', padding: '4px', fontWeight: 900, color: '#EA3943' }}
                 />
@@ -766,6 +887,7 @@ export const PurchaseEntryView: React.FC = () => {
                   onClick={handleAddUnitAItem}
                   className="btn-customer-save"
                   style={{ padding: '6px 16px', fontSize: '0.85rem', whiteSpace: 'nowrap' }}
+                  title="Add item (or press Enter in Qty field)"
                 >
                   + Add
                 </button>
@@ -803,7 +925,7 @@ export const PurchaseEntryView: React.FC = () => {
               {purchaseItems.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ padding: '30px', textAlign: 'center', color: '#9CA3AF', fontWeight: 600 }}>
-                    No items in this purchase bill. Select an item above and click "+ Add".
+                    No items in this purchase bill. Select an item above and press Enter on Qty or click "+ Add".
                   </td>
                 </tr>
               ) : (
@@ -816,6 +938,7 @@ export const PurchaseEntryView: React.FC = () => {
                       cursor: 'pointer',
                       background: editingItemIndex === idx ? '#F3E8FF' : 'transparent'
                     }}
+                    title="Click to edit item rates"
                   >
                     <td style={{ padding: '8px 12px', fontWeight: 800, borderRight: '1px solid #000000' }}>
                       {item.itemName}
@@ -845,7 +968,7 @@ export const PurchaseEntryView: React.FC = () => {
         {/* BOTTOM FINANCIAL SUMMARY & CUSTOMER ACTION BUTTONS */}
         <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '30px', alignItems: 'center', marginTop: '10px' }}>
           
-          {/* Financial Summary */}
+          {/* Financial Summary with EDITABLE ROUND UP */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '300px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.95rem', fontWeight: 800 }}>
               <span>Basic</span>
@@ -857,9 +980,57 @@ export const PurchaseEntryView: React.FC = () => {
               <span>{billSummary.gstTotal}</span>
             </div>
 
+            {/* EDITABLE ROUND UP FIELD */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.95rem', fontWeight: 800 }}>
               <span>Round up</span>
-              <span>{billSummary.roundUp}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <input
+                  ref={roundUpInputRef}
+                  type="number"
+                  step="0.01"
+                  className="input-text-clean"
+                  value={manualRoundUp !== null ? manualRoundUp : billSummary.roundUp}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setManualRoundUp(e.target.value);
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      saveButtonRef.current?.focus();
+                    }
+                  }}
+                  style={{
+                    width: '90px',
+                    textAlign: 'right',
+                    fontWeight: 800,
+                    padding: '3px 6px',
+                    fontSize: '0.92rem',
+                    background: manualRoundUp !== null ? '#FEF3C7' : '#FFFFFF'
+                  }}
+                  title="Manual Round-Up adjustment"
+                  placeholder="0.00"
+                />
+                {manualRoundUp !== null && (
+                  <button
+                    type="button"
+                    onClick={() => setManualRoundUp(null)}
+                    title="Reset to automatic round-up"
+                    style={{
+                      fontSize: '0.72rem',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      border: '1px solid #D1D5DB',
+                      background: '#F3F4F6',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                      color: '#4B5563'
+                    }}
+                  >
+                    Auto
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* BILL TOTAL */}
@@ -888,10 +1059,12 @@ export const PurchaseEntryView: React.FC = () => {
             </button>
 
             <button
+              ref={saveButtonRef}
               type="button"
               onClick={handleSavePurchase}
               className="btn-customer-save"
               style={{ padding: '10px 48px', fontSize: '1.2rem', minWidth: '160px' }}
+              title="Save Purchase Bill (Ctrl+S / Alt+S)"
             >
               {isViewing ? 'Edit Bill' : 'Save'}
             </button>
@@ -900,6 +1073,7 @@ export const PurchaseEntryView: React.FC = () => {
               type="button"
               className="btn-customer-action-pill"
               onClick={handlePrint}
+              title="Print Voucher (Alt+P)"
             >
               Print
             </button>
