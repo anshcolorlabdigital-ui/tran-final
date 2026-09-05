@@ -67,6 +67,11 @@ export const SelfUseView: React.FC = () => {
         setSelectedCategory(categories[0]);
       }
     }
+    const timer = setTimeout(() => {
+      billDateInputRef.current?.focus();
+      billDateInputRef.current?.select();
+    }, 60);
+    return () => clearTimeout(timer);
   }, [editingSelfUseId, selectedDate, categories, refreshKey]);
 
   const selectedItemObj = useMemo(() => {

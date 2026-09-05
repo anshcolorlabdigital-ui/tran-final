@@ -159,6 +159,13 @@ export const PurchaseEntryView: React.FC = () => {
       setBillDate(selectedDate || getTodayDateString());
       setRecdDate(selectedDate || getTodayDateString());
     }
+    if (!pendingPurchasePrefill) {
+      const timer = setTimeout(() => {
+        billDateInputRef.current?.focus();
+        billDateInputRef.current?.select();
+      }, 60);
+      return () => clearTimeout(timer);
+    }
   }, [editingPurchaseId, selectedDate, refreshKey]);
 
   const selectedItemObj = useMemo(() => {

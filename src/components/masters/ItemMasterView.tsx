@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { db } from '../../db/db';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -24,6 +24,16 @@ export const ItemMasterView: React.FC = () => {
   const [hasSecondaryUnit, setHasSecondaryUnit] = useState(false);
   const [search, setSearch] = useState('');
 
+  const itemNameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      itemNameInputRef.current?.focus();
+      itemNameInputRef.current?.select();
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [selectedItemId]);
+
   // Form Fields matching customer screenshot item.jpg
   const [sno, setSno] = useState('');
   const [name, setName] = useState('');
@@ -38,10 +48,13 @@ export const ItemMasterView: React.FC = () => {
   const [unitABasicPrice, setUnitABasicPrice] = useState('0');
   const [unitAGstPercent, setUnitAGstPercent] = useState('18');
   const [unitATranPercent, setUnitATranPercent] = useState('10');
-  const [unitAProfPercent, setUnitAProfPercent] = useState('25');
-  const [unitAMisPercent, setUnitAMisPercent] = useState('2');
-  const [unitARoundUp, setUnitARoundUp] = useState('0');
+  const [unitAProfAm, setUnitAProfAm] = useState('0');
+  const [unitAProfDeal, setUnitAProfDeal] = useState('0');
+  const [unitAMisPercent, setUnitAMisPercent] = useState('0');
+  const [unitARoundUpSale, setUnitARoundUpSale] = useState('0');
+  const [unitARoundUpMrp, setUnitARoundUpMrp] = useState('0');
   const [unitASalePrice, setUnitASalePrice] = useState('0');
+  const [unitAMrp, setUnitAMrp] = useState('0');
   const [unitAActive, setUnitAActive] = useState(true);
 
   // Unit B State
@@ -50,10 +63,13 @@ export const ItemMasterView: React.FC = () => {
   const [unitBBasicPrice, setUnitBBasicPrice] = useState('0');
   const [unitBGstPercent, setUnitBGstPercent] = useState('18');
   const [unitBTranPercent, setUnitBTranPercent] = useState('10');
-  const [unitBProfPercent, setUnitBProfPercent] = useState('25');
-  const [unitBMisPercent, setUnitBMisPercent] = useState('2');
-  const [unitBRoundUp, setUnitBRoundUp] = useState('0');
+  const [unitBProfAm, setUnitBProfAm] = useState('0');
+  const [unitBProfDeal, setUnitBProfDeal] = useState('0');
+  const [unitBMisPercent, setUnitBMisPercent] = useState('0');
+  const [unitBRoundUpSale, setUnitBRoundUpSale] = useState('0');
+  const [unitBRoundUpMrp, setUnitBRoundUpMrp] = useState('0');
   const [unitBSalePrice, setUnitBSalePrice] = useState('0');
+  const [unitBMrp, setUnitBMrp] = useState('0');
   const [unitBActive, setUnitBActive] = useState(true);
 
   const [minStock, setMinStock] = useState('100');
@@ -81,11 +97,14 @@ export const ItemMasterView: React.FC = () => {
       Number(unitABasicPrice) || 0,
       Number(unitAGstPercent) || 0,
       Number(unitATranPercent) || 0,
-      Number(unitAProfPercent) || 0,
+      Number(unitAProfAm) || 0,
       Number(unitAMisPercent) || 0,
-      Number(unitARoundUp) || 0
+      Number(unitARoundUpSale) || 0,
+      undefined,
+      Number(unitAProfDeal) || 0,
+      Number(unitARoundUpMrp) || 0
     );
-  }, [unitABasicPrice, unitAGstPercent, unitATranPercent, unitAProfPercent, unitAMisPercent, unitARoundUp]);
+  }, [unitABasicPrice, unitAGstPercent, unitATranPercent, unitAProfAm, unitAProfDeal, unitAMisPercent, unitARoundUpSale, unitARoundUpMrp]);
 
   // Live Unit B Calculation
   const unitBBreakdown = useMemo(() => {
@@ -93,24 +112,29 @@ export const ItemMasterView: React.FC = () => {
       Number(unitBBasicPrice) || 0,
       Number(unitBGstPercent) || 0,
       Number(unitBTranPercent) || 0,
-      Number(unitBProfPercent) || 0,
+      Number(unitBProfAm) || 0,
       Number(unitBMisPercent) || 0,
-      Number(unitBRoundUp) || 0
+      Number(unitBRoundUpSale) || 0,
+      undefined,
+      Number(unitBProfDeal) || 0,
+      Number(unitBRoundUpMrp) || 0
     );
-  }, [unitBBasicPrice, unitBGstPercent, unitBTranPercent, unitBProfPercent, unitBMisPercent, unitBRoundUp]);
+  }, [unitBBasicPrice, unitBGstPercent, unitBTranPercent, unitBProfAm, unitBProfDeal, unitBMisPercent, unitBRoundUpSale, unitBRoundUpMrp]);
 
-  // Auto-sync sale price when inputs change
+  // Auto-sync sale price and mrp when inputs change
   useEffect(() => {
     if (isTouched) {
       setUnitASalePrice(String(unitABreakdown.salePrice));
+      setUnitAMrp(String(unitABreakdown.mrp));
     }
-  }, [unitABreakdown.salePrice, isTouched]);
+  }, [unitABreakdown.salePrice, unitABreakdown.mrp, isTouched]);
 
   useEffect(() => {
     if (isTouched && hasSecondaryUnit) {
       setUnitBSalePrice(String(unitBBreakdown.salePrice));
+      setUnitBMrp(String(unitBBreakdown.mrp));
     }
-  }, [unitBBreakdown.salePrice, isTouched, hasSecondaryUnit]);
+  }, [unitBBreakdown.salePrice, unitBBreakdown.mrp, isTouched, hasSecondaryUnit]);
 
   // Delete dialog
   const [deleteDialog, setDeleteDialog] = useState<{ isOpen: boolean; id: string; name: string }>({
@@ -141,20 +165,26 @@ export const ItemMasterView: React.FC = () => {
       setUnitABasicPrice(String(item.unitA.basicPrice ?? 0));
       setUnitAGstPercent(String(item.unitA.gstPercent ?? 18));
       setUnitATranPercent(String(item.unitA.tranPercent ?? 10));
-      setUnitAProfPercent(String(item.unitA.profPercent ?? 25));
-      setUnitAMisPercent(String(item.unitA.misPercent ?? 2));
-      setUnitARoundUp(String(item.unitA.roundUp ?? 0));
+      setUnitAProfAm(String(item.unitA.profPercentAm ?? item.profPercentAm ?? 0));
+      setUnitAProfDeal(String(item.unitA.profPercentDeal ?? item.unitA.profPercent ?? item.profPercentDeal ?? 0));
+      setUnitAMisPercent(String(item.unitA.misPercent ?? 0));
+      setUnitARoundUpSale(String(item.unitA.roundUpSale ?? item.unitA.roundUp ?? item.roundUpSale ?? item.roundUp ?? 0));
+      setUnitARoundUpMrp(String(item.unitA.roundUpMrp ?? item.roundUpMrp ?? 0));
       setUnitASalePrice(String(item.unitA.salePrice ?? item.saleRate ?? 0));
+      setUnitAMrp(String(item.unitA.mrp ?? item.mrp ?? 0));
       setUnitAActive(item.unitA.isActive !== false);
     } else {
       setUnitAName(item.unit || 'Roll');
       setUnitABasicPrice(String(item.purchaseRate || 0));
       setUnitAGstPercent(String(item.gstPercent || 18));
       setUnitATranPercent('10');
-      setUnitAProfPercent('25');
-      setUnitAMisPercent('2');
-      setUnitARoundUp('0');
+      setUnitAProfAm(String(item.profPercentAm ?? 0));
+      setUnitAProfDeal(String(item.profPercentDeal ?? 0));
+      setUnitAMisPercent('0');
+      setUnitARoundUpSale(String(item.roundUpSale ?? item.roundUp ?? 0));
+      setUnitARoundUpMrp(String(item.roundUpMrp ?? 0));
       setUnitASalePrice(String(item.saleRate || 0));
+      setUnitAMrp(String(item.mrp || 0));
       setUnitAActive(true);
     }
 
@@ -165,10 +195,13 @@ export const ItemMasterView: React.FC = () => {
       setUnitBBasicPrice(String(item.unitB.basicPrice ?? 0));
       setUnitBGstPercent(String(item.unitB.gstPercent ?? 18));
       setUnitBTranPercent(String(item.unitB.tranPercent ?? 10));
-      setUnitBProfPercent(String(item.unitB.profPercent ?? 25));
-      setUnitBMisPercent(String(item.unitB.misPercent ?? 2));
-      setUnitBRoundUp(String(item.unitB.roundUp ?? 0));
+      setUnitBProfAm(String(item.unitB.profPercentAm ?? 0));
+      setUnitBProfDeal(String(item.unitB.profPercentDeal ?? item.unitB.profPercent ?? 0));
+      setUnitBMisPercent(String(item.unitB.misPercent ?? 0));
+      setUnitBRoundUpSale(String(item.unitB.roundUpSale ?? item.unitB.roundUp ?? 0));
+      setUnitBRoundUpMrp(String(item.unitB.roundUpMrp ?? 0));
       setUnitBSalePrice(String(item.unitB.salePrice ?? 0));
+      setUnitBMrp(String(item.unitB.mrp ?? 0));
       setUnitBActive(item.unitB.isActive !== false);
     } else {
       setUnitBName('Mt.');
@@ -176,10 +209,13 @@ export const ItemMasterView: React.FC = () => {
       setUnitBBasicPrice(String(item.purchaseRate || 0));
       setUnitBGstPercent(String(item.gstPercent || 18));
       setUnitBTranPercent('10');
-      setUnitBProfPercent('25');
-      setUnitBMisPercent('2');
-      setUnitBRoundUp('0');
+      setUnitBProfAm('0');
+      setUnitBProfDeal('0');
+      setUnitBMisPercent('0');
+      setUnitBRoundUpSale('0');
+      setUnitBRoundUpMrp('0');
       setUnitBSalePrice(String(item.saleRate || 0));
+      setUnitBMrp(String(item.mrp || 0));
       setUnitBActive(true);
     }
 
@@ -207,10 +243,13 @@ export const ItemMasterView: React.FC = () => {
     setUnitABasicPrice('0');
     setUnitAGstPercent('18');
     setUnitATranPercent('10');
-    setUnitAProfPercent('25');
-    setUnitAMisPercent('2');
-    setUnitARoundUp('0');
+    setUnitAProfAm('0');
+    setUnitAProfDeal('0');
+    setUnitAMisPercent('0');
+    setUnitARoundUpSale('0');
+    setUnitARoundUpMrp('0');
     setUnitASalePrice('0');
+    setUnitAMrp('0');
     setUnitAActive(true);
 
     setUnitBName('Mt.');
@@ -218,10 +257,13 @@ export const ItemMasterView: React.FC = () => {
     setUnitBBasicPrice('0');
     setUnitBGstPercent('18');
     setUnitBTranPercent('10');
-    setUnitBProfPercent('25');
-    setUnitBMisPercent('2');
-    setUnitBRoundUp('0');
+    setUnitBProfAm('0');
+    setUnitBProfDeal('0');
+    setUnitBMisPercent('0');
+    setUnitBRoundUpSale('0');
+    setUnitBRoundUpMrp('0');
     setUnitBSalePrice('0');
+    setUnitBMrp('0');
     setUnitBActive(true);
 
     setMinStock('10');
@@ -236,7 +278,7 @@ export const ItemMasterView: React.FC = () => {
       return;
     }
     if (!name.trim()) {
-      showAlert('Item Name is required', 'Validation Error', 'warning');
+      showAlert('Item Name is required', 'Validation Error', 'error');
       return;
     }
 
@@ -266,17 +308,28 @@ export const ItemMasterView: React.FC = () => {
       openingStock: Number(openingStock) || 0,
       purchaseRate: Number(unitABasicPrice) || 0,
       saleRate: Number(unitASalePrice) || unitABreakdown.salePrice,
+      mrp: Number(unitAMrp) || unitABreakdown.mrp,
       gstPercent: Number(unitAGstPercent) || 18,
+      roundUp: Number(unitARoundUpSale) || 0,
+      roundUpSale: Number(unitARoundUpSale) || 0,
+      roundUpMrp: Number(unitARoundUpMrp) || 0,
+      profPercentAm: Number(unitAProfAm) || 0,
+      profPercentDeal: Number(unitAProfDeal) || 0,
       unitA: {
         unitName: unitAName.trim() || 'Roll',
         basicPrice: Number(unitABasicPrice) || 0,
         gstPercent: Number(unitAGstPercent) || 0,
         tranPercent: Number(unitATranPercent) || 0,
-        profPercent: Number(unitAProfPercent) || 0,
+        profPercent: Number(unitAProfDeal) || 0,
+        profPercentAm: Number(unitAProfAm) || 0,
+        profPercentDeal: Number(unitAProfDeal) || 0,
         misPercent: Number(unitAMisPercent) || 0,
         nettPrice: unitABreakdown.nettPrice,
-        roundUp: Number(unitARoundUp) || 0,
+        roundUp: Number(unitARoundUpSale) || 0,
+        roundUpSale: Number(unitARoundUpSale) || 0,
+        roundUpMrp: Number(unitARoundUpMrp) || 0,
         salePrice: Number(unitASalePrice) || unitABreakdown.salePrice,
+        mrp: Number(unitAMrp) || unitABreakdown.mrp,
         isActive: unitAActive
       },
       unitB: hasSecondaryUnit ? {
@@ -285,11 +338,16 @@ export const ItemMasterView: React.FC = () => {
         basicPrice: Number(unitBBasicPrice) || 0,
         gstPercent: Number(unitBGstPercent) || 0,
         tranPercent: Number(unitBTranPercent) || 0,
-        profPercent: Number(unitBProfPercent) || 0,
+        profPercent: Number(unitBProfDeal) || 0,
+        profPercentAm: Number(unitBProfAm) || 0,
+        profPercentDeal: Number(unitBProfDeal) || 0,
         misPercent: Number(unitBMisPercent) || 0,
         nettPrice: unitBBreakdown.nettPrice,
-        roundUp: Number(unitBRoundUp) || 0,
+        roundUp: Number(unitBRoundUpSale) || 0,
+        roundUpSale: Number(unitBRoundUpSale) || 0,
+        roundUpMrp: Number(unitBRoundUpMrp) || 0,
         salePrice: Number(unitBSalePrice) || unitBBreakdown.salePrice,
+        mrp: Number(unitBMrp) || unitBBreakdown.mrp,
         isActive: unitBActive
       } : undefined,
       isActive,
@@ -352,7 +410,7 @@ export const ItemMasterView: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedItemId, sno, name, hsn, description, category, supplierId, unitAName, unitABasicPrice, unitAGstPercent, unitATranPercent, unitAProfPercent, unitAMisPercent, unitARoundUp, unitASalePrice, unitAActive, unitBName, unitBConversion, unitBBasicPrice, unitBGstPercent, unitBTranPercent, unitBProfPercent, unitBMisPercent, unitBRoundUp, unitBSalePrice, unitBActive, minStock, openingStock, hasSecondaryUnit, isActive, isViewOnly]);
+  }, [selectedItemId, sno, name, hsn, description, category, supplierId, unitAName, unitABasicPrice, unitAGstPercent, unitATranPercent, unitAProfAm, unitAProfDeal, unitAMisPercent, unitASalePrice, unitAMrp, unitAActive, unitBName, unitBConversion, unitBBasicPrice, unitBGstPercent, unitBTranPercent, unitBProfAm, unitBProfDeal, unitBMisPercent, unitBSalePrice, unitBMrp, unitBActive, minStock, openingStock, hasSecondaryUnit, isActive, isViewOnly]);
 
   const filteredSummaries = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -379,6 +437,28 @@ export const ItemMasterView: React.FC = () => {
     : isCreating
     ? 'is-creating-green'
     : 'is-initial-blue';
+
+  const handleFormKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
+    if (e.key === 'Enter') {
+      const target = e.target as HTMLElement;
+      if (target.tagName !== 'BUTTON' && target.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        const form = e.currentTarget;
+        const focusable = Array.from(
+          form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement | HTMLTextAreaElement>(
+            'input:not([disabled]):not([type="hidden"]):not([type="checkbox"]), select:not([disabled]), textarea:not([disabled]), button[type="submit"]'
+          )
+        );
+        const index = focusable.indexOf(target as any);
+        if (index > -1 && index < focusable.length - 1) {
+          focusable[index + 1]?.focus();
+          if ('select' in focusable[index + 1]) {
+            (focusable[index + 1] as HTMLInputElement).select?.();
+          }
+        }
+      }
+    }
+  };
 
   return (
     <div className="content-panel-grey">
@@ -555,6 +635,7 @@ export const ItemMasterView: React.FC = () => {
 
         <form
           onSubmit={handleSave}
+          onKeyDown={handleFormKeyDown}
           onClickCapture={isViewOnly ? (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -570,6 +651,7 @@ export const ItemMasterView: React.FC = () => {
                 Item Name *
               </label>
               <input
+                ref={itemNameInputRef}
                 type="text"
                 className="input-text-clean"
                 value={name}
@@ -689,9 +771,9 @@ export const ItemMasterView: React.FC = () => {
             </div>
 
             {/* Pricing Grid with Red Calculation Subtexts */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '10px', textAlign: 'center' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: '8px', textAlign: 'center' }}>
               <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Besic Price</label>
+                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Besic Price</label>
                 <input
                   type="number"
                   step="any"
@@ -707,7 +789,7 @@ export const ItemMasterView: React.FC = () => {
               </div>
 
               <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>GST %</label>
+                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>GST %</label>
                 <input
                   type="number"
                   step="any"
@@ -723,7 +805,7 @@ export const ItemMasterView: React.FC = () => {
               </div>
 
               <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>TRAN%</label>
+                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>tran%</label>
                 <input
                   type="number"
                   step="any"
@@ -739,23 +821,7 @@ export const ItemMasterView: React.FC = () => {
               </div>
 
               <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Prof%</label>
-                <input
-                  type="number"
-                  step="any"
-                  className="input-text-clean"
-                  value={unitAProfPercent}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitAProfPercent(e.target.value);
-                  }}
-                  style={{ textAlign: 'center', fontWeight: 700 }}
-                />
-                <div className="subtext-calc-red">{unitABreakdown.profAmt}</div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Mis.%</label>
+                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>mis%</label>
                 <input
                   type="number"
                   step="any"
@@ -771,23 +837,71 @@ export const ItemMasterView: React.FC = () => {
               </div>
 
               <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>ROUND UP</label>
+                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Prof % Am</label>
                 <input
                   type="number"
                   step="any"
                   className="input-text-clean"
-                  value={unitARoundUp}
+                  value={unitAProfAm}
                   onChange={e => {
                     setIsTouched(true);
-                    setUnitARoundUp(e.target.value);
+                    setUnitAProfAm(e.target.value);
                   }}
-                  style={{ textAlign: 'center', fontWeight: 700 }}
+                  style={{ textAlign: 'center', fontWeight: 700, borderColor: '#3B82F6' }}
                 />
-                <div className="subtext-calc-red">{unitABreakdown.nettPrice}</div>
+                <div className="subtext-calc-red">{unitABreakdown.profAmAmt}</div>
               </div>
 
               <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Sale Price</label>
+                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Prof % deal</label>
+                <input
+                  type="number"
+                  step="any"
+                  className="input-text-clean"
+                  value={unitAProfDeal}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitAProfDeal(e.target.value);
+                  }}
+                  style={{ textAlign: 'center', fontWeight: 700, borderColor: '#8B5CF6' }}
+                />
+                <div className="subtext-calc-red">{unitABreakdown.profDealAmt}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Round-S</label>
+                <input
+                  type="number"
+                  step="any"
+                  className="input-text-clean"
+                  value={unitARoundUpSale}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitARoundUpSale(e.target.value);
+                  }}
+                  style={{ textAlign: 'center', fontWeight: 700, borderColor: '#8B5CF6' }}
+                />
+                <div className="subtext-calc-red">{unitABreakdown.roundUpSale}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Round-M</label>
+                <input
+                  type="number"
+                  step="any"
+                  className="input-text-clean"
+                  value={unitARoundUpMrp}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitARoundUpMrp(e.target.value);
+                  }}
+                  style={{ textAlign: 'center', fontWeight: 700, borderColor: '#3B82F6' }}
+                />
+                <div className="subtext-calc-red">{unitABreakdown.roundUpMrp}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Sale Price</label>
                 <input
                   type="number"
                   step="any"
@@ -797,9 +911,25 @@ export const ItemMasterView: React.FC = () => {
                     setIsTouched(true);
                     setUnitASalePrice(e.target.value);
                   }}
-                  style={{ textAlign: 'center', fontWeight: 900, color: '#002B99', fontSize: '0.95rem' }}
+                  style={{ textAlign: 'center', fontWeight: 900, color: '#6D28D9', fontSize: '0.92rem' }}
                 />
                 <div className="subtext-calc-red">{unitABreakdown.salePrice}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>mrp</label>
+                <input
+                  type="number"
+                  step="any"
+                  className="input-text-clean"
+                  value={unitAMrp}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitAMrp(e.target.value);
+                  }}
+                  style={{ textAlign: 'center', fontWeight: 900, color: '#1E40AF', fontSize: '0.92rem' }}
+                />
+                <div className="subtext-calc-red">{unitABreakdown.mrp}</div>
               </div>
             </div>
           </div>
@@ -855,9 +985,9 @@ export const ItemMasterView: React.FC = () => {
               </div>
 
               {/* Pricing Grid for Unit B */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '10px', textAlign: 'center' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: '8px', textAlign: 'center' }}>
                 <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Besic Price</label>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Besic Price</label>
                   <input
                     type="number"
                     step="any"
@@ -873,7 +1003,7 @@ export const ItemMasterView: React.FC = () => {
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>GST %</label>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>GST %</label>
                   <input
                     type="number"
                     step="any"
@@ -889,7 +1019,7 @@ export const ItemMasterView: React.FC = () => {
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>TRAN%</label>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>tran%</label>
                   <input
                     type="number"
                     step="any"
@@ -905,23 +1035,7 @@ export const ItemMasterView: React.FC = () => {
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Prof%</label>
-                  <input
-                    type="number"
-                    step="any"
-                    className="input-text-clean"
-                    value={unitBProfPercent}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitBProfPercent(e.target.value);
-                    }}
-                    style={{ textAlign: 'center', fontWeight: 700 }}
-                  />
-                  <div className="subtext-calc-red">{unitBBreakdown.profAmt}</div>
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Mis.%</label>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>mis%</label>
                   <input
                     type="number"
                     step="any"
@@ -937,23 +1051,71 @@ export const ItemMasterView: React.FC = () => {
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>ROUND UP</label>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Prof % Am</label>
                   <input
                     type="number"
                     step="any"
                     className="input-text-clean"
-                    value={unitBRoundUp}
+                    value={unitBProfAm}
                     onChange={e => {
                       setIsTouched(true);
-                      setUnitBRoundUp(e.target.value);
+                      setUnitBProfAm(e.target.value);
                     }}
-                    style={{ textAlign: 'center', fontWeight: 700 }}
+                    style={{ textAlign: 'center', fontWeight: 700, borderColor: '#3B82F6' }}
                   />
-                  <div className="subtext-calc-red">{unitBBreakdown.nettPrice}</div>
+                  <div className="subtext-calc-red">{unitBBreakdown.profAmAmt}</div>
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Sale Price</label>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Prof % deal</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitBProfDeal}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitBProfDeal(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', fontWeight: 700, borderColor: '#8B5CF6' }}
+                  />
+                  <div className="subtext-calc-red">{unitBBreakdown.profDealAmt}</div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Round-S</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitBRoundUpSale}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitBRoundUpSale(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', fontWeight: 700, borderColor: '#8B5CF6' }}
+                  />
+                  <div className="subtext-calc-red">{unitBBreakdown.roundUpSale}</div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Round-M</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitBRoundUpMrp}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitBRoundUpMrp(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', fontWeight: 700, borderColor: '#3B82F6' }}
+                  />
+                  <div className="subtext-calc-red">{unitBBreakdown.roundUpMrp}</div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Sale Price</label>
                   <input
                     type="number"
                     step="any"
@@ -963,9 +1125,25 @@ export const ItemMasterView: React.FC = () => {
                       setIsTouched(true);
                       setUnitBSalePrice(e.target.value);
                     }}
-                    style={{ textAlign: 'center', fontWeight: 900, color: '#002B99', fontSize: '0.95rem' }}
+                    style={{ textAlign: 'center', fontWeight: 900, color: '#6D28D9', fontSize: '0.92rem' }}
                   />
                   <div className="subtext-calc-red">{unitBBreakdown.salePrice}</div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>mrp</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitBMrp}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitBMrp(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', fontWeight: 900, color: '#1E40AF', fontSize: '0.92rem' }}
+                  />
+                  <div className="subtext-calc-red">{unitBBreakdown.mrp}</div>
                 </div>
               </div>
             </div>
@@ -1066,7 +1244,7 @@ export const ItemMasterView: React.FC = () => {
               <tr>
                 <th>Item Name</th>
                 <th>Supplier</th>
-                <th>Unit-A (Sale Price)</th>
+                <th>Unit-A (Sale / MRP)</th>
                 <th>Unit-B (Conversion)</th>
                 <th style={{ textAlign: 'center' }}>Live Stock</th>
                 <th style={{ textAlign: 'center' }}>Status</th>
@@ -1095,7 +1273,9 @@ export const ItemMasterView: React.FC = () => {
                     <td style={{ fontWeight: 800 }}>{s.item.name}</td>
                     <td>{s.item.supplierName || '-'}</td>
                     <td>
-                      {s.item.unitA ? `${s.item.unitA.unitName} (₹${s.item.unitA.salePrice})` : `${s.item.unit || 'Pcs'} (₹${s.item.saleRate})`}
+                      {s.item.unitA 
+                        ? `${s.item.unitA.unitName}: ₹${s.item.unitA.salePrice ?? s.item.saleRate ?? 0} (Sale) / ₹${s.item.unitA.mrp ?? s.item.mrp ?? 0} (MRP)` 
+                        : `${s.item.unit || 'Pcs'}: ₹${s.item.saleRate || 0} (Sale) / ₹${s.item.mrp || 0} (MRP)`}
                     </td>
                     <td>
                       {s.item.unitB ? `${s.item.unitB.unitName} (1=${s.item.unitB.conversionFactor})` : '-'}

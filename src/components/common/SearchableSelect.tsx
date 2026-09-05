@@ -48,6 +48,17 @@ export const SearchableSelect = forwardRef<SearchableSelectHandle, SearchableSel
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
   const containerRef = useRef<HTMLDivElement>(null);
   const internalInputRef = useRef<HTMLInputElement>(null);
+  const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  // Keep highlighted item scrolled into view when using arrow keys
+  useEffect(() => {
+    if (isOpen && highlightedIndex >= 0 && itemRefs.current[highlightedIndex]) {
+      itemRefs.current[highlightedIndex]?.scrollIntoView({
+        block: 'nearest',
+        inline: 'nearest'
+      });
+    }
+  }, [highlightedIndex, isOpen]);
 
   useImperativeHandle(ref, () => ({
     focus: () => {
@@ -288,6 +299,7 @@ export const SearchableSelect = forwardRef<SearchableSelectHandle, SearchableSel
               return (
                 <div
                   key={opt.id}
+                  ref={el => { itemRefs.current[idx] = el; }}
                   onClick={() => handleSelect(opt, true)}
                   onMouseEnter={() => setHighlightedIndex(idx)}
                   style={{

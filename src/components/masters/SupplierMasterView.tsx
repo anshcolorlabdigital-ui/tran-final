@@ -41,6 +41,16 @@ export const SupplierMasterView: React.FC = () => {
   const [isViewOnly, setIsViewOnly] = useState(false);
   const [isEditPromptOpen, setIsEditPromptOpen] = useState(false);
 
+  const firmNameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      firmNameInputRef.current?.focus();
+      firmNameInputRef.current?.select();
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [selectedSupplierId]);
+
   // When selected supplier changes, populate fields
   const loadSupplierIntoForm = (supplier: Supplier, viewOnly: boolean = false) => {
     setSelectedSupplierId(supplier.id);
@@ -194,6 +204,28 @@ export const SupplierMasterView: React.FC = () => {
     ? 'is-creating-green'
     : 'is-initial-blue';
 
+  const handleFormKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
+    if (e.key === 'Enter') {
+      const target = e.target as HTMLElement;
+      if (target.tagName !== 'BUTTON' && target.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        const form = e.currentTarget;
+        const focusable = Array.from(
+          form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement | HTMLTextAreaElement>(
+            'input:not([disabled]):not([type="hidden"]):not([type="checkbox"]), select:not([disabled]), textarea:not([disabled]), button[type="submit"]'
+          )
+        );
+        const index = focusable.indexOf(target as any);
+        if (index > -1 && index < focusable.length - 1) {
+          focusable[index + 1]?.focus();
+          if ('select' in focusable[index + 1]) {
+            (focusable[index + 1] as HTMLInputElement).select?.();
+          }
+        }
+      }
+    }
+  };
+
   return (
     <div className="content-panel-grey">
       {/* Top Header Strip matching supplier.jpg */}
@@ -286,6 +318,7 @@ export const SupplierMasterView: React.FC = () => {
 
         <form
           onSubmit={handleSave}
+          onKeyDown={handleFormKeyDown}
           onClickCapture={isViewOnly ? (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -301,6 +334,7 @@ export const SupplierMasterView: React.FC = () => {
                 Firm Name *
               </label>
               <input
+                ref={firmNameInputRef}
                 type="text"
                 className="input-text-clean"
                 value={firmName}

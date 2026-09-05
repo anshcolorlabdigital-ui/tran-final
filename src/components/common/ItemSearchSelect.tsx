@@ -37,6 +37,17 @@ export const ItemSearchSelect = forwardRef<ItemSearchSelectHandle, ItemSearchSel
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  // Keep highlighted item scrolled into view when using arrow keys
+  useEffect(() => {
+    if (isOpen && highlightedIndex >= 0 && itemRefs.current[highlightedIndex]) {
+      itemRefs.current[highlightedIndex]?.scrollIntoView({
+        block: 'nearest',
+        inline: 'nearest'
+      });
+    }
+  }, [highlightedIndex, isOpen]);
 
   useImperativeHandle(ref, () => ({
     focus: () => {
@@ -257,7 +268,7 @@ export const ItemSearchSelect = forwardRef<ItemSearchSelectHandle, ItemSearchSel
             top: 'calc(100% + 4px)',
             left: 0,
             right: onQuickAdd ? '40px' : 0,
-            maxHeight: '260px',
+            maxHeight: '320px',
             overflowY: 'auto',
             background: '#FFFFFF',
             border: '2px solid #000000',
@@ -279,48 +290,54 @@ export const ItemSearchSelect = forwardRef<ItemSearchSelectHandle, ItemSearchSel
               return (
                 <div
                   key={item.id}
+                  ref={el => { itemRefs.current[idx] = el; }}
                   onClick={() => handleSelect(item, true)}
                   onMouseEnter={() => setHighlightedIndex(idx)}
                   style={{
-                    padding: '8px 14px',
+                    padding: '6px 12px',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
+                    gap: '12px',
                     borderBottom: '1px solid #F3F4F6',
                     background: isHighlighted ? '#EFF6FF' : isSelected ? '#F5F3FF' : '#FFFFFF',
-                    transition: 'background 0.1s ease'
+                    transition: 'background 0.08s ease',
+                    minHeight: '34px'
                   }}
                 >
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ fontWeight: 800, fontSize: '0.92rem', color: isSelected ? '#002B99' : '#111827' }}>
-                      {item.name}
-                      {item.hasSecondaryUnit && (
-                        <span style={{ fontSize: '0.78rem', color: '#6B7280', marginLeft: '6px', fontWeight: 600 }}>
-                          ({item.unitA?.unitName || 'Unit A'} / {item.unitB?.unitName || 'Unit B'})
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px', fontSize: '0.75rem', color: '#6B7280', fontWeight: 600 }}>
-                      {item.sno && <span>Code: {item.sno}</span>}
-                      {item.category && <span>Category: {item.category}</span>}
-                    </div>
+                  {/* Single Line: Item Name on the left */}
+                  <div
+                    style={{
+                      fontWeight: 800,
+                      fontSize: '0.9rem',
+                      color: isSelected ? '#002B99' : '#111827',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      flex: 1
+                    }}
+                    title={item.name}
+                  >
+                    {item.name}
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {/* Single Line: Stock Badge & Check on the right */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                     <span
                       style={{
-                        fontSize: '0.78rem',
+                        fontSize: '0.76rem',
                         fontWeight: 800,
                         padding: '2px 8px',
-                        borderRadius: '12px',
+                        borderRadius: '10px',
                         background: stock > 0 ? '#DCFCE7' : '#FEE2E2',
-                        color: stock > 0 ? '#15803D' : '#991B1B'
+                        color: stock > 0 ? '#15803D' : '#991B1B',
+                        whiteSpace: 'nowrap'
                       }}
                     >
                       Stock: {stock} {item.unitA?.unitName || item.unit || 'Units'}
                     </span>
-                    {isSelected && <Check size={16} color="#002B99" />}
+                    {isSelected && <Check size={15} color="#002B99" />}
                   </div>
                 </div>
               );

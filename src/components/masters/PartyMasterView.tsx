@@ -36,8 +36,8 @@ export const PartyMasterView: React.FC = () => {
   const [isActive, setIsActive] = useState<boolean>(true);
   const [allowCredit, setAllowCredit] = useState<boolean>(false);
   const [partyType, setPartyType] = useState<'DEALER' | 'AMATEUR'>('AMATEUR');
-  const [dealerProfitPercent, setDealerProfitPercent] = useState<string>('10');
-  const [amateurProfitPercent, setAmateurProfitPercent] = useState<string>('25');
+  const [dealerProfitPercent, setDealerProfitPercent] = useState<string>('0');
+  const [amateurProfitPercent, setAmateurProfitPercent] = useState<string>('0');
 
   const [search, setSearch] = useState('');
   const [deleteDialog, setDeleteDialog] = useState<{ isOpen: boolean; id: string; name: string }>({
@@ -53,6 +53,16 @@ export const PartyMasterView: React.FC = () => {
   const [paymentRef, setPaymentRef] = useState<string>('');
   const [paymentNotes, setPaymentNotes] = useState<string>('');
   const [showPaymentForm, setShowPaymentForm] = useState(false);
+
+  const firmNameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      firmNameInputRef.current?.focus();
+      firmNameInputRef.current?.select();
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [selectedPartyId]);
 
   const handleCreateNew = () => {
     setSelectedPartyId(null);
@@ -76,8 +86,8 @@ export const PartyMasterView: React.FC = () => {
     setIsActive(true);
     setAllowCredit(false);
     setPartyType('AMATEUR');
-    setDealerProfitPercent('10');
-    setAmateurProfitPercent('25');
+    setDealerProfitPercent('0');
+    setAmateurProfitPercent('0');
   };
 
   const handleEditParty = (party: Party, viewOnly: boolean = false) => {
@@ -102,8 +112,8 @@ export const PartyMasterView: React.FC = () => {
     setIsActive(party.isActive !== false);
     setAllowCredit(Boolean(party.allowCredit));
     setPartyType(party.partyType || 'AMATEUR');
-    setDealerProfitPercent(party.dealerProfitPercent !== undefined ? String(party.dealerProfitPercent) : '10');
-    setAmateurProfitPercent(party.amateurProfitPercent !== undefined ? String(party.amateurProfitPercent) : '25');
+    setDealerProfitPercent(party.dealerProfitPercent !== undefined ? String(party.dealerProfitPercent) : '0');
+    setAmateurProfitPercent(party.amateurProfitPercent !== undefined ? String(party.amateurProfitPercent) : '0');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -139,8 +149,8 @@ export const PartyMasterView: React.FC = () => {
       isActive,
       allowCredit,
       partyType,
-      dealerProfitPercent: partyType === 'DEALER' ? (dealerProfitPercent !== '' ? Number(dealerProfitPercent) : 10) : undefined,
-      amateurProfitPercent: partyType === 'AMATEUR' ? (amateurProfitPercent !== '' ? Number(amateurProfitPercent) : 25) : undefined,
+      dealerProfitPercent: dealerProfitPercent !== '' ? Number(dealerProfitPercent) : 0,
+      amateurProfitPercent: amateurProfitPercent !== '' ? Number(amateurProfitPercent) : 0,
       createdAt: new Date().toISOString()
     };
 
@@ -266,6 +276,28 @@ export const PartyMasterView: React.FC = () => {
     ? 'is-creating-green'
     : 'is-initial-blue';
 
+  const handleFormKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
+    if (e.key === 'Enter') {
+      const target = e.target as HTMLElement;
+      if (target.tagName !== 'BUTTON' && target.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        const form = e.currentTarget;
+        const focusable = Array.from(
+          form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement | HTMLTextAreaElement>(
+            'input:not([disabled]):not([type="hidden"]):not([type="checkbox"]), select:not([disabled]), textarea:not([disabled]), button[type="submit"]'
+          )
+        );
+        const index = focusable.indexOf(target as any);
+        if (index > -1 && index < focusable.length - 1) {
+          focusable[index + 1]?.focus();
+          if ('select' in focusable[index + 1]) {
+            (focusable[index + 1] as HTMLInputElement).select?.();
+          }
+        }
+      }
+    }
+  };
+
   return (
     <div className="content-panel-grey">
       {/* Top Header Strip matching party.jpg */}
@@ -359,6 +391,7 @@ export const PartyMasterView: React.FC = () => {
 
         <form
           onSubmit={handleSave}
+          onKeyDown={handleFormKeyDown}
           onClickCapture={isViewing ? (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -374,6 +407,7 @@ export const PartyMasterView: React.FC = () => {
                 Firm Name *
               </label>
               <input
+                ref={firmNameInputRef}
                 type="text"
                 className="input-text-clean"
                 value={firmName}
@@ -604,93 +638,58 @@ export const PartyMasterView: React.FC = () => {
             </div>
           </div>
 
-          {/* CLASSIFICATION: Amateur vs Dealer with Custom Profit % */}
+          {/* CLASSIFICATION: Amateur vs Dealer with Dual Profit % below each */}
           <div style={{ background: '#F8FAFC', border: '1.5px solid #CBD5E1', borderRadius: '10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px' }}>
             <label style={{ display: 'block', fontWeight: 900, fontSize: '0.88rem', color: '#1E293B' }}>
-              Party Classification (Pricing Tier & Profit %)
+              Party Classification (Select Amateur vs Dealer)
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+              {/* Amateur Option */}
               <button
                 type="button"
                 onClick={() => { setIsTouched(true); setPartyType('AMATEUR'); }}
                 style={{
-                  padding: '8px 12px',
+                  padding: '12px 16px',
                   borderRadius: '8px',
                   fontWeight: 800,
-                  fontSize: '0.85rem',
+                  fontSize: '0.92rem',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '6px',
-                  border: partyType === 'AMATEUR' ? '2px solid #2563EB' : '1px solid #D1D5DB',
+                  gap: '8px',
+                  border: partyType === 'AMATEUR' ? '2.5px solid #2563EB' : '1px solid #D1D5DB',
                   background: partyType === 'AMATEUR' ? '#EFF6FF' : '#FFFFFF',
-                  color: partyType === 'AMATEUR' ? '#1D4ED8' : '#6B7280'
+                  color: partyType === 'AMATEUR' ? '#1D4ED8' : '#4B5563',
+                  boxShadow: partyType === 'AMATEUR' ? '0 0 0 2px rgba(37,99,235,0.2)' : 'none'
                 }}
               >
-                👤 Amateur (Retail/Custom Profit %)
+                👤 Amateur (Retail / End Customer) {partyType === 'AMATEUR' && '✓'}
               </button>
+
+              {/* Dealer Option */}
               <button
                 type="button"
                 onClick={() => { setIsTouched(true); setPartyType('DEALER'); }}
                 style={{
-                  padding: '8px 12px',
+                  padding: '12px 16px',
                   borderRadius: '8px',
                   fontWeight: 800,
-                  fontSize: '0.85rem',
+                  fontSize: '0.92rem',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '6px',
-                  border: partyType === 'DEALER' ? '2px solid #7C3AED' : '1px solid #D1D5DB',
+                  gap: '8px',
+                  border: partyType === 'DEALER' ? '2.5px solid #7C3AED' : '1px solid #D1D5DB',
                   background: partyType === 'DEALER' ? '#F5F3FF' : '#FFFFFF',
-                  color: partyType === 'DEALER' ? '#6D28D9' : '#6B7280'
+                  color: partyType === 'DEALER' ? '#6D28D9' : '#4B5563',
+                  boxShadow: partyType === 'DEALER' ? '0 0 0 2px rgba(124,58,237,0.2)' : 'none'
                 }}
               >
-                🏢 Dealer (Custom Profit %)
+                🏢 Dealer (Wholesale Rate) {partyType === 'DEALER' && '✓'}
               </button>
             </div>
-
-            {partyType === 'AMATEUR' && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#EFF6FF', padding: '10px 14px', borderRadius: '8px', border: '1px solid #BFDBFE' }}>
-                <label style={{ fontWeight: 800, fontSize: '0.85rem', color: '#1E40AF', whiteSpace: 'nowrap' }}>
-                  Amateur Profit %:
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  className="input-text-clean"
-                  value={amateurProfitPercent}
-                  onChange={e => { setIsTouched(true); setAmateurProfitPercent(e.target.value); }}
-                  placeholder="e.g. 25"
-                  style={{ width: '100px', fontWeight: 800, textAlign: 'center', borderColor: '#3B82F6' }}
-                />
-                <span style={{ fontSize: '0.8rem', color: '#1D4ED8', fontWeight: 700 }}>
-                  This profit % will automatically apply in Sales Entry for this amateur customer.
-                </span>
-              </div>
-            )}
-
-            {partyType === 'DEALER' && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#F5F3FF', padding: '10px 14px', borderRadius: '8px', border: '1px solid #DDD6FE' }}>
-                <label style={{ fontWeight: 800, fontSize: '0.85rem', color: '#5B21B6', whiteSpace: 'nowrap' }}>
-                  Dealer Profit %:
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  className="input-text-clean"
-                  value={dealerProfitPercent}
-                  onChange={e => { setIsTouched(true); setDealerProfitPercent(e.target.value); }}
-                  placeholder="e.g. 10"
-                  style={{ width: '100px', fontWeight: 800, textAlign: 'center', borderColor: '#8B5CF6' }}
-                />
-                <span style={{ fontSize: '0.8rem', color: '#6D28D9', fontWeight: 700 }}>
-                  This profit % will automatically replace standard item profit % in Sales Entry for this dealer.
-                </span>
-              </div>
-            )}
           </div>
 
           {/* PRIVILEGES & STATUS TOGGLES: Active Status & Credit Facility */}

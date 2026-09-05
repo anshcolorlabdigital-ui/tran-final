@@ -81,11 +81,16 @@ export interface ItemUnitPricing {
   basicPrice?: number;
   gstPercent?: number;
   tranPercent?: number; // Transport %
-  profPercent?: number; // Profit %
+  profPercent?: number; // Legacy Profit %
+  profPercentAm?: number; // Amateur Profit %
+  profPercentDeal?: number; // Dealer Profit %
   misPercent?: number;  // Misc %
   nettPrice?: number;
-  roundUp?: number;
-  salePrice?: number;
+  roundUp?: number; // legacy/default round up for sale
+  roundUpSale?: number; // Round-S (Sale Price round up)
+  roundUpMrp?: number;  // Round-M (MRP round up)
+  salePrice?: number; // Dealer rate
+  mrp?: number;       // Amateur rate
   isActive?: boolean;
 }
 
@@ -107,8 +112,14 @@ export interface Item {
   minStock: number; // Reorder level threshold
   openingStock: number;
   purchaseRate: number; // Basic Price
-  saleRate: number;
-  gstPercent: number; // e.g. 0, 5, 12, 18, 28
+  saleRate: number;     // Sale Price (Dealer rate)
+  mrp?: number;         // MRP (Amateur rate)
+  gstPercent: number;   // e.g. 0, 5, 12, 18, 28
+  profPercentAm?: number;
+  profPercentDeal?: number;
+  roundUp?: number;
+  roundUpSale?: number;
+  roundUpMrp?: number;
   unitA?: ItemUnitPricing;
   unitB?: ItemUnitSecondaryPricing;
   isActive: boolean;
@@ -178,6 +189,9 @@ export interface SaleItem {
   toPercent?: number;
   tranPercent?: number;
   profPercent?: number;
+  profPercentAm?: number;
+  profPercentDeal?: number;
+  mrp?: number;
   misPercent?: number;
   salePrice: number;
   qty: number;

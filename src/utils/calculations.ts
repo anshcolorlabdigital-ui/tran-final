@@ -18,68 +18,90 @@ export interface ItemUnitBreakdown {
   tranAmt: number;
   profPercent: number;
   profAmt: number;
+  profPercentAm: number;
+  profAmAmt: number;
+  profPercentDeal: number;
+  profDealAmt: number;
   misPercent: number;
   misAmt: number;
   nettPrice: number;
   roundUp: number;
+  roundUpSale: number;
+  roundUpMrp: number;
   salePrice: number;
+  mrp: number;
 }
 
 /**
  * Calculates item unit pricing breakdown with intermediate currency values (e.g. 18% -> 180, 10% -> 100)
  */
 export function calculateItemUnitBreakdown(
-  basicPriceOrConfig: number | Partial<ItemUnitBreakdown> & { unitName?: string },
+  basicPriceOrConfig: number | Partial<ItemUnitBreakdown> & { unitName?: string; roundUpSale?: number; roundUpMrp?: number },
   gstPercent: number = 18,
   tranPercent: number = 0,
-  profPercent: number = 0,
+  profPercentOrAm: number = 0,
   misPercent: number = 0,
   roundUp: number = 0,
-  manualNettPrice?: number
+  manualNettPrice?: number,
+  profPercentDeal: number = 0,
+  roundUpMrpParam: number = 0
 ): ItemUnitBreakdown {
   let basic = 0;
   let gst = 18;
   let tran = 0;
-  let prof = 0;
+  let profAm = 0;
+  let profDeal = 0;
   let mis = 0;
-  let rUp = 0;
+  let rUpSale = 0;
+  let rUpMrp = 0;
   let manualNett = manualNettPrice;
 
   if (typeof basicPriceOrConfig === 'object' && basicPriceOrConfig !== null) {
     basic = Number(basicPriceOrConfig.basicPrice) || 0;
     gst = basicPriceOrConfig.gstPercent !== undefined ? Number(basicPriceOrConfig.gstPercent) : 18;
     tran = Number(basicPriceOrConfig.tranPercent) || 0;
-    prof = Number(basicPriceOrConfig.profPercent) || 0;
+    profAm = Number(basicPriceOrConfig.profPercentAm !== undefined ? basicPriceOrConfig.profPercentAm : basicPriceOrConfig.profPercent) || 0;
+    profDeal = Number(basicPriceOrConfig.profPercentDeal !== undefined ? basicPriceOrConfig.profPercentDeal : basicPriceOrConfig.profPercent) || 0;
     mis = Number(basicPriceOrConfig.misPercent) || 0;
-    rUp = Number(basicPriceOrConfig.roundUp) || 0;
+    rUpSale = Number(basicPriceOrConfig.roundUpSale !== undefined ? basicPriceOrConfig.roundUpSale : basicPriceOrConfig.roundUp) || 0;
+    rUpMrp = Number(basicPriceOrConfig.roundUpMrp) || 0;
     if (basicPriceOrConfig.nettPrice) manualNett = Number(basicPriceOrConfig.nettPrice);
   } else {
     basic = Number(basicPriceOrConfig) || 0;
     gst = Number(gstPercent) || 0;
     tran = Number(tranPercent) || 0;
-    prof = Number(profPercent) || 0;
+    profAm = Number(profPercentOrAm) || 0;
+    profDeal = Number(profPercentDeal !== undefined ? profPercentDeal : profPercentOrAm) || 0;
     mis = Number(misPercent) || 0;
-    rUp = Number(roundUp) || 0;
+    rUpSale = Number(roundUp) || 0;
+    rUpMrp = Number(roundUpMrpParam) || 0;
   }
 
   const safeBasic = basic;
   const safeGst = gst;
   const safeTran = tran;
-  const safeProf = prof;
+  const safeProfAm = profAm;
+  const safeProfDeal = profDeal;
   const safeMis = mis;
-  const safeRoundUp = rUp;
+  const safeRoundUpSale = rUpSale;
+  const safeRoundUpMrp = rUpMrp;
 
   const gstAmt = Number((safeBasic * (safeGst / 100)).toFixed(2));
   const tranAmt = Number((safeBasic * (safeTran / 100)).toFixed(2));
-  const profAmt = Number((safeBasic * (safeProf / 100)).toFixed(2));
   const misAmt = Number((safeBasic * (safeMis / 100)).toFixed(2));
+  const profAmAmt = Number((safeBasic * (safeProfAm / 100)).toFixed(2));
+  const profDealAmt = Number((safeBasic * (safeProfDeal / 100)).toFixed(2));
 
-  // If manualNettPrice is provided and > 0, respect it; otherwise compute sum of (Basic + GST + Tran + Prof + Mis)
+  // Landed cost before profit margins = Basic + GST + Tran + Mis
   let nettPrice = manualNett !== undefined && manualNett > 0
     ? Number(manualNett.toFixed(2))
-    : Number((safeBasic + gstAmt + tranAmt + profAmt + misAmt).toFixed(2));
+    : Number((safeBasic + gstAmt + tranAmt + misAmt).toFixed(2));
 
-  const salePrice = Number((nettPrice + safeRoundUp).toFixed(2));
+  // Dealer Sale Price = Landed Nett + Dealer Profit + Round-S
+  const salePrice = Number((nettPrice + profDealAmt + safeRoundUpSale).toFixed(2));
+
+  // Amateur MRP = Landed Nett + Amateur Profit + Round-M
+  const mrp = Number((nettPrice + profAmAmt + safeRoundUpMrp).toFixed(2));
 
   return {
     basicPrice: safeBasic,
@@ -87,13 +109,20 @@ export function calculateItemUnitBreakdown(
     gstAmt,
     tranPercent: safeTran,
     tranAmt,
-    profPercent: safeProf,
-    profAmt,
+    profPercent: safeProfDeal,
+    profAmt: profDealAmt,
+    profPercentAm: safeProfAm,
+    profAmAmt,
+    profPercentDeal: safeProfDeal,
+    profDealAmt,
     misPercent: safeMis,
     misAmt,
     nettPrice,
-    roundUp: safeRoundUp,
-    salePrice
+    roundUp: safeRoundUpSale,
+    roundUpSale: safeRoundUpSale,
+    roundUpMrp: safeRoundUpMrp,
+    salePrice,
+    mrp
   };
 }
 
@@ -107,14 +136,15 @@ export function calculateUnitBFromUnitA(
   const factor = Number(conversionFactor) > 0 ? Number(conversionFactor) : 1;
   const basicB = Number((unitABreakdown.basicPrice / factor).toFixed(2));
 
-  return calculateItemUnitBreakdown(
-    basicB,
-    unitABreakdown.gstPercent,
-    unitABreakdown.tranPercent,
-    unitABreakdown.profPercent,
-    unitABreakdown.misPercent,
-    0
-  );
+  return calculateItemUnitBreakdown({
+    basicPrice: basicB,
+    gstPercent: unitABreakdown.gstPercent,
+    tranPercent: unitABreakdown.tranPercent,
+    profPercentAm: unitABreakdown.profPercentAm,
+    profPercentDeal: unitABreakdown.profPercentDeal,
+    misPercent: unitABreakdown.misPercent,
+    roundUp: 0
+  });
 }
 
 /**
@@ -156,6 +186,66 @@ export function calculateItemPricing(
     toPercent: safeToPct,
     roundup: manualRoundup,
     salePrice,
+    qty: safeQty,
+    amount
+  };
+}
+
+export interface SalesPricingCalculations {
+  basicPrice: number;
+  gstPercent: number;
+  gstAmt: number;
+  nettPrice: number;
+  profPercentAm: number;
+  profPercentDeal: number;
+  mrp: number;        // Amateur rate = Nett Price + (Basic Price * (Prof % Am / 100))
+  salePrice: number;  // Dealer rate = Nett Price + (Basic Price * (Prof % Deal / 100))
+  effectivePrice: number; // mrp if party is AMATEUR, salePrice if party is DEALER
+  qty: number;
+  amount: number;     // effectivePrice * qty
+}
+
+/**
+ * Calculates sales line item dual-pricing with Prof % Am (MRP) and Prof % Deal (Sale Price)
+ */
+export function calculateSalesItemPricing(
+  basicPrice: number,
+  gstPercent: number,
+  profPercentAm: number,
+  profPercentDeal: number,
+  qty: number,
+  isDealer: boolean = false
+): SalesPricingCalculations {
+  const safeBasic = Number(basicPrice) || 0;
+  const safeGstPct = Number(gstPercent) || 0;
+  const safeProfAm = Number(profPercentAm) || 0;
+  const safeProfDeal = Number(profPercentDeal) || 0;
+  const safeQty = Number(qty) || 0;
+
+  const gstAmt = Number((safeBasic * (safeGstPct / 100)).toFixed(2));
+  const nettPrice = Number((safeBasic + gstAmt).toFixed(2));
+
+  // mrp = nettPrice + (basic * profAm / 100)
+  const profAmAmt = Number((safeBasic * (safeProfAm / 100)).toFixed(2));
+  const mrp = Number((nettPrice + profAmAmt).toFixed(2));
+
+  // salePrice = nettPrice + (basic * profDeal / 100)
+  const profDealAmt = Number((safeBasic * (safeProfDeal / 100)).toFixed(2));
+  const salePrice = Number((nettPrice + profDealAmt).toFixed(2));
+
+  const effectivePrice = isDealer ? salePrice : mrp;
+  const amount = Number((effectivePrice * safeQty).toFixed(2));
+
+  return {
+    basicPrice: safeBasic,
+    gstPercent: safeGstPct,
+    gstAmt,
+    nettPrice,
+    profPercentAm: safeProfAm,
+    profPercentDeal: safeProfDeal,
+    mrp,
+    salePrice,
+    effectivePrice,
     qty: safeQty,
     amount
   };

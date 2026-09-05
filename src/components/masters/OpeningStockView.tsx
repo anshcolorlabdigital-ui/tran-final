@@ -12,8 +12,16 @@ export const OpeningStockView: React.FC = () => {
   const stockSummaries = useMemo(() => StockEngine.getAllItemsStockSummary(), [refreshKey]);
   const [search, setSearch] = useState('');
 
-  // Editable opening stock map
   const [openingStockValues, setOpeningStockValues] = useState<{ [itemId: string]: string }>({});
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    }, 60);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Initialize values
   React.useEffect(() => {
@@ -122,6 +130,7 @@ export const OpeningStockView: React.FC = () => {
           <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
             <Search size={16} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
             <input
+              ref={searchInputRef}
               type="text"
               placeholder="Search items..."
               className="input-text-clean"
