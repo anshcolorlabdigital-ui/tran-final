@@ -135,12 +135,14 @@ export function calculateItemPricing(
   // GST Amount per unit
   const gstAmt = Number((safeBasic * (safeGstPct / 100)).toFixed(2));
 
-  // Nett Price = Basic + GST
+  // Nett Price before Profit Margin = Basic + GST
   const nettPrice = Number((safeBasic + gstAmt).toFixed(2));
 
-  // Sale Price includes T&O %
-  const toAmount = (nettPrice * safeToPct) / 100;
-  const rawSalePrice = nettPrice + toAmount + manualRoundup;
+  // Profit / Margin Amount per unit (Prof % on basic price)
+  const toAmt = Number((safeBasic * (safeToPct / 100)).toFixed(2));
+
+  // Sale Price = Nett Price + Profit Amount + optional roundup
+  const rawSalePrice = nettPrice + toAmt + manualRoundup;
   const salePrice = Number(rawSalePrice.toFixed(2));
 
   // Total Line Amount = Sale Price * Qty

@@ -28,9 +28,7 @@ export const OpeningStockView: React.FC = () => {
     const q = search.toLowerCase().trim();
     if (!q) return stockSummaries;
     return stockSummaries.filter(
-      s =>
-        s.item.name.toLowerCase().includes(q) ||
-        s.item.sno.toLowerCase().includes(q)
+      s => s.item.name.toLowerCase().includes(q)
     );
   }, [stockSummaries, search]);
 
@@ -105,7 +103,6 @@ export const OpeningStockView: React.FC = () => {
           <table className="custom-table">
             <thead>
               <tr>
-                <th style={{ width: '90px' }}>S.No.</th>
                 <th>Item Description</th>
                 <th>Category</th>
                 <th style={{ textAlign: 'center', width: '130px', color: '#002B99' }}>Opening Stock</th>
@@ -121,7 +118,6 @@ export const OpeningStockView: React.FC = () => {
 
                 return (
                   <tr key={s.item.id}>
-                    <td style={{ fontFamily: 'monospace', fontWeight: 700 }}>{s.item.sno}</td>
                     <td style={{ fontWeight: 800 }}>{s.item.name}</td>
                     <td>{s.item.category || '-'}</td>
 

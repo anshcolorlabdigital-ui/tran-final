@@ -4,9 +4,11 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Item, Supplier } from '../../types';
 import { StockEngine } from '../../db/stockEngine';
-import { Search } from 'lucide-react';
+import { Search, FileSpreadsheet, Zap, RefreshCw } from 'lucide-react';
 import { ConfirmDialog } from '../common/ConfirmDialog';
+import { ExcelImportModal } from '../common/ExcelImportModal';
 import { calculateItemUnitBreakdown } from '../../utils/calculations';
+import { loadBundledMaterialsCatalog } from '../../utils/excelEngine';
 
 export const ItemMasterView: React.FC = () => {
   const { refreshKey, showToast, showAlert } = useApp();
@@ -56,6 +58,22 @@ export const ItemMasterView: React.FC = () => {
 
   const [minStock, setMinStock] = useState('100');
   const [openingStock, setOpeningStock] = useState('0');
+  const [isViewOnly, setIsViewOnly] = useState(false);
+  const [isEditPromptOpen, setIsEditPromptOpen] = useState(false);
+  const [isExcelImportOpen, setIsExcelImportOpen] = useState(false);
+  const [isImportingBundled, setIsImportingBundled] = useState(false);
+
+  const handleQuickLoadBundled = async () => {
+    setIsImportingBundled(true);
+    try {
+      const res = await loadBundledMaterialsCatalog();
+      showToast(`Successfully loaded ${res.importedCount} materials and ${res.createdSuppliersCount} suppliers from ITEM.xls!`, 'success');
+    } catch (err: any) {
+      showAlert(`Failed to load materials: ${err.message}`, 'Load Error', 'error');
+    } finally {
+      setIsImportingBundled(false);
+    }
+  };
 
   // Live Unit A Calculation
   const unitABreakdown = useMemo(() => {
@@ -101,12 +119,13 @@ export const ItemMasterView: React.FC = () => {
     name: ''
   });
 
-  const isFormActive = Boolean(isTouched || selectedItemId || name.trim() !== '' || sno.trim() !== '');
+  const isFormActive = Boolean(isTouched || selectedItemId || name.trim() !== '');
 
-  const loadItemIntoForm = (item: Item) => {
+  const loadItemIntoForm = (item: Item, viewOnly: boolean = false) => {
     setSelectedItemId(item.id);
     setIsTouched(false);
     setIsJustSaved(false);
+    setIsViewOnly(viewOnly);
     setHasSecondaryUnit(Boolean(item.hasSecondaryUnit || (item.unitB && item.unitB.isActive !== false && item.unitB.unitName && item.unitB.unitName !== item.unitA?.unitName)));
     setSno(item.sno || '');
     setName(item.name);
@@ -166,7 +185,7 @@ export const ItemMasterView: React.FC = () => {
 
     setMinStock(String(item.minStock || 0));
     setOpeningStock(String(item.openingStock || 0));
-    showToast(`Loaded ${item.name} for editing`, 'info');
+    showToast(viewOnly ? `Viewing ${item.name}` : `Loaded ${item.name} for editing`, 'info');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -174,6 +193,7 @@ export const ItemMasterView: React.FC = () => {
     setSelectedItemId(null);
     setIsTouched(false);
     setIsJustSaved(false);
+    setIsViewOnly(false);
     setHasSecondaryUnit(false);
     setSno(StockEngine.getNextItemSno());
     setName('');
@@ -211,6 +231,10 @@ export const ItemMasterView: React.FC = () => {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isViewOnly) {
+      setIsEditPromptOpen(true);
+      return;
+    }
     if (!name.trim()) {
       showAlert('Item Name is required', 'Validation Error', 'warning');
       return;
@@ -277,9 +301,11 @@ export const ItemMasterView: React.FC = () => {
     if (isUpdating) {
       setIsJustSaved(true);
       setIsTouched(false);
+      setIsViewOnly(false);
       showToast(`Item "${itemRecord.name}" updated successfully!`, 'success');
     } else {
       setIsJustSaved(false);
+      setIsViewOnly(false);
       showToast(`Item "${itemRecord.name}" created successfully!`, 'success');
       handleCreateNew();
     }
@@ -322,11 +348,14 @@ export const ItemMasterView: React.FC = () => {
     );
   }, [stockSummaries, search]);
 
-  const isEditing = Boolean(selectedItemId);
-  const isCreating = Boolean(!isEditing && !isJustSaved && (isTouched || name.trim() !== '' || sno.trim() !== ''));
+  const isEditing = Boolean(selectedItemId && !isViewOnly);
+  const isViewing = Boolean(selectedItemId && isViewOnly);
+  const isCreating = Boolean(!selectedItemId && !isJustSaved && (isTouched || name.trim() !== ''));
 
   const cardStateClass = isJustSaved
     ? 'is-saved-yellow'
+    : isViewing
+    ? 'is-initial-blue'
     : isEditing
     ? 'is-editing-pink'
     : isCreating
@@ -345,9 +374,13 @@ export const ItemMasterView: React.FC = () => {
             <span className="active-mode-indicator is-saved">
               ● Saved / Updated Just Now ({name})
             </span>
+          ) : isViewing ? (
+            <span className="active-mode-indicator is-initial" style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #F59E0B' }}>
+              ● Viewing Item: {name || 'Saved Item'} (Read Only — Double-Click to Edit)
+            </span>
           ) : isEditing ? (
             <span className="active-mode-indicator is-editing">
-              ● Editing Item ({name || sno || 'Saved Item'})
+              ● Editing Item ({name || 'Saved Item'})
             </span>
           ) : isCreating ? (
             <span className="active-mode-indicator is-creating">
@@ -360,7 +393,54 @@ export const ItemMasterView: React.FC = () => {
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* 1-Click Load 569 Materials Button */}
+          <button
+            type="button"
+            onClick={handleQuickLoadBundled}
+            disabled={isImportingBundled}
+            style={{
+              background: '#059669',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: '20px',
+              padding: '6px 16px',
+              fontWeight: 800,
+              fontSize: '0.85rem',
+              cursor: isImportingBundled ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 2px 4px rgba(5,150,105,0.3)'
+            }}
+          >
+            {isImportingBundled ? <RefreshCw size={14} className="spin" /> : <Zap size={14} />}
+            ⚡ 1-Click Load 569 Materials
+          </button>
+
+          {/* Bulk Excel Import Button */}
+          <button
+            type="button"
+            onClick={() => setIsExcelImportOpen(true)}
+            style={{
+              background: '#F0FDF4',
+              color: '#166534',
+              border: '1.5px solid #86EFAC',
+              borderRadius: '20px',
+              padding: '6px 16px',
+              fontWeight: 800,
+              fontSize: '0.85rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+            }}
+          >
+            <FileSpreadsheet size={15} color="#16A34A" />
+            Import from Excel (.xlsx)
+          </button>
+
           {/* Secondary Unit Toggle (OFF by default) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: hasSecondaryUnit ? '#DCFCE7' : '#FFFFFF', padding: '6px 14px', borderRadius: '20px', border: '1px solid #D1D5DB' }}>
             <input
@@ -402,13 +482,62 @@ export const ItemMasterView: React.FC = () => {
         style={{
           padding: '28px',
           maxWidth: '980px',
-          margin: '0 auto'
+          margin: '0 auto',
+          position: 'relative'
         }}
       >
-        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {isViewOnly && (
+          <div
+            onClick={() => setIsEditPromptOpen(true)}
+            style={{
+              marginBottom: '18px',
+              padding: '10px 16px',
+              background: '#FEF3C7',
+              border: '1.5px solid #F59E0B',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              cursor: 'pointer'
+            }}
+          >
+            <span style={{ fontWeight: 800, color: '#92400E', fontSize: '0.88rem' }}>
+              🔒 View-Only Mode: Item record is locked against accidental edits. Click anywhere or press button to edit.
+            </span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsEditPromptOpen(true);
+              }}
+              style={{
+                background: '#D97706',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '5px 14px',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                cursor: 'pointer'
+              }}
+            >
+              Unlock / Edit
+            </button>
+          </div>
+        )}
+
+        <form
+          onSubmit={handleSave}
+          onClickCapture={isViewOnly ? (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsEditPromptOpen(true);
+          } : undefined}
+          style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
+        >
           
-          {/* Row 1: Item Name, S.No. / Code, HSN (Optional) */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.8fr 0.8fr', gap: '14px' }}>
+          {/* Row 1: Item Name, HSN Code */}
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '14px' }}>
             <div>
               <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 Item Name *
@@ -421,25 +550,9 @@ export const ItemMasterView: React.FC = () => {
                   setIsTouched(true);
                   setName(e.target.value);
                 }}
-                placeholder="e.g. ASTER - 12X36"
+                placeholder="e.g. ASTER / PRINTING SHEET 70 GSM"
                 required
                 style={{ fontWeight: 800 }}
-              />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
-                S.No. / Code (Optional)
-              </label>
-              <input
-                type="text"
-                className="input-text-clean"
-                value={sno}
-                onChange={e => {
-                  setIsTouched(true);
-                  setSno(e.target.value);
-                }}
-                placeholder="Auto-generated if empty"
-                style={{ fontFamily: 'monospace', fontWeight: 700 }}
               />
             </div>
             <div>
@@ -924,7 +1037,6 @@ export const ItemMasterView: React.FC = () => {
           <table className="custom-table">
             <thead>
               <tr>
-                <th style={{ width: '80px' }}>S.No</th>
                 <th>Item Name</th>
                 <th>Supplier</th>
                 <th>Unit-A (Sale Price)</th>
@@ -937,7 +1049,7 @@ export const ItemMasterView: React.FC = () => {
             <tbody>
               {filteredSummaries.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '24px', color: '#9CA3AF', fontWeight: 600 }}>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: '#9CA3AF', fontWeight: 600 }}>
                     No items found matching "{search}".
                   </td>
                 </tr>
@@ -945,13 +1057,14 @@ export const ItemMasterView: React.FC = () => {
                 filteredSummaries.map(s => (
                   <tr
                     key={s.item.id}
+                    title="Single-click to view, double-click to edit directly"
                     style={{
                       backgroundColor: selectedItemId === s.item.id ? '#EFF6FF' : 'transparent',
                       cursor: 'pointer'
                     }}
-                    onClick={() => loadItemIntoForm(s.item)}
+                    onClick={() => loadItemIntoForm(s.item, true)}
+                    onDoubleClick={() => loadItemIntoForm(s.item, false)}
                   >
-                    <td style={{ fontFamily: 'monospace', fontWeight: 700 }}>{s.item.sno}</td>
                     <td style={{ fontWeight: 800 }}>{s.item.name}</td>
                     <td>{s.item.supplierName || '-'}</td>
                     <td>
@@ -982,11 +1095,11 @@ export const ItemMasterView: React.FC = () => {
                         type="button"
                         onClick={e => {
                           e.stopPropagation();
-                          loadItemIntoForm(s.item);
+                          loadItemIntoForm(s.item, false);
                         }}
                         style={{
-                          background: selectedItemId === s.item.id ? '#BFDBFE' : '#E2D2F8',
-                          color: selectedItemId === s.item.id ? '#1E40AF' : '#EA3943',
+                          background: selectedItemId === s.item.id && !isViewOnly ? '#BFDBFE' : '#E2D2F8',
+                          color: selectedItemId === s.item.id && !isViewOnly ? '#1E40AF' : '#EA3943',
                           border: '1px solid #C4B5FD',
                           borderRadius: '12px',
                           padding: '3px 12px',
@@ -995,7 +1108,7 @@ export const ItemMasterView: React.FC = () => {
                           cursor: 'pointer'
                         }}
                       >
-                        {selectedItemId === s.item.id ? 'Editing' : 'Load'}
+                        {selectedItemId === s.item.id && !isViewOnly ? 'Editing' : selectedItemId === s.item.id ? 'Viewing' : 'Edit'}
                       </button>
                     </td>
                   </tr>
@@ -1006,6 +1119,21 @@ export const ItemMasterView: React.FC = () => {
         </div>
       </div>
 
+      {/* Edit Mode Prompt Confirmation */}
+      <ConfirmDialog
+        isOpen={isEditPromptOpen}
+        onClose={() => setIsEditPromptOpen(false)}
+        onConfirm={() => {
+          setIsViewOnly(false);
+          setIsEditPromptOpen(false);
+          showToast('Edit mode enabled', 'info');
+        }}
+        title="Enable Edit Mode?"
+        message="Would you like to edit this item record?"
+        confirmText="Yes, Edit"
+        cancelText="No, Keep View Only"
+      />
+
       {/* Delete Confirmation */}
       <ConfirmDialog
         isOpen={deleteDialog.isOpen}
@@ -1013,6 +1141,12 @@ export const ItemMasterView: React.FC = () => {
         onConfirm={confirmDelete}
         title="Delete Item"
         message={`Are you sure you want to delete item "${deleteDialog.name}"? This will also remove associated stock movements.`}
+      />
+
+      {/* Excel Bulk Import Modal */}
+      <ExcelImportModal
+        isOpen={isExcelImportOpen}
+        onClose={() => setIsExcelImportOpen(false)}
       />
     </div>
   );

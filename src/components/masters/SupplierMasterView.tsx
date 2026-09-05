@@ -38,11 +38,15 @@ export const SupplierMasterView: React.FC = () => {
     name: ''
   });
 
+  const [isViewOnly, setIsViewOnly] = useState(false);
+  const [isEditPromptOpen, setIsEditPromptOpen] = useState(false);
+
   // When selected supplier changes, populate fields
-  const loadSupplierIntoForm = (supplier: Supplier) => {
+  const loadSupplierIntoForm = (supplier: Supplier, viewOnly: boolean = false) => {
     setSelectedSupplierId(supplier.id);
     setIsJustSaved(false);
     setIsTouched(false);
+    setIsViewOnly(viewOnly);
     setFirmName(supplier.name);
     setGstNo(supplier.gstin || '');
     setPropName(supplier.propName || '');
@@ -64,6 +68,7 @@ export const SupplierMasterView: React.FC = () => {
     setSelectedSupplierId(null);
     setIsJustSaved(false);
     setIsTouched(false);
+    setIsViewOnly(false);
     setFirmName('');
     setGstNo('');
     setPropName('');
@@ -179,7 +184,11 @@ export const SupplierMasterView: React.FC = () => {
           <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '8px 36px', minWidth: '160px', textAlign: 'center' }}>
             Supplier
           </div>
-          {isJustSaved ? (
+          {isViewOnly ? (
+            <span className="active-mode-indicator is-saved" style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #F59E0B' }}>
+              🔒 Viewing Supplier ({firmName || 'Selected Supplier'}) — Read-Only
+            </span>
+          ) : isJustSaved ? (
             <span className="active-mode-indicator is-saved">
               ● Saved / Updated Just Now ({firmName})
             </span>
@@ -208,7 +217,55 @@ export const SupplierMasterView: React.FC = () => {
           margin: '0 auto'
         }}
       >
-        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        {isViewOnly && (
+          <div
+            onClick={() => setIsEditPromptOpen(true)}
+            style={{
+              marginBottom: '18px',
+              padding: '10px 16px',
+              background: '#FEF3C7',
+              border: '1.5px solid #F59E0B',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              cursor: 'pointer'
+            }}
+          >
+            <span style={{ fontWeight: 800, color: '#92400E', fontSize: '0.88rem' }}>
+              🔒 View-Only Mode: Supplier record is locked against accidental edits. Click anywhere or press button to edit.
+            </span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsEditPromptOpen(true);
+              }}
+              style={{
+                background: '#D97706',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '5px 14px',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                cursor: 'pointer'
+              }}
+            >
+              Unlock / Edit
+            </button>
+          </div>
+        )}
+
+        <form
+          onSubmit={handleSave}
+          onClickCapture={isViewOnly ? (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsEditPromptOpen(true);
+          } : undefined}
+          style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}
+        >
           
           {/* Row 1: Firm Name (wider) & Gst No. */}
           <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '14px' }}>
@@ -523,11 +580,13 @@ export const SupplierMasterView: React.FC = () => {
                 filteredSuppliers.map(s => (
                   <tr
                     key={s.id}
+                    title="Single-click to view, double-click to edit directly"
                     style={{
                       backgroundColor: selectedSupplierId === s.id ? '#EFF6FF' : 'transparent',
                       cursor: 'pointer'
                     }}
-                    onClick={() => loadSupplierIntoForm(s)}
+                    onClick={() => loadSupplierIntoForm(s, true)}
+                    onDoubleClick={() => loadSupplierIntoForm(s, false)}
                   >
                     <td style={{ fontWeight: 800 }}>{s.name}</td>
                     <td>{s.propName || '-'}</td>
@@ -539,11 +598,11 @@ export const SupplierMasterView: React.FC = () => {
                         type="button"
                         onClick={e => {
                           e.stopPropagation();
-                          loadSupplierIntoForm(s);
+                          loadSupplierIntoForm(s, false);
                         }}
                         style={{
-                          background: selectedSupplierId === s.id ? '#BFDBFE' : '#E2D2F8',
-                          color: selectedSupplierId === s.id ? '#1E40AF' : '#EA3943',
+                          background: selectedSupplierId === s.id && !isViewOnly ? '#BFDBFE' : '#E2D2F8',
+                          color: selectedSupplierId === s.id && !isViewOnly ? '#1E40AF' : '#EA3943',
                           border: '1px solid #C4B5FD',
                           borderRadius: '12px',
                           padding: '3px 12px',
@@ -552,7 +611,7 @@ export const SupplierMasterView: React.FC = () => {
                           cursor: 'pointer'
                         }}
                       >
-                        {selectedSupplierId === s.id ? 'Editing' : 'Load'}
+                        {selectedSupplierId === s.id && !isViewOnly ? 'Editing' : selectedSupplierId === s.id ? 'Viewing' : 'Edit'}
                       </button>
                     </td>
                   </tr>
@@ -562,6 +621,21 @@ export const SupplierMasterView: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Edit Mode Prompt Confirmation */}
+      <ConfirmDialog
+        isOpen={isEditPromptOpen}
+        onClose={() => setIsEditPromptOpen(false)}
+        onConfirm={() => {
+          setIsViewOnly(false);
+          setIsEditPromptOpen(false);
+          showToast('Edit mode enabled', 'info');
+        }}
+        title="Enable Edit Mode?"
+        message="Would you like to edit this supplier record?"
+        confirmText="Yes, Edit"
+        cancelText="No, Keep View Only"
+      />
 
       {/* Delete Confirmation */}
       <ConfirmDialog

@@ -179,7 +179,6 @@ export const OrderReceiveModal: React.FC<OrderReceiveModalProps> = ({
           <table className="custom-table">
             <thead>
               <tr>
-                <th style={{ width: '80px' }}>S.No.</th>
                 <th>Item Name</th>
                 <th style={{ width: '90px', textAlign: 'center' }}>Ordered</th>
                 <th style={{ width: '90px', textAlign: 'center' }}>Prev Recd</th>
@@ -194,7 +193,6 @@ export const OrderReceiveModal: React.FC<OrderReceiveModalProps> = ({
 
                 return (
                   <tr key={item.id}>
-                    <td style={{ fontFamily: 'monospace' }}>{item.sno}</td>
                     <td style={{ fontWeight: 700 }}>{item.itemName}</td>
                     <td style={{ textAlign: 'center', fontWeight: 700 }}>{item.orderedQty}</td>
                     <td style={{ textAlign: 'center', color: '#6B7280' }}>{prevRecd}</td>

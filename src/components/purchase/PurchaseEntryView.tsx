@@ -5,9 +5,10 @@ import { useAuth } from '../../context/AuthContext';
 import { Item, Supplier, Purchase, PurchaseItem } from '../../types';
 import { StockEngine } from '../../db/stockEngine';
 import { getTodayDateString } from '../../utils/dateUtils';
-import { calculateItemPricing, calculateBillSummary, calculateItemUnitBreakdown, calculateUnitBFromUnitA } from '../../utils/calculations';
+import { calculateItemPricing, calculateBillSummary, calculateUnitBFromUnitA, calculateItemUnitBreakdown } from '../../utils/calculations';
 import { PurchasePrintVoucher } from './PurchasePrintVoucher';
 import { ConfirmDialog } from '../common/ConfirmDialog';
+import { ItemSearchSelect } from '../common/ItemSearchSelect';
 import { Search } from 'lucide-react';
 
 export const PurchaseEntryView: React.FC = () => {
@@ -20,16 +21,28 @@ export const PurchaseEntryView: React.FC = () => {
   const items = useMemo(() => db.getItems().filter(i => i.isActive !== false), [refreshKey]);
   const purchasesHistory = useMemo(() => db.getPurchases(), [refreshKey]);
 
+  // Unique categories from items
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    items.forEach(i => {
+      if (i.category) set.add(i.category);
+    });
+    return Array.from(set);
+  }, [items]);
+
   // Header State
   const [billDate, setBillDate] = useState<string>(getTodayDateString());
   const [recdDate, setRecdDate] = useState<string>(getTodayDateString());
   const [billNo, setBillNo] = useState<string>('');
   const [supplierId, setSupplierId] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(null);
   const [associatedOrderId, setAssociatedOrderId] = useState<string | null>(null);
   const [isJustSaved, setIsJustSaved] = useState(false);
+  const [isViewOnly, setIsViewOnly] = useState(false);
+  const [isEditPromptOpen, setIsEditPromptOpen] = useState(false);
 
-  // Line item selection & dual unit state
+  // Line item selection & Unit A state (Purchase is strictly in Unit A)
   const [selectedItemId, setSelectedItemId] = useState<string>('');
   const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
 
@@ -37,16 +50,18 @@ export const PurchaseEntryView: React.FC = () => {
   const [unitAGstPercent, setUnitAGstPercent] = useState<string>(String(settings.defaultGstPercent || 18));
   const [unitAQty, setUnitAQty] = useState<string>('1');
 
-  const [unitBBasicPrice, setUnitBBasicPrice] = useState<string>('0');
-  const [unitBGstPercent, setUnitBGstPercent] = useState<string>(String(settings.defaultGstPercent || 18));
-  const [unitBQty, setUnitBQty] = useState<string>('1');
-
-  // Items added
+  // Items added to the bill
   const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>([]);
   const [isTouched, setIsTouched] = useState(false);
   const [searchHistory, setSearchHistory] = useState('');
 
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+
+  // Filter items by category if selected
+  const filteredCategoryItems = useMemo(() => {
+    if (!selectedCategory) return items;
+    return items.filter(i => i.category?.toLowerCase() === selectedCategory.toLowerCase());
+  }, [items, selectedCategory]);
 
   // Handle incoming order prefill from ORDERED section
   useEffect(() => {
@@ -55,7 +70,7 @@ export const PurchaseEntryView: React.FC = () => {
       if (pendingPurchasePrefill.supplierId) {
         setSupplierId(pendingPurchasePrefill.supplierId);
       }
-      setBillNo(''); // User must enter physical supplier bill number
+      setBillNo(''); // User enters physical supplier bill number
       setBillDate(pendingPurchasePrefill.orderDate || getTodayDateString());
       setRecdDate(getTodayDateString());
       setAssociatedOrderId(pendingPurchasePrefill.orderId || null);
@@ -108,17 +123,13 @@ export const PurchaseEntryView: React.FC = () => {
     return items.find(i => i.id === selectedItemId);
   }, [items, selectedItemId]);
 
-  const hasUnitB = Boolean(
-    selectedItemObj &&
-    (selectedItemObj.hasSecondaryUnit || (selectedItemObj.unitB && selectedItemObj.unitB.isActive !== false && selectedItemObj.unitB.unitName && selectedItemObj.unitB.unitName !== selectedItemObj.unitA?.unitName))
-  );
-
   const handleItemSelect = (itemId: string) => {
     setIsTouched(true);
     setSelectedItemId(itemId);
     setEditingItemIndex(null);
     const found = items.find(i => i.id === itemId);
     if (found) {
+      if (found.category) setSelectedCategory(found.category);
       const uA = found.unitA || {
         basicPrice: found.purchaseRate || 0,
         gstPercent: found.gstPercent || settings.defaultGstPercent || 18,
@@ -126,16 +137,10 @@ export const PurchaseEntryView: React.FC = () => {
       setUnitABasicPrice(String(uA.basicPrice || 0));
       setUnitAGstPercent(String(uA.gstPercent || settings.defaultGstPercent || 18));
       setUnitAQty('1');
-
-      if (found.unitB) {
-        setUnitBBasicPrice(String(found.unitB.basicPrice || 0));
-        setUnitBGstPercent(String(found.unitB.gstPercent || settings.defaultGstPercent || 18));
-        setUnitBQty('1');
-      }
     }
   };
 
-  // Live computed pricing for Unit A and Unit B
+  // Live computed pricing for Unit A
   const calculatedUnitAPricing = useMemo(() => {
     return calculateItemPricing(
       Number(unitABasicPrice),
@@ -145,16 +150,6 @@ export const PurchaseEntryView: React.FC = () => {
       0
     );
   }, [unitABasicPrice, unitAGstPercent, unitAQty]);
-
-  const calculatedUnitBPricing = useMemo(() => {
-    return calculateItemPricing(
-      Number(unitBBasicPrice),
-      Number(unitBGstPercent),
-      0,
-      Number(unitBQty),
-      0
-    );
-  }, [unitBBasicPrice, unitBGstPercent, unitBQty]);
 
   const selectedItemCurrentStock = useMemo(() => {
     if (!selectedItemId) return 0;
@@ -185,8 +180,8 @@ export const PurchaseEntryView: React.FC = () => {
     const newPurchaseItem: PurchaseItem = {
       id: `pur-item-${Date.now()}-${Math.random()}`,
       itemId: selectedItemObj.id,
-      sno: selectedItemObj.sno,
-      itemName: hasUnitB ? `${selectedItemObj.name} (${unitName})` : selectedItemObj.name,
+      sno: selectedItemObj.sno || '',
+      itemName: selectedItemObj.name,
       unit: unitName,
       basicPrice: calculatedUnitAPricing.basicPrice,
       gstPercent: calculatedUnitAPricing.gstPercent,
@@ -216,69 +211,15 @@ export const PurchaseEntryView: React.FC = () => {
     setUnitAQty('1');
   };
 
-  const handleAddUnitBItem = () => {
-    setIsTouched(true);
-    if (!selectedItemId || !selectedItemObj || !selectedItemObj.unitB) {
-      showAlert('Secondary unit not configured for this item.', 'Invalid Action', 'warning');
-      return;
-    }
-    const numQty = Number(unitBQty);
-    if (!numQty || numQty <= 0) {
-      showAlert('Please enter a quantity greater than 0 for Unit B.', 'Invalid Quantity', 'warning');
-      return;
-    }
-
-    const convFactor = Number(selectedItemObj.unitB.conversionFactor) || 1;
-    const unitName = selectedItemObj.unitB.unitName || 'Unit B';
-    const baseQty = Number((numQty / convFactor).toFixed(4));
-
-    const newPurchaseItem: PurchaseItem = {
-      id: `pur-item-${Date.now()}-${Math.random()}`,
-      itemId: selectedItemObj.id,
-      sno: selectedItemObj.sno,
-      itemName: `${selectedItemObj.name} (${unitName})`,
-      unit: unitName,
-      basicPrice: calculatedUnitBPricing.basicPrice,
-      gstPercent: calculatedUnitBPricing.gstPercent,
-      gstAmt: calculatedUnitBPricing.gstAmt,
-      nettPrice: calculatedUnitBPricing.nettPrice,
-      toPercent: 0,
-      roundup: 0,
-      salePrice: calculatedUnitBPricing.nettPrice,
-      qty: calculatedUnitBPricing.qty,
-      amount: calculatedUnitBPricing.amount,
-      conversionFactor: convFactor,
-      isSecondaryUnit: true,
-      baseQty
-    };
-
-    if (editingItemIndex !== null && editingItemIndex >= 0) {
-      const updated = [...purchaseItems];
-      updated[editingItemIndex] = newPurchaseItem;
-      setPurchaseItems(updated);
-      setEditingItemIndex(null);
-      showToast('Item updated in purchase table', 'info');
-    } else {
-      setPurchaseItems(prev => [...prev, newPurchaseItem]);
-      showToast(`Added ${numQty} ${unitName} (${baseQty} primary units) to purchase`, 'success');
-    }
-
-    setUnitBQty('1');
-  };
-
   const handleEditLineItem = (index: number) => {
     setIsTouched(true);
     const item = purchaseItems[index];
+    const foundItem = items.find(i => i.id === item.itemId);
+    if (foundItem?.category) setSelectedCategory(foundItem.category);
     setSelectedItemId(item.itemId);
-    if (item.isSecondaryUnit) {
-      setUnitBBasicPrice(String(item.basicPrice));
-      setUnitBGstPercent(String(item.gstPercent));
-      setUnitBQty(String(item.qty));
-    } else {
-      setUnitABasicPrice(String(item.basicPrice));
-      setUnitAGstPercent(String(item.gstPercent));
-      setUnitAQty(String(item.qty));
-    }
+    setUnitABasicPrice(String(item.basicPrice));
+    setUnitAGstPercent(String(item.gstPercent));
+    setUnitAQty(String(item.qty));
     setEditingItemIndex(index);
   };
 
@@ -295,40 +236,40 @@ export const PurchaseEntryView: React.FC = () => {
     setEditingPurchaseId(null);
     setIsJustSaved(false);
     setIsTouched(false);
+    setIsViewOnly(false);
     setBillNo('');
     setBillDate(getTodayDateString());
     setRecdDate(getTodayDateString());
     setSupplierId('');
     setPurchaseItems([]);
     setSelectedItemId('');
-    setUnitABasicPrice('0');
-    setUnitAGstPercent(String(settings.defaultGstPercent || 18));
-    setUnitAQty('1');
-    setUnitBBasicPrice('0');
-    setUnitBGstPercent(String(settings.defaultGstPercent || 18));
-    setUnitBQty('1');
     setEditingItemIndex(null);
+    setAssociatedOrderId(null);
     showToast('New Purchase entry ready', 'info');
   };
 
   const handleSavePurchase = () => {
-    if (!supplierId) {
-      showAlert("Please select a Supplier / Vendor first.", 'Validation Error', 'warning');
+    if (isViewOnly) {
+      setIsEditPromptOpen(true);
       return;
     }
     if (!billNo.trim()) {
-      showAlert("Please enter the Supplier's Bill / Invoice Number first.", 'Validation Error', 'warning');
+      showAlert('Please enter the Supplier Bill No.', 'Validation Error', 'error');
+      return;
+    }
+    if (!supplierId) {
+      showAlert('Please select a Supplier.', 'Validation Error', 'error');
       return;
     }
     if (purchaseItems.length === 0) {
-      showAlert('Please add at least one item to the purchase bill.', 'Empty Line Items', 'warning');
+      showAlert('Please add at least one item to the purchase bill.', 'Validation Error', 'error');
       return;
     }
 
     const supplier = suppliers.find(s => s.id === supplierId);
 
     const purchaseRecord: Purchase = {
-      id: editingPurchaseId || `pur-${Date.now()}`,
+      id: editingPurchaseId || `purchase-${Date.now()}`,
       billNo: billNo.trim(),
       billDate,
       recdDate,
@@ -341,48 +282,32 @@ export const PurchaseEntryView: React.FC = () => {
       billTotal: billSummary.billTotal,
       recdCash: 0,
       recdUpi: 0,
-      notes: `Purchase from ${supplier?.name}`,
       orderId: associatedOrderId || undefined,
       createdAt: new Date().toISOString()
     };
 
-    // Auto-update Item Master base prices & GST % if updated during purchase invoice entry
-    purchaseItems.forEach(pItem => {
-      const currentItem = db.getItemById(pItem.itemId);
-      if (currentItem) {
-        let newUnitABasicPrice = currentItem.unitA?.basicPrice ?? currentItem.purchaseRate ?? 0;
-        let newGstPercent = currentItem.unitA?.gstPercent ?? currentItem.gstPercent ?? 18;
-        let hasChange = false;
-
-        if (pItem.isSecondaryUnit) {
-          const conv = Number(pItem.conversionFactor) || 1;
-          const derivedUnitAPrice = Number((pItem.basicPrice * conv).toFixed(2));
-          if (derivedUnitAPrice !== newUnitABasicPrice || pItem.gstPercent !== newGstPercent) {
-            newUnitABasicPrice = derivedUnitAPrice;
-            newGstPercent = pItem.gstPercent;
-            hasChange = true;
-          }
-        } else {
-          if (pItem.basicPrice !== newUnitABasicPrice || pItem.gstPercent !== newGstPercent) {
-            newUnitABasicPrice = pItem.basicPrice;
-            newGstPercent = pItem.gstPercent;
-            hasChange = true;
-          }
-        }
-
-        if (hasChange) {
-          const updatedItem = { ...currentItem };
-          updatedItem.purchaseRate = newUnitABasicPrice;
-          updatedItem.gstPercent = newGstPercent;
+    // Auto-update Item Master prices for newly purchased items based on their latest landed cost
+    purchaseItems.forEach(pi => {
+      const itemToUpdate = items.find(i => i.id === pi.itemId);
+      if (itemToUpdate) {
+        const newBasic = Number(pi.basicPrice);
+        const newGst = Number(pi.gstPercent);
+        
+        if (newBasic > 0) {
+          const updatedItem = { ...itemToUpdate };
+          updatedItem.purchaseRate = newBasic;
+          updatedItem.gstPercent = newGst;
 
           if (updatedItem.unitA) {
-            const updatedUnitA = calculateItemUnitBreakdown({
+            const updatedUnitA: any = {
               ...updatedItem.unitA,
-              basicPrice: newUnitABasicPrice,
-              gstPercent: newGstPercent
-            });
+              basicPrice: newBasic,
+              gstPercent: newGst
+            };
+            const breakdownA = calculateItemUnitBreakdown(updatedUnitA);
+            updatedUnitA.salePrice = breakdownA.salePrice;
             updatedItem.unitA = updatedUnitA;
-            updatedItem.saleRate = updatedUnitA.salePrice;
+            updatedItem.saleRate = breakdownA.salePrice;
 
             if (updatedItem.hasSecondaryUnit && updatedItem.unitB) {
               const conv = Number(updatedItem.unitB.conversionFactor) || 1;
@@ -394,43 +319,46 @@ export const PurchaseEntryView: React.FC = () => {
               };
             }
           }
-
           db.saveItem(updatedItem);
         }
       }
     });
 
-    // Automatically increases Universal Stock Ledger via PURCHASE_IN!
+    // Save to Database
     db.savePurchase(purchaseRecord);
 
     if (editingPurchaseId) {
       setIsJustSaved(true);
       setIsTouched(false);
+      setIsViewOnly(false);
       showToast(`Purchase bill ${purchaseRecord.billNo} updated! Stock adjusted.`, 'success');
     } else {
       setIsJustSaved(false);
+      setIsViewOnly(false);
       showToast(`Purchase bill ${purchaseRecord.billNo} saved! Item rates and stock updated.`, 'success');
       setAssociatedOrderId(null);
       handleNewEntry();
     }
   };
 
-  const handleLoadPurchaseForEdit = (purchase: Purchase) => {
+  const handleLoadPurchaseForEdit = (purchase: Purchase, viewOnly: boolean = false) => {
     setIsJustSaved(false);
     setEditingPurchaseId(purchase.id);
+    setIsViewOnly(viewOnly);
     setIsTouched(true);
     setBillNo(purchase.billNo);
     setBillDate(purchase.billDate);
     setRecdDate(purchase.recdDate || purchase.billDate);
     setSupplierId(purchase.supplierId);
     setPurchaseItems(purchase.items);
-    showToast(`Loaded purchase bill ${purchase.billNo} for editing`, 'info');
+    setAssociatedOrderId(purchase.orderId || null);
+    showToast(viewOnly ? `Viewing purchase bill ${purchase.billNo}` : `Loaded purchase bill ${purchase.billNo} for editing`, 'info');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDeleteCurrentPurchase = () => {
     if (!editingPurchaseId) {
-      showToast('Please select a saved purchase to delete', 'warning');
+      showToast('Please select a saved purchase bill to delete', 'warning');
       return;
     }
     if (!hasPermission('DELETE_PURCHASE')) {
@@ -454,11 +382,11 @@ export const PurchaseEntryView: React.FC = () => {
 
   const currentPurchaseForPrint: Purchase = {
     id: editingPurchaseId || 'temp',
-    billNo,
+    billNo: billNo || 'NEW-BILL',
     billDate,
     recdDate,
     supplierId,
-    supplierName: suppliers.find(s => s.id === supplierId)?.name || 'Supplier',
+    supplierName: suppliers.find(s => s.id === supplierId)?.name || 'Cash Supplier',
     items: purchaseItems,
     basicTotal: billSummary.basicTotal,
     gstTotal: billSummary.gstTotal,
@@ -480,11 +408,14 @@ export const PurchaseEntryView: React.FC = () => {
     );
   }, [purchasesHistory, searchHistory]);
 
-  const isEditing = Boolean(editingPurchaseId);
-  const isCreating = Boolean(!isEditing && !isJustSaved && (isTouched || purchaseItems.length > 0 || selectedItemId || supplierId || billNo.trim()));
+  const isEditing = Boolean(editingPurchaseId && !isViewOnly);
+  const isViewing = Boolean(editingPurchaseId && isViewOnly);
+  const isCreating = Boolean(!editingPurchaseId && !isJustSaved && (isTouched || purchaseItems.length > 0 || selectedItemId || billNo.trim() !== ''));
 
   const cardStateClass = isJustSaved
     ? 'is-saved-yellow'
+    : isViewing
+    ? 'is-initial-blue'
     : isEditing
     ? 'is-editing-pink'
     : isCreating
@@ -493,9 +424,10 @@ export const PurchaseEntryView: React.FC = () => {
 
   return (
     <div className="content-panel-grey">
+      {/* Hidden Print Voucher */}
       <PurchasePrintVoucher purchase={currentPurchaseForPrint} />
 
-      {/* Top Header Strip matching new purchase.jpg */}
+      {/* Top Header Strip */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '8px 36px', minWidth: '220px', textAlign: 'center' }}>
@@ -504,6 +436,10 @@ export const PurchaseEntryView: React.FC = () => {
           {isJustSaved ? (
             <span className="active-mode-indicator is-saved">
               ● Saved / Updated Just Now ({billNo})
+            </span>
+          ) : isViewing ? (
+            <span className="active-mode-indicator is-initial" style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #F59E0B' }}>
+              ● Viewing Purchase Bill: {billNo} (Read Only — Double-Click to Edit)
             </span>
           ) : isEditing ? (
             <span className="active-mode-indicator is-editing">
@@ -521,14 +457,68 @@ export const PurchaseEntryView: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Form Container: Light Blue on Initial, Light Green on Creating, Light Pink on Editing */}
+      {/* Main Form Container */}
       <div
         className={`dynamic-entry-card ${cardStateClass}`}
         style={{
+          borderRadius: '14px',
+          padding: '24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px',
           maxWidth: '960px',
-          margin: '0 auto'
+          margin: '0 auto',
+          position: 'relative'
         }}
       >
+        {isViewing && (
+          <div
+            onClick={() => setIsEditPromptOpen(true)}
+            style={{
+              padding: '10px 16px',
+              background: '#FEF3C7',
+              border: '1.5px solid #F59E0B',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              cursor: 'pointer'
+            }}
+          >
+            <span style={{ fontWeight: 800, color: '#92400E', fontSize: '0.88rem' }}>
+              🔒 View-Only Mode: Purchase bill is locked against accidental edits. Click anywhere or press button to edit.
+            </span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsEditPromptOpen(true);
+              }}
+              style={{
+                background: '#D97706',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '5px 14px',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                cursor: 'pointer'
+              }}
+            >
+              Unlock / Edit
+            </button>
+          </div>
+        )}
+
+        <div
+          onClickCapture={isViewing ? (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsEditPromptOpen(true);
+          } : undefined}
+          style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
+        >
+
         {/* Top Dates & Bill No Row */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -549,13 +539,14 @@ export const PurchaseEntryView: React.FC = () => {
             <label style={{ fontWeight: 900, fontSize: '0.9rem' }}>BILL NO.</label>
             <input
               type="text"
+              placeholder="Supplier Bill #"
               className="input-text-clean"
               value={billNo}
               onChange={e => {
                 setIsTouched(true);
                 setBillNo(e.target.value);
               }}
-              style={{ width: '140px', fontWeight: 800 }}
+              style={{ width: '150px', fontWeight: 800 }}
             />
           </div>
 
@@ -606,22 +597,43 @@ export const PurchaseEntryView: React.FC = () => {
           </button>
         </div>
 
-        {/* ITEM SELECTION */}
+        {/* CATEGORY SELECTION */}
         <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 34px', gap: '10px', alignItems: 'center' }}>
-          <label style={{ fontWeight: 900, fontSize: '1.05rem' }}>ITEM :</label>
+          <label style={{ fontWeight: 900, fontSize: '1.05rem' }}>CATG. :</label>
           <select
             className="input-text-clean"
-            value={selectedItemId}
-            onChange={e => handleItemSelect(e.target.value)}
+            value={selectedCategory}
+            onChange={e => {
+              setIsTouched(true);
+              setSelectedCategory(e.target.value);
+              setSelectedItemId('');
+            }}
             style={{ fontSize: '0.95rem', height: '38px', fontWeight: 700 }}
           >
-            <option value="">-- Select Item --</option>
-            {items.map(i => (
-              <option key={i.id} value={i.id}>
-                [{i.sno}] {i.name}
-              </option>
+            <option value="">-- All Categories --</option>
+            {categories.map(c => (
+              <option key={c} value={c}>{c}</option>
             ))}
           </select>
+          <button
+            type="button"
+            className="btn-quick-n"
+            title="Quick Create Item / Category"
+            onClick={() => openQuickModal('ITEM', () => setIsTouched(true))}
+          >
+            N
+          </button>
+        </div>
+
+        {/* SEARCHABLE ITEM SELECTION */}
+        <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 34px', gap: '10px', alignItems: 'center' }}>
+          <label style={{ fontWeight: 900, fontSize: '1.05rem' }}>ITEM :</label>
+          <ItemSearchSelect
+            items={filteredCategoryItems}
+            selectedItemId={selectedItemId}
+            onSelectItem={(item) => handleItemSelect(item ? item.id : '')}
+            placeholder="Type item name to search..."
+          />
           <button
             type="button"
             className="btn-quick-n"
@@ -632,9 +644,8 @@ export const PurchaseEntryView: React.FC = () => {
           </button>
         </div>
 
-        {/* DUAL PRICING INPUT CARDS (UNIT-A & UNIT-B) */}
+        {/* PRICING INPUT CARD (UNIT-A ONLY FOR PURCHASES) */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {/* Card 1: Unit A (Primary) */}
           <div
             style={{
               background: '#FFFFFF',
@@ -645,7 +656,7 @@ export const PurchaseEntryView: React.FC = () => {
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
               <span style={{ fontWeight: 900, fontSize: '0.95rem', color: '#1E3A8A' }}>
-                UNIT-A : {selectedItemObj?.unitA?.unitName || selectedItemObj?.unit || 'Roll'} (Primary)
+                UNIT-A : {selectedItemObj?.unitA?.unitName || selectedItemObj?.unit || 'Roll'} (Primary Inward Unit)
               </span>
               <span style={{ fontSize: '0.8rem', color: '#6B7280', fontWeight: 700 }}>
                 Available Stock: {selectedItemCurrentStock} {selectedItemObj?.unitA?.unitName || selectedItemObj?.unit || 'Units'}
@@ -721,7 +732,7 @@ export const PurchaseEntryView: React.FC = () => {
 
               <div>
                 <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
-                  Qty ({selectedItemObj?.unitA?.unitName || 'Unit A'})
+                  Qty ({selectedItemObj?.unitA?.unitName || selectedItemObj?.unit || 'Unit A'})
                 </label>
                 <input
                   type="number"
@@ -754,151 +765,16 @@ export const PurchaseEntryView: React.FC = () => {
                   type="button"
                   onClick={handleAddUnitAItem}
                   className="btn-customer-save"
-                  style={{ padding: '6px 14px', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+                  style={{ padding: '6px 16px', fontSize: '0.85rem', whiteSpace: 'nowrap' }}
                 >
-                  + Add {selectedItemObj?.unitA?.unitName || 'Unit A'}
+                  + Add
                 </button>
               </div>
             </div>
           </div>
-
-          {/* Card 2: Unit B (Shown if secondary unit is enabled) */}
-          {hasUnitB && (
-            <div
-              style={{
-                background: '#FFFFFF',
-                border: '1.5px solid #000000',
-                borderRadius: '8px',
-                padding: '10px 12px'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontWeight: 900, fontSize: '0.95rem', color: '#047857' }}>
-                    UNIT-B : {selectedItemObj?.unitB?.unitName || 'Unit B'} (Secondary)
-                  </span>
-                  <span style={{ fontSize: '0.8rem', background: '#DCFCE7', color: '#166534', padding: '1px 8px', borderRadius: '10px', fontWeight: 800 }}>
-                    1 {selectedItemObj?.unitA?.unitName || 'Unit A'} = {selectedItemObj?.unitB?.conversionFactor || 40} {selectedItemObj?.unitB?.unitName || 'Unit B'}
-                  </span>
-                </div>
-                <span style={{ fontSize: '0.8rem', color: '#6B7280', fontWeight: 700 }}>
-                  Equivalent in {selectedItemObj?.unitB?.unitName || 'Unit B'}: {Number((selectedItemCurrentStock * (Number(selectedItemObj?.unitB?.conversionFactor) || 1)).toFixed(1))} {selectedItemObj?.unitB?.unitName}
-                </span>
-              </div>
-
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1.2fr 80px 1fr 1fr 90px 1.1fr auto',
-                  gap: '8px',
-                  alignItems: 'flex-end'
-                }}
-              >
-                <div>
-                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
-                    Besic Price
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="input-text-clean"
-                    value={unitBBasicPrice}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitBBasicPrice(e.target.value);
-                    }}
-                    style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
-                    GST %
-                  </label>
-                  <input
-                    type="number"
-                    className="input-text-clean"
-                    value={unitBGstPercent}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitBGstPercent(e.target.value);
-                    }}
-                    style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
-                    GST Amt.
-                  </label>
-                  <input
-                    type="text"
-                    readOnly
-                    className="input-text-clean"
-                    value={calculatedUnitBPricing.gstAmt}
-                    style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
-                    Nett Price
-                  </label>
-                  <input
-                    type="text"
-                    readOnly
-                    className="input-text-clean"
-                    value={calculatedUnitBPricing.nettPrice}
-                    style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
-                    Qty ({selectedItemObj?.unitB?.unitName || 'Unit B'})
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    className="input-text-clean"
-                    value={unitBQty}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitBQty(e.target.value);
-                    }}
-                    style={{ textAlign: 'center', padding: '4px', fontWeight: 900, color: '#EA3943' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
-                    Amount
-                  </label>
-                  <input
-                    type="text"
-                    readOnly
-                    className="input-text-clean"
-                    value={calculatedUnitBPricing.amount}
-                    style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 800 }}
-                  />
-                </div>
-
-                <div style={{ paddingBottom: '2px' }}>
-                  <button
-                    type="button"
-                    onClick={handleAddUnitBItem}
-                    className="btn-customer-save"
-                    style={{ padding: '6px 14px', fontSize: '0.82rem', whiteSpace: 'nowrap', background: '#A7F3D0' }}
-                  >
-                    + Add {selectedItemObj?.unitB?.unitName || 'Unit B'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* ITEMS TABLE matching new purchase.jpg */}
+        {/* ITEMS TABLE */}
         <div style={{ border: '2px solid #000000', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -927,7 +803,7 @@ export const PurchaseEntryView: React.FC = () => {
               {purchaseItems.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ padding: '30px', textAlign: 'center', color: '#9CA3AF', fontWeight: 600 }}>
-                    No items in this purchase bill. Select an item above and click "Add".
+                    No items in this purchase bill. Select an item above and click "+ Add".
                   </td>
                 </tr>
               ) : (
@@ -942,7 +818,7 @@ export const PurchaseEntryView: React.FC = () => {
                     }}
                   >
                     <td style={{ padding: '8px 12px', fontWeight: 800, borderRight: '1px solid #000000' }}>
-                      [{item.sno}] {item.itemName}
+                      {item.itemName}
                     </td>
                     <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, borderRight: '1px solid #000000' }}>
                       {item.basicPrice}
@@ -1005,8 +881,8 @@ export const PurchaseEntryView: React.FC = () => {
               type="button"
               className="btn-customer-action-pill"
               onClick={handleDeleteCurrentPurchase}
-              disabled={!isEditing}
-              style={{ opacity: isEditing ? 1 : 0.5, cursor: isEditing ? 'pointer' : 'not-allowed' }}
+              disabled={!isEditing && !isViewing}
+              style={{ opacity: (isEditing || isViewing) ? 1 : 0.5, cursor: (isEditing || isViewing) ? 'pointer' : 'not-allowed' }}
             >
               Del
             </button>
@@ -1017,7 +893,7 @@ export const PurchaseEntryView: React.FC = () => {
               className="btn-customer-save"
               style={{ padding: '10px 48px', fontSize: '1.2rem', minWidth: '160px' }}
             >
-              Save
+              {isViewing ? 'Edit Bill' : 'Save'}
             </button>
 
             <button
@@ -1029,9 +905,10 @@ export const PurchaseEntryView: React.FC = () => {
             </button>
           </div>
         </div>
+        </div>
       </div>
 
-      {/* Purchase Inward History in the Downside (Always Visible) */}
+      {/* Purchase Inward History */}
       <div id="purchase-inward-register" style={{ marginTop: '28px', background: '#FFFFFF', border: '2px solid #000000', borderRadius: '12px', padding: '20px', maxWidth: '960px', margin: '28px auto 0', boxShadow: '0 2px 4px rgba(0,0,0,0.04)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -1080,7 +957,9 @@ export const PurchaseEntryView: React.FC = () => {
                       backgroundColor: editingPurchaseId === p.id ? '#EFF6FF' : 'transparent',
                       cursor: 'pointer'
                     }}
-                    onClick={() => handleLoadPurchaseForEdit(p)}
+                    onClick={() => handleLoadPurchaseForEdit(p, true)}
+                    onDoubleClick={() => handleLoadPurchaseForEdit(p, false)}
+                    title="Single-click to View, Double-click to Edit"
                   >
                     <td>{p.billDate}</td>
                     <td style={{ fontWeight: 800 }}>{p.billNo}</td>
@@ -1092,11 +971,11 @@ export const PurchaseEntryView: React.FC = () => {
                         type="button"
                         onClick={e => {
                           e.stopPropagation();
-                          handleLoadPurchaseForEdit(p);
+                          handleLoadPurchaseForEdit(p, false);
                         }}
                         style={{
-                          background: editingPurchaseId === p.id ? '#BFDBFE' : '#E2D2F8',
-                          color: editingPurchaseId === p.id ? '#1E40AF' : '#EA3943',
+                          background: (editingPurchaseId === p.id && !isViewOnly) ? '#BFDBFE' : '#E2D2F8',
+                          color: (editingPurchaseId === p.id && !isViewOnly) ? '#1E40AF' : '#EA3943',
                           border: '1px solid #C4B5FD',
                           borderRadius: '12px',
                           padding: '3px 12px',
@@ -1105,7 +984,7 @@ export const PurchaseEntryView: React.FC = () => {
                           cursor: 'pointer'
                         }}
                       >
-                        {editingPurchaseId === p.id ? 'Editing' : 'Load'}
+                        {(editingPurchaseId === p.id && !isViewOnly) ? 'Editing' : 'Edit'}
                       </button>
                     </td>
                   </tr>
@@ -1115,6 +994,21 @@ export const PurchaseEntryView: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Edit Mode Prompt Confirmation */}
+      <ConfirmDialog
+        isOpen={isEditPromptOpen}
+        onClose={() => setIsEditPromptOpen(false)}
+        onConfirm={() => {
+          setIsViewOnly(false);
+          setIsEditPromptOpen(false);
+          showToast('Edit mode enabled', 'info');
+        }}
+        title="Enable Edit Mode?"
+        message="Would you like to edit this purchase voucher?"
+        confirmText="Yes, Edit"
+        cancelText="No, Keep View Only"
+      />
 
       <ConfirmDialog
         isOpen={isDeleteConfirmOpen}

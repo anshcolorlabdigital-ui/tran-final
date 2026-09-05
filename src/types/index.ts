@@ -47,7 +47,11 @@ export interface Party {
   gstin: string; // Gst No.
   openingBalance: number;
   creditLimit: number;
-  isActive: boolean;
+  allowCredit?: boolean; // When true, customer can make partial/credit purchases
+  partyType?: 'DEALER' | 'AMATEUR'; // Dealer vs Amateur (Retailer/End Customer)
+  dealerProfitPercent?: number; // Custom profit % configured when party is a Dealer
+  amateurProfitPercent?: number; // Custom profit % configured when party is an Amateur
+  isActive: boolean; // When false, hidden from Sales dropdowns but visible in Party Master
   createdAt: string;
 }
 
@@ -183,6 +187,22 @@ export interface SaleItem {
   baseQty?: number;
 }
 
+export interface PartyLog {
+  id: string;
+  partyId: string;
+  partyName: string;
+  date: string; // YYYY-MM-DD
+  type: 'SALE' | 'PAYMENT' | 'OPENING_BALANCE' | 'CREDIT_ADJUSTMENT';
+  refNo: string; // e.g. INV-1002, RCPT-001
+  totalAmount: number; // Sale bill total or Payment receipt total
+  paidAmount: number; // Received via cash + UPI
+  balanceChange: number; // Positive = credit added to balance, Negative = payment reducing balance
+  runningBalance?: number; // Calculated balance after this transaction
+  paymentMode?: 'CASH' | 'UPI' | 'COMBINED';
+  notes?: string;
+  createdAt: string;
+}
+
 export interface Sale {
   id: string;
   billNo: string;
@@ -196,6 +216,8 @@ export interface Sale {
   billTotal: number;
   recdCash: number;
   recdUpi: number;
+  balanceDue?: number; // Unpaid credit balance (billTotal - (recdCash + recdUpi))
+  isCreditSale?: boolean; // True if total paid < bill total
   notes?: string;
   createdAt: string;
 }
@@ -290,10 +312,19 @@ export interface CompanySettings {
   gstin: string;
   currencySymbol: string;
   defaultGstPercent: number;
+  defaultTransportPercent?: number;
   invoicePrefix: string;
-  purchasePrefix: string;
+  invoiceNextNumber?: number;
+  invoicePadDigits?: number;
+  purchasePrefix?: string;
+  purchaseNextNumber?: number;
+  purchasePadDigits?: number;
   selfUsePrefix: string;
+  selfUseNextNumber?: number;
+  selfUsePadDigits?: number;
   orderPrefix: string;
+  orderNextNumber?: number;
+  orderPadDigits?: number;
 }
 
 export interface ItemStockSummary {

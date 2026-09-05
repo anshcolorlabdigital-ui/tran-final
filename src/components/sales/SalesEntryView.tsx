@@ -2,12 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../db/db';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import { Item, Party, Sale, SaleItem } from '../../types';
+import { Item, ItemUnitPricing, Party, Sale, SaleItem } from '../../types';
 import { StockEngine } from '../../db/stockEngine';
 import { getTodayDateString } from '../../utils/dateUtils';
 import { calculateItemPricing, calculateBillSummary } from '../../utils/calculations';
 import { SalesPrintInvoice } from './SalesPrintInvoice';
 import { ConfirmDialog } from '../common/ConfirmDialog';
+import { ItemSearchSelect } from '../common/ItemSearchSelect';
 import { Search } from 'lucide-react';
 
 export const SalesEntryView: React.FC = () => {
@@ -34,6 +35,8 @@ export const SalesEntryView: React.FC = () => {
   const [partyId, setPartyId] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
+  const [isViewOnly, setIsViewOnly] = useState<boolean>(false);
+  const [isEditPromptOpen, setIsEditPromptOpen] = useState<boolean>(false);
 
   // Line Item Input Strip State
   const [selectedItemId, setSelectedItemId] = useState<string>('');
@@ -68,11 +71,50 @@ export const SalesEntryView: React.FC = () => {
     if (!editingSaleId) {
       setBillNo(StockEngine.getNextBillNumber('SALE'));
       setBillDate(selectedDate || getTodayDateString());
-      if (parties.length > 0 && !partyId) {
-        setPartyId(parties[0].id);
-      }
     }
-  }, [editingSaleId, selectedDate, parties, refreshKey]);
+  }, [editingSaleId, selectedDate, refreshKey]);
+
+  // Active parties (only active parties show in sales dropdown)
+  const activeParties = useMemo(() => {
+    return parties.filter(p => p.isActive !== false);
+  }, [parties]);
+
+  const selectedParty = useMemo(() => {
+    return parties.find(p => p.id === partyId);
+  }, [parties, partyId]);
+
+  // Helper to compute profit % based on party classification (Dealer/Amateur custom profit % vs standard item profit %)
+  const getComputedProfitPercent = (itemPricing?: ItemUnitPricing | null, party?: Party | null) => {
+    if (!itemPricing) return 0;
+    if (party?.partyType === 'DEALER' && party?.dealerProfitPercent !== undefined) {
+      return party.dealerProfitPercent;
+    }
+    if (party?.partyType === 'AMATEUR' && party?.amateurProfitPercent !== undefined) {
+      return party.amateurProfitPercent;
+    }
+    return itemPricing.profPercent ?? 25;
+  };
+
+  // Live computed Bill Summary
+  const billSummary = useMemo(() => {
+    return calculateBillSummary(billItems);
+  }, [billItems]);
+
+  // Payment totals and credit calculation
+  const totalPaid = useMemo(() => {
+    return Number(((Number(recdCash) || 0) + (Number(recdUpi) || 0)).toFixed(2));
+  }, [recdCash, recdUpi]);
+
+  const balanceDue = useMemo(() => {
+    return Number((billSummary.billTotal - totalPaid).toFixed(2));
+  }, [billSummary.billTotal, totalPaid]);
+
+  const isCreditSale = totalPaid < billSummary.billTotal && billItems.length > 0;
+  const isCreditAllowed = Boolean(selectedParty?.allowCredit);
+
+  // Can save check: If credit sale and credit NOT allowed, save is blocked!
+  const isSaveBlockedByCredit = Boolean(isCreditSale && !isCreditAllowed);
+  const canSaveSale = Boolean(partyId && billItems.length > 0 && billNo.trim() && !isSaveBlockedByCredit);
 
   // Filter items by category if selected
   const filteredCategoryItems = useMemo(() => {
@@ -90,10 +132,11 @@ export const SalesEntryView: React.FC = () => {
   );
 
   // When selected item changes, auto-populate configured rates for Unit A & Unit B
-  const handleItemSelect = (itemId: string) => {
+  const handleItemSelect = (itemId: string, currentPartyId?: string) => {
     setIsTouched(true);
     setSelectedItemId(itemId);
     const found = items.find(i => i.id === itemId);
+    const effectiveParty = parties.find(p => p.id === (currentPartyId || partyId));
     if (found) {
       const uA = found.unitA || {
         basicPrice: found.purchaseRate || 0,
@@ -106,17 +149,25 @@ export const SalesEntryView: React.FC = () => {
 
       setUnitABasicPrice(String(uA.basicPrice || 0));
       setUnitAGstPercent(String(uA.gstPercent || 18));
-      const totalMarginA = (uA.tranPercent || 0) + (uA.profPercent || 0) + (uA.misPercent || 0);
-      setUnitAToPercent(String(totalMarginA));
+      const profitPercentA = getComputedProfitPercent(uA, effectiveParty);
+      setUnitAToPercent(String(profitPercentA));
       setUnitAQty('1');
 
       if (found.unitB) {
         setUnitBBasicPrice(String(found.unitB.basicPrice || 0));
         setUnitBGstPercent(String(found.unitB.gstPercent || 18));
-        const totalMarginB = (found.unitB.tranPercent || 0) + (found.unitB.profPercent || 0) + (found.unitB.misPercent || 0);
-        setUnitBToPercent(String(totalMarginB));
+        const profitPercentB = getComputedProfitPercent(found.unitB, effectiveParty);
+        setUnitBToPercent(String(profitPercentB));
         setUnitBQty('1');
       }
+    }
+  };
+
+  const handlePartyChange = (newPartyId: string) => {
+    setIsTouched(true);
+    setPartyId(newPartyId);
+    if (selectedItemId) {
+      handleItemSelect(selectedItemId, newPartyId);
     }
   };
 
@@ -144,11 +195,6 @@ export const SalesEntryView: React.FC = () => {
     if (!selectedItemId) return 0;
     return StockEngine.getItemCurrentStock(selectedItemId);
   }, [selectedItemId, refreshKey]);
-
-  // Live computed Bill Summary
-  const billSummary = useMemo(() => {
-    return calculateBillSummary(billItems);
-  }, [billItems]);
 
   const isFormActive = Boolean(editingSaleId || billItems.length > 0 || selectedItemId || isTouched);
 
@@ -285,9 +331,10 @@ export const SalesEntryView: React.FC = () => {
     setEditingSaleId(null);
     setIsJustSaved(false);
     setIsTouched(false);
+    setIsViewOnly(false);
     setBillNo(StockEngine.getNextBillNumber('SALE'));
     setBillDate(getTodayDateString());
-    if (parties.length > 0) setPartyId(parties[0].id);
+    setPartyId('');
     setBillItems([]);
     setRecdCash('0');
     setRecdUpi('0');
@@ -297,6 +344,10 @@ export const SalesEntryView: React.FC = () => {
   };
 
   const handleSaveSale = () => {
+    if (isViewOnly) {
+      setIsEditPromptOpen(true);
+      return;
+    }
     if (!partyId) {
       showAlert('Please select a customer / party.', 'Validation Error', 'error');
       return;
@@ -312,6 +363,16 @@ export const SalesEntryView: React.FC = () => {
 
     const party = parties.find(p => p.id === partyId);
 
+    // Credit enforcement: if total paid is less than bill total, check if party has allowCredit enabled
+    if (isSaveBlockedByCredit) {
+      showAlert(
+        `Party "${party?.name || 'Customer'}" does not have Credit Privileges enabled. Total payment received (₹${totalPaid}) must equal Bill Total (₹${billSummary.billTotal}). Please collect the full payment or enable "Allow Credit" in Party Master.`,
+        'Credit Sale Not Allowed',
+        'error'
+      );
+      return;
+    }
+
     const saleRecord: Sale = {
       id: editingSaleId || `sale-${Date.now()}`,
       billNo: billNo.trim(),
@@ -325,27 +386,32 @@ export const SalesEntryView: React.FC = () => {
       billTotal: billSummary.billTotal,
       recdCash: Number(recdCash) || 0,
       recdUpi: Number(recdUpi) || 0,
-      notes: `Cash: ₹${recdCash}, UPI: ₹${recdUpi}`,
+      balanceDue: isCreditSale ? balanceDue : 0,
+      isCreditSale: isCreditSale,
+      notes: isCreditSale ? `Credit Sale. Paid: ₹${totalPaid}, Balance Due: ₹${balanceDue}` : `Cash: ₹${recdCash}, UPI: ₹${recdUpi}`,
       createdAt: new Date().toISOString()
     };
 
-    // Save to Database: automatically registers SALE_OUT in universal Stock Ledger!
+    // Save to Database: automatically registers SALE_OUT in universal Stock Ledger and Party Statement Log!
     db.saveSale(saleRecord);
 
     if (editingSaleId) {
       setIsJustSaved(true);
       setIsTouched(false);
-      showToast(`Sale Invoice ${saleRecord.billNo} updated! Stock adjusted.`, 'success');
+      setIsViewOnly(false);
+      showToast(`Sale Invoice ${saleRecord.billNo} updated! Stock & Ledger adjusted.`, 'success');
     } else {
       setIsJustSaved(false);
-      showToast(`Sale Invoice ${saleRecord.billNo} saved! Stock updated.`, 'success');
+      setIsViewOnly(false);
+      showToast(`Sale Invoice ${saleRecord.billNo} saved! Stock & Ledger updated.`, 'success');
       handleNewEntry();
     }
   };
 
-  const handleLoadSaleForEdit = (sale: Sale) => {
+  const handleLoadSaleForEdit = (sale: Sale, viewOnly: boolean = false) => {
     setIsJustSaved(false);
     setEditingSaleId(sale.id);
+    setIsViewOnly(viewOnly);
     setIsTouched(true);
     setBillNo(sale.billNo);
     setBillDate(sale.billDate);
@@ -353,7 +419,7 @@ export const SalesEntryView: React.FC = () => {
     setBillItems(sale.items);
     setRecdCash(String(sale.recdCash || 0));
     setRecdUpi(String(sale.recdUpi || 0));
-    showToast(`Loaded invoice ${sale.billNo} for editing`, 'info');
+    showToast(viewOnly ? `Viewing invoice ${sale.billNo}` : `Loaded invoice ${sale.billNo} for editing`, 'info');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -408,11 +474,14 @@ export const SalesEntryView: React.FC = () => {
     );
   }, [salesHistory, searchHistory]);
 
-  const isEditing = Boolean(editingSaleId);
-  const isCreating = Boolean(!isEditing && !isJustSaved && (isTouched || billItems.length > 0 || selectedItemId || (parties.length > 0 && partyId !== parties[0]?.id)));
+  const isEditing = Boolean(editingSaleId && !isViewOnly);
+  const isViewing = Boolean(editingSaleId && isViewOnly);
+  const isCreating = Boolean(!editingSaleId && !isJustSaved && (isTouched || billItems.length > 0 || selectedItemId || (parties.length > 0 && partyId !== parties[0]?.id)));
 
   const cardStateClass = isJustSaved
     ? 'is-saved-yellow'
+    : isViewing
+    ? 'is-initial-blue'
     : isEditing
     ? 'is-editing-pink'
     : isCreating
@@ -433,6 +502,10 @@ export const SalesEntryView: React.FC = () => {
           {isJustSaved ? (
             <span className="active-mode-indicator is-saved">
               ● Saved / Updated Just Now ({billNo})
+            </span>
+          ) : isViewing ? (
+            <span className="active-mode-indicator is-initial" style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #F59E0B' }}>
+              ● Viewing Invoice: {billNo} (Read Only — Double-Click to Edit)
             </span>
           ) : isEditing ? (
             <span className="active-mode-indicator is-editing">
@@ -460,9 +533,57 @@ export const SalesEntryView: React.FC = () => {
           flexDirection: 'column',
           gap: '16px',
           maxWidth: '960px',
-          margin: '0 auto'
+          margin: '0 auto',
+          position: 'relative'
         }}
       >
+        {isViewing && (
+          <div
+            onClick={() => setIsEditPromptOpen(true)}
+            style={{
+              padding: '10px 16px',
+              background: '#FEF3C7',
+              border: '1.5px solid #F59E0B',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              cursor: 'pointer'
+            }}
+          >
+            <span style={{ fontWeight: 800, color: '#92400E', fontSize: '0.88rem' }}>
+              🔒 View-Only Mode: Sales invoice is locked against accidental edits. Click anywhere or press button to edit.
+            </span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsEditPromptOpen(true);
+              }}
+              style={{
+                background: '#D97706',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '5px 14px',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                cursor: 'pointer'
+              }}
+            >
+              Unlock / Edit
+            </button>
+          </div>
+        )}
+
+        <div
+          onClickCapture={isViewing ? (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsEditPromptOpen(true);
+          } : undefined}
+          style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
+        >
         {/* Top date and bill no */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '24px', alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -491,24 +612,42 @@ export const SalesEntryView: React.FC = () => {
         {/* PARTY SELECTION ROW */}
         <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 34px', gap: '10px', alignItems: 'center' }}>
           <label style={{ fontWeight: 900, fontSize: '1.05rem' }}>Party :</label>
-          <select
-            className="input-text-clean"
-            value={partyId}
-            onChange={e => { setIsTouched(true); setPartyId(e.target.value); }}
-            style={{ fontSize: '0.95rem', height: '38px', fontWeight: 700 }}
-          >
-            <option value="">-- Select Party / Customer --</option>
-            {parties.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.name} {p.phone ? `(${p.phone})` : ''}
-              </option>
-            ))}
-          </select>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <select
+              className="input-text-clean"
+              value={partyId}
+              onChange={e => handlePartyChange(e.target.value)}
+              style={{ fontSize: '0.95rem', height: '38px', fontWeight: 700, flex: 1 }}
+            >
+              <option value="">-- Select Party / Customer --</option>
+              {activeParties.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.name} {p.partyType === 'DEALER' ? `[DEALER • ${p.dealerProfitPercent ?? 10}%]` : (p.amateurProfitPercent !== undefined ? `[AMATEUR • ${p.amateurProfitPercent}%]` : '[AMATEUR]')} {p.phone ? `(${p.phone})` : ''} {p.allowCredit ? ' • [Credit Allowed]' : ' • [Cash Only]'}
+                </option>
+              ))}
+            </select>
+            {selectedParty && (
+              <span style={{
+                fontSize: '0.78rem',
+                fontWeight: 800,
+                padding: '4px 10px',
+                borderRadius: '6px',
+                whiteSpace: 'nowrap',
+                background: selectedParty.partyType === 'DEALER' ? '#F5F3FF' : '#EFF6FF',
+                color: selectedParty.partyType === 'DEALER' ? '#6D28D9' : '#1D4ED8',
+                border: selectedParty.partyType === 'DEALER' ? '1px solid #DDD6FE' : '1px solid #BFDBFE'
+              }}>
+                {selectedParty.partyType === 'DEALER'
+                  ? `🏢 Dealer (${selectedParty.dealerProfitPercent ?? 10}% Margin)`
+                  : `👤 Amateur (${selectedParty.amateurProfitPercent !== undefined ? selectedParty.amateurProfitPercent + '% Margin' : 'Standard Rates'})`}
+              </span>
+            )}
+          </div>
           <button
             type="button"
             className="btn-quick-n"
             title="Quick Add Party"
-            onClick={() => openQuickModal('PARTY', (newId) => { setIsTouched(true); setPartyId(newId); })}
+            onClick={() => openQuickModal('PARTY', (newId) => handlePartyChange(newId))}
           >
             N
           </button>
@@ -543,31 +682,15 @@ export const SalesEntryView: React.FC = () => {
         </div>
 
         {/* ITEM SELECTION ROW */}
-        <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 34px', gap: '10px', alignItems: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: '10px', alignItems: 'center' }}>
           <label style={{ fontWeight: 900, fontSize: '1.05rem' }}>ITEM :</label>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <select
-              className="input-text-clean"
-              value={selectedItemId}
-              onChange={e => handleItemSelect(e.target.value)}
-              style={{ flex: 1, fontSize: '0.95rem', height: '38px', fontWeight: 700 }}
-            >
-              <option value="">-- Select Item --</option>
-              {filteredCategoryItems.map(i => (
-                <option key={i.id} value={i.id}>
-                  [{i.sno}] {i.name} {i.hasSecondaryUnit ? `(${i.unitA?.unitName || 'Unit A'} / ${i.unitB?.unitName || 'Unit B'})` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button
-            type="button"
-            className="btn-quick-n"
-            title="Quick Create Item"
-            onClick={() => openQuickModal('ITEM', (newId) => handleItemSelect(newId))}
-          >
-            N
-          </button>
+          <ItemSearchSelect
+            items={filteredCategoryItems}
+            selectedItemId={selectedItemId}
+            onSelect={handleItemSelect}
+            onQuickAdd={() => openQuickModal('ITEM', (newId) => handleItemSelect(newId))}
+            placeholder="Type to search item (e.g. ASTER)..."
+          />
         </div>
 
         {/* DUAL PRICING INPUT CARDS (UNIT-A & UNIT-B) */}
@@ -615,7 +738,7 @@ export const SalesEntryView: React.FC = () => {
                 <input type="text" readOnly className="input-text-clean" value={calculatedUnitAPricing.nettPrice} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }} />
               </div>
               <div>
-                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>T&O%</label>
+                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Prof %</label>
                 <input type="number" step="0.01" className="input-text-clean" value={unitAToPercent} onChange={e => { setIsTouched(true); setUnitAToPercent(e.target.value); }} style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }} />
               </div>
               <div>
@@ -692,7 +815,7 @@ export const SalesEntryView: React.FC = () => {
                   <input type="text" readOnly className="input-text-clean" value={calculatedUnitBPricing.nettPrice} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>T&O%</label>
+                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Prof %</label>
                   <input type="number" step="0.01" className="input-text-clean" value={unitBToPercent} onChange={e => { setIsTouched(true); setUnitBToPercent(e.target.value); }} style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }} />
                 </div>
                 <div>
@@ -731,7 +854,7 @@ export const SalesEntryView: React.FC = () => {
                 <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '90px', borderRight: '1px solid #000000' }}>Besic Price</th>
                 <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, width: '70px', borderRight: '1px solid #000000' }}>GST</th>
                 <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '90px', borderRight: '1px solid #000000' }}>Net Price</th>
-                <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, width: '70px', borderRight: '1px solid #000000' }}>T&O%</th>
+                <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, width: '70px', borderRight: '1px solid #000000' }}>Prof %</th>
                 <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '90px', borderRight: '1px solid #000000' }}>Sale Price</th>
                 <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, width: '70px', borderRight: '1px solid #000000' }}>Qty</th>
                 <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '120px' }}>Amount</th>
@@ -747,7 +870,7 @@ export const SalesEntryView: React.FC = () => {
               ) : (
                 billItems.map((item, idx) => (
                   <tr key={idx} onClick={() => handleEditLineItem(idx)} style={{ borderBottom: '1px solid #E5E7EB', cursor: 'pointer', background: editingItemIndex === idx ? '#F3E8FF' : 'transparent' }}>
-                    <td style={{ padding: '8px 12px', fontWeight: 800, borderRight: '1px solid #000000' }}>[{item.sno}] {item.itemName}</td>
+                    <td style={{ padding: '8px 12px', fontWeight: 800, borderRight: '1px solid #000000' }}>{item.itemName}</td>
                     <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, borderRight: '1px solid #000000' }}>{item.basicPrice}</td>
                     <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, borderRight: '1px solid #000000' }}>{item.gstPercent}%</td>
                     <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, borderRight: '1px solid #000000' }}>{item.nettPrice}</td>
@@ -769,8 +892,8 @@ export const SalesEntryView: React.FC = () => {
         </div>
 
         {/* BOTTOM SECTION */}
-        <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '30px', alignItems: 'center', marginTop: '10px' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '300px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: '30px', alignItems: 'center', marginTop: '10px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '340px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.95rem', fontWeight: 800 }}><span>Basic</span><span>{billSummary.basicTotal}</span></div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.95rem', fontWeight: 800 }}><span>Gst</span><span>{billSummary.gstTotal}</span></div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.95rem', fontWeight: 800 }}><span>Round up</span><span>{billSummary.roundUp}</span></div>
@@ -786,6 +909,32 @@ export const SalesEntryView: React.FC = () => {
               <span style={{ color: '#EA3943', fontWeight: 900, fontSize: '0.95rem' }}>RECD UPI</span>
               <input type="number" className="input-text-clean" value={recdUpi} onChange={e => { setIsTouched(true); setRecdUpi(e.target.value); }} style={{ textAlign: 'right', fontWeight: 800 }} />
             </div>
+
+            {/* Total Paid & Credit Calculation Status Banner */}
+            {billSummary.billTotal > 0 && (
+              <div style={{ marginTop: '4px', padding: '8px 10px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 800, border: '1px solid', ...(
+                isSaveBlockedByCredit
+                  ? { background: '#FEE2E2', borderColor: '#F87171', color: '#991B1B' }
+                  : isCreditSale
+                  ? { background: '#FEF3C7', borderColor: '#F59E0B', color: '#92400E' }
+                  : { background: '#DCFCE7', borderColor: '#86EFAC', color: '#166534' }
+              )}}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Total Paid: ₹{totalPaid}</span>
+                  <span>{isCreditSale ? `Due: ₹${balanceDue}` : 'Paid in Full'}</span>
+                </div>
+                {isSaveBlockedByCredit && (
+                  <div style={{ marginTop: '4px', fontSize: '0.78rem', color: '#DC2626' }}>
+                    ⛔ Credit NOT Allowed for this party. Total paid must equal ₹{billSummary.billTotal}!
+                  </div>
+                )}
+                {isCreditSale && isCreditAllowed && (
+                  <div style={{ marginTop: '4px', fontSize: '0.78rem', color: '#B45309' }}>
+                    ✓ Credit Authorized for {selectedParty?.name}. ₹{balanceDue} will be added to ledger.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Customer Action Buttons: Del, Large Save, Print */}
@@ -794,8 +943,8 @@ export const SalesEntryView: React.FC = () => {
               type="button"
               className="btn-customer-action-pill"
               onClick={handleDeleteCurrentSale}
-              disabled={!isEditing}
-              style={{ opacity: isEditing ? 1 : 0.5, cursor: isEditing ? 'pointer' : 'not-allowed' }}
+              disabled={!isEditing && !isViewing}
+              style={{ opacity: (isEditing || isViewing) ? 1 : 0.5, cursor: (isEditing || isViewing) ? 'pointer' : 'not-allowed' }}
             >
               Del
             </button>
@@ -803,10 +952,20 @@ export const SalesEntryView: React.FC = () => {
             <button
               type="button"
               onClick={handleSaveSale}
+              disabled={isSaveBlockedByCredit}
               className="btn-customer-save"
-              style={{ padding: '10px 48px', fontSize: '1.2rem', minWidth: '160px' }}
+              style={{
+                padding: '10px 48px',
+                fontSize: '1.2rem',
+                minWidth: '160px',
+                opacity: isSaveBlockedByCredit ? 0.45 : 1,
+                cursor: isSaveBlockedByCredit ? 'not-allowed' : 'pointer',
+                background: isSaveBlockedByCredit ? '#9CA3AF' : undefined,
+                boxShadow: isSaveBlockedByCredit ? 'none' : undefined
+              }}
+              title={isSaveBlockedByCredit ? `Credit not allowed for ${selectedParty?.name || 'this customer'}. Must collect full ₹${billSummary.billTotal}` : 'Save Sales Invoice'}
             >
-              Save
+              {isViewing ? 'Edit Invoice' : 'Save'}
             </button>
 
             <button
@@ -817,6 +976,7 @@ export const SalesEntryView: React.FC = () => {
               Print
             </button>
           </div>
+        </div>
         </div>
       </div>
 
@@ -855,7 +1015,13 @@ export const SalesEntryView: React.FC = () => {
                 </tr>
               ) : (
                 filteredSales.map(s => (
-                  <tr key={s.id} style={{ backgroundColor: editingSaleId === s.id ? '#EFF6FF' : 'transparent', cursor: 'pointer' }} onClick={() => handleLoadSaleForEdit(s)}>
+                  <tr
+                    key={s.id}
+                    style={{ backgroundColor: editingSaleId === s.id ? '#EFF6FF' : 'transparent', cursor: 'pointer' }}
+                    onClick={() => handleLoadSaleForEdit(s, true)}
+                    onDoubleClick={() => handleLoadSaleForEdit(s, false)}
+                    title="Single-click to View, Double-click to Edit"
+                  >
                     <td>{s.billDate}</td>
                     <td style={{ fontWeight: 800 }}>{s.billNo}</td>
                     <td>{s.partyName}</td>
@@ -866,11 +1032,11 @@ export const SalesEntryView: React.FC = () => {
                         type="button"
                         onClick={e => {
                           e.stopPropagation();
-                          handleLoadSaleForEdit(s);
+                          handleLoadSaleForEdit(s, false);
                         }}
                         style={{
-                          background: editingSaleId === s.id ? '#BFDBFE' : '#E2D2F8',
-                          color: editingSaleId === s.id ? '#1E40AF' : '#EA3943',
+                          background: (editingSaleId === s.id && !isViewOnly) ? '#BFDBFE' : '#E2D2F8',
+                          color: (editingSaleId === s.id && !isViewOnly) ? '#1E40AF' : '#EA3943',
                           border: '1px solid #C4B5FD',
                           borderRadius: '12px',
                           padding: '3px 12px',
@@ -879,7 +1045,7 @@ export const SalesEntryView: React.FC = () => {
                           cursor: 'pointer'
                         }}
                       >
-                        {editingSaleId === s.id ? 'Editing' : 'Load'}
+                        {(editingSaleId === s.id && !isViewOnly) ? 'Editing' : 'Edit'}
                       </button>
                     </td>
                   </tr>
@@ -889,6 +1055,21 @@ export const SalesEntryView: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Edit Mode Prompt Confirmation */}
+      <ConfirmDialog
+        isOpen={isEditPromptOpen}
+        onClose={() => setIsEditPromptOpen(false)}
+        onConfirm={() => {
+          setIsViewOnly(false);
+          setIsEditPromptOpen(false);
+          showToast('Edit mode enabled', 'info');
+        }}
+        title="Enable Edit Mode?"
+        message="Would you like to edit this sales invoice?"
+        confirmText="Yes, Edit"
+        cancelText="No, Keep View Only"
+      />
 
       <ConfirmDialog
         isOpen={isDeleteConfirmOpen}

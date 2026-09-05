@@ -115,29 +115,73 @@ export class StockEngine {
   }
 
   /**
-   * Generates next serial / bill number
+   * Generates next serial / bill number based on customizable prefix and sequence configurations
    */
   public static getNextBillNumber(type: 'SALE' | 'PURCHASE' | 'SELF_USE' | 'ORDER'): string {
     const settings = db.getSettings();
     if (type === 'SALE') {
       const sales = db.getSales();
-      const count = sales.length + 1001;
-      return `${settings.invoicePrefix || 'INV-'}${count}`;
+      const prefix = settings.invoicePrefix ?? 'INV-';
+      const padDigits = Number(settings.invoicePadDigits) || 4;
+      const baseNum = Number(settings.invoiceNextNumber) || 1001;
+      let nextNum = baseNum;
+      sales.forEach(s => {
+        if (s.billNo && s.billNo.startsWith(prefix)) {
+          const numPart = parseInt(s.billNo.slice(prefix.length), 10);
+          if (!isNaN(numPart) && numPart >= nextNum) {
+            nextNum = numPart + 1;
+          }
+        }
+      });
+      return `${prefix}${String(nextNum).padStart(padDigits, '0')}`;
     }
     if (type === 'PURCHASE') {
       const purchases = db.getPurchases();
-      const count = purchases.length + 101;
-      return `${settings.purchasePrefix || 'PUR-'}${count}`;
+      const prefix = settings.purchasePrefix ?? 'PUR-';
+      const padDigits = Number(settings.purchasePadDigits) || 3;
+      const baseNum = Number(settings.purchaseNextNumber) || 101;
+      let nextNum = baseNum;
+      purchases.forEach(p => {
+        if (p.billNo && p.billNo.startsWith(prefix)) {
+          const numPart = parseInt(p.billNo.slice(prefix.length), 10);
+          if (!isNaN(numPart) && numPart >= nextNum) {
+            nextNum = numPart + 1;
+          }
+        }
+      });
+      return `${prefix}${String(nextNum).padStart(padDigits, '0')}`;
     }
     if (type === 'SELF_USE') {
       const selfUses = db.getSelfUses();
-      const count = selfUses.length + 101;
-      return `${settings.selfUsePrefix || 'SU-'}${count}`;
+      const prefix = settings.selfUsePrefix ?? 'SU-';
+      const padDigits = Number(settings.selfUsePadDigits) || 3;
+      const baseNum = Number(settings.selfUseNextNumber) || 101;
+      let nextNum = baseNum;
+      selfUses.forEach(su => {
+        if (su.billNo && su.billNo.startsWith(prefix)) {
+          const numPart = parseInt(su.billNo.slice(prefix.length), 10);
+          if (!isNaN(numPart) && numPart >= nextNum) {
+            nextNum = numPart + 1;
+          }
+        }
+      });
+      return `${prefix}${String(nextNum).padStart(padDigits, '0')}`;
     }
     if (type === 'ORDER') {
       const orders = db.getOrders();
-      const count = orders.length + 101;
-      return `${settings.orderPrefix || 'ORD-'}${count}`;
+      const prefix = settings.orderPrefix ?? 'ORD-';
+      const padDigits = Number(settings.orderPadDigits) || 3;
+      const baseNum = Number(settings.orderNextNumber) || 101;
+      let nextNum = baseNum;
+      orders.forEach(o => {
+        if (o.orderNumber && o.orderNumber.startsWith(prefix)) {
+          const numPart = parseInt(o.orderNumber.slice(prefix.length), 10);
+          if (!isNaN(numPart) && numPart >= nextNum) {
+            nextNum = numPart + 1;
+          }
+        }
+      });
+      return `${prefix}${String(nextNum).padStart(padDigits, '0')}`;
     }
     return '1001';
   }

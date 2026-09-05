@@ -264,7 +264,7 @@ export const OrdersView: React.FC = () => {
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '80px 110px 1fr 100px 140px 90px',
+                  gridTemplateColumns: '110px 1fr 100px 140px 90px',
                   gap: '8px',
                   padding: '6px 12px',
                   background: 'var(--color-lime)',
@@ -278,7 +278,6 @@ export const OrdersView: React.FC = () => {
                   marginBottom: '8px'
                 }}
               >
-                <div>SNO</div>
                 <div>DATE</div>
                 <div>ITEM & DESCRIPTION</div>
                 <div style={{ textAlign: 'center', color: '#EA3943' }}>QTY</div>
@@ -293,14 +292,11 @@ export const OrdersView: React.FC = () => {
                     key={item.id}
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '80px 110px 1fr 100px 140px 90px',
+                      gridTemplateColumns: '110px 1fr 100px 140px 90px',
                       gap: '8px',
                       alignItems: 'center'
                     }}
                   >
-                    <div style={{ background: '#ECECEC', border: '1px solid #000000', borderRadius: '4px', padding: '6px 8px', fontWeight: 700, fontFamily: 'monospace', textAlign: 'center', fontSize: '0.88rem' }}>
-                      {item.sno}
-                    </div>
                     <div style={{ background: '#ECECEC', border: '1px solid #000000', borderRadius: '4px', padding: '6px 8px', fontWeight: 700, textAlign: 'center', fontSize: '0.85rem' }}>
                       {formatDateToDisplay(item.orderDate)}
                     </div>
@@ -443,27 +439,11 @@ export const OrdersView: React.FC = () => {
                   key={summary.item.id}
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '80px 110px 1fr 100px 140px 90px',
+                    gridTemplateColumns: '110px 1fr 100px 140px 90px',
                     gap: '8px',
                     alignItems: 'center'
                   }}
                 >
-                  {/* SNO */}
-                  <div
-                    style={{
-                      background: '#ECECEC',
-                      border: '1px solid #000000',
-                      borderRadius: '4px',
-                      padding: '6px 8px',
-                      fontWeight: 700,
-                      fontFamily: 'monospace',
-                      textAlign: 'center',
-                      fontSize: '0.88rem'
-                    }}
-                  >
-                    {summary.item.sno}
-                  </div>
-
                   {/* Date */}
                   <div
                     style={{

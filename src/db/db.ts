@@ -9,7 +9,8 @@ import {
   StockMovement,
   StockAdjustment,
   User,
-  CompanySettings
+  CompanySettings,
+  PartyLog
 } from '../types';
 import {
   INITIAL_COMPANY_SETTINGS,
@@ -21,6 +22,16 @@ import {
   INITIAL_STOCK_MOVEMENTS,
   INITIAL_SALES
 } from './seedData';
+import { firestore } from '../services/firebase';
+import {
+  doc,
+  setDoc,
+  getDoc,
+  deleteDoc,
+  collection,
+  getDocs,
+  writeBatch
+} from 'firebase/firestore';
 
 const STORAGE_KEYS = {
   SETTINGS: 'rmms_settings_v1',
@@ -34,8 +45,16 @@ const STORAGE_KEYS = {
   SELF_USES: 'rmms_self_uses_v1',
   STOCK_MOVEMENTS: 'rmms_stock_movements_v1',
   STOCK_ADJUSTMENTS: 'rmms_stock_adjustments_v1',
+  PARTY_LOGS: 'rmms_party_logs_v1',
   INITIALIZED: 'rmms_initialized_v1'
 };
+
+export interface CloudSyncState {
+  status: 'CONNECTED' | 'SYNCING' | 'LOCAL' | 'ERROR';
+  lastSync: string | null;
+  error?: string | null;
+  projectId: string;
+}
 
 const memoryStore: Record<string, string> = {};
 
@@ -58,9 +77,16 @@ type DbChangeListener = () => void;
 
 class DatabaseService {
   private listeners: Set<DbChangeListener> = new Set();
+  private cloudSyncState: CloudSyncState = {
+    status: 'LOCAL',
+    lastSync: null,
+    error: null,
+    projectId: 'acl-inventory-mange-final'
+  };
 
   constructor() {
     this.initDatabase();
+    this.initFirestoreSync();
   }
 
   public subscribe(listener: DbChangeListener): () => void {
@@ -76,6 +102,262 @@ class DatabaseService {
         console.error('Error in DB change listener:', err);
       }
     });
+  }
+
+  public getCloudSyncState(): CloudSyncState {
+    return { ...this.cloudSyncState };
+  }
+
+  private async pushDocToFirestore(collectionName: string, docId: string, data: any): Promise<void> {
+    try {
+      if (typeof window === 'undefined') return;
+      const cleanData = JSON.parse(JSON.stringify(data));
+      const docRef = doc(firestore, collectionName, String(docId));
+      await setDoc(docRef, cleanData, { merge: true });
+      this.cloudSyncState = {
+        status: 'CONNECTED',
+        lastSync: new Date().toLocaleTimeString(),
+        error: null,
+        projectId: 'acl-inventory-mange-final'
+      };
+      this.notify();
+    } catch (err: any) {
+      this.cloudSyncState = {
+        status: 'LOCAL',
+        lastSync: this.cloudSyncState.lastSync,
+        error: err?.message || 'Firestore API offline or pending initialization',
+        projectId: 'acl-inventory-mange-final'
+      };
+    }
+  }
+
+  private async deleteDocFromFirestore(collectionName: string, docId: string): Promise<void> {
+    try {
+      if (typeof window === 'undefined') return;
+      const docRef = doc(firestore, collectionName, String(docId));
+      await deleteDoc(docRef);
+    } catch (err: any) {
+      console.warn(`Firestore delete warning for ${collectionName}/${docId}:`, err);
+    }
+  }
+
+  private async initFirestoreSync(): Promise<void> {
+    if (typeof window === 'undefined') return;
+    try {
+      this.cloudSyncState.status = 'SYNCING';
+      // Attempt to load settings from cloud
+      const settingsDoc = await getDoc(doc(firestore, 'app_metadata', 'settings'));
+      if (settingsDoc.exists()) {
+        const cloudSettings = settingsDoc.data() as CompanySettings;
+        if (cloudSettings) {
+          this.set(STORAGE_KEYS.SETTINGS, cloudSettings);
+        }
+      } else {
+        // First cloud boot: upload initial settings to firestore
+        await setDoc(doc(firestore, 'app_metadata', 'settings'), this.getSettings(), { merge: true });
+      }
+
+      this.cloudSyncState = {
+        status: 'CONNECTED',
+        lastSync: new Date().toLocaleTimeString(),
+        error: null,
+        projectId: 'acl-inventory-mange-final'
+      };
+      this.notify();
+    } catch (err: any) {
+      this.cloudSyncState = {
+        status: 'LOCAL',
+        lastSync: null,
+        error: err?.message || 'Firestore API disabled or network offline',
+        projectId: 'acl-inventory-mange-final'
+      };
+    }
+  }
+
+  public async pushAllToCloudFirestore(): Promise<boolean> {
+    try {
+      this.cloudSyncState.status = 'SYNCING';
+      this.notify();
+
+      // Push settings
+      await setDoc(doc(firestore, 'app_metadata', 'settings'), this.getSettings());
+
+      // Push parties
+      for (const p of this.getParties()) {
+        await setDoc(doc(firestore, 'parties', p.id), p);
+      }
+      // Push items
+      for (const i of this.getItems()) {
+        await setDoc(doc(firestore, 'items', i.id), i);
+      }
+      // Push suppliers
+      for (const s of this.getSuppliers()) {
+        await setDoc(doc(firestore, 'suppliers', s.id), s);
+      }
+      // Push orders
+      for (const o of this.getOrders()) {
+        await setDoc(doc(firestore, 'orders', o.id), o);
+      }
+      // Push sales
+      for (const s of this.getSales()) {
+        await setDoc(doc(firestore, 'sales', s.id), s);
+      }
+      // Push purchases
+      for (const pu of this.getPurchases()) {
+        await setDoc(doc(firestore, 'purchases', pu.id), pu);
+      }
+      // Push self uses
+      for (const su of this.getSelfUses()) {
+        await setDoc(doc(firestore, 'self_uses', su.id), su);
+      }
+      // Push stock adjustments
+      for (const a of this.getStockAdjustments()) {
+        await setDoc(doc(firestore, 'stock_adjustments', a.id), a);
+      }
+      // Push party logs
+      for (const l of this.getPartyLogs()) {
+        await setDoc(doc(firestore, 'party_logs', l.id), l);
+      }
+
+      this.cloudSyncState = {
+        status: 'CONNECTED',
+        lastSync: new Date().toLocaleTimeString(),
+        error: null,
+        projectId: 'acl-inventory-mange-final'
+      };
+      this.notify();
+      return true;
+    } catch (e: any) {
+      console.error('Error pushing to Firestore:', e);
+      this.cloudSyncState = {
+        status: 'ERROR',
+        lastSync: this.cloudSyncState.lastSync,
+        error: e?.message || 'Failed to push to Cloud Firestore',
+        projectId: 'acl-inventory-mange-final'
+      };
+      this.notify();
+      return false;
+    }
+  }
+
+  public async pullAllFromCloudFirestore(): Promise<{ success: boolean; stats: Record<string, number>; error?: string }> {
+    try {
+      this.cloudSyncState.status = 'SYNCING';
+      this.notify();
+
+      const stats: Record<string, number> = {
+        items: 0,
+        suppliers: 0,
+        parties: 0,
+        sales: 0,
+        purchases: 0,
+        orders: 0,
+        self_uses: 0
+      };
+
+      // Pull Settings
+      const settingsDoc = await getDoc(doc(firestore, 'app_metadata', 'settings'));
+      if (settingsDoc.exists()) {
+        const cloudSettings = settingsDoc.data() as CompanySettings;
+        if (cloudSettings) this.set(STORAGE_KEYS.SETTINGS, cloudSettings);
+      }
+
+      // Pull Items
+      const itemsSnap = await getDocs(collection(firestore, 'items'));
+      if (!itemsSnap.empty) {
+        const cloudItems: Item[] = [];
+        itemsSnap.forEach(d => cloudItems.push(d.data() as Item));
+        if (cloudItems.length > 0) {
+          this.set(STORAGE_KEYS.ITEMS, cloudItems);
+          stats.items = cloudItems.length;
+        }
+      }
+
+      // Pull Suppliers
+      const supSnap = await getDocs(collection(firestore, 'suppliers'));
+      if (!supSnap.empty) {
+        const cloudSuppliers: Supplier[] = [];
+        supSnap.forEach(d => cloudSuppliers.push(d.data() as Supplier));
+        if (cloudSuppliers.length > 0) {
+          this.set(STORAGE_KEYS.SUPPLIERS, cloudSuppliers);
+          stats.suppliers = cloudSuppliers.length;
+        }
+      }
+
+      // Pull Parties
+      const partySnap = await getDocs(collection(firestore, 'parties'));
+      if (!partySnap.empty) {
+        const cloudParties: Party[] = [];
+        partySnap.forEach(d => cloudParties.push(d.data() as Party));
+        if (cloudParties.length > 0) {
+          this.set(STORAGE_KEYS.PARTIES, cloudParties);
+          stats.parties = cloudParties.length;
+        }
+      }
+
+      // Pull Sales
+      const salesSnap = await getDocs(collection(firestore, 'sales'));
+      if (!salesSnap.empty) {
+        const cloudSales: Sale[] = [];
+        salesSnap.forEach(d => cloudSales.push(d.data() as Sale));
+        if (cloudSales.length > 0) {
+          this.set(STORAGE_KEYS.SALES, cloudSales);
+          stats.sales = cloudSales.length;
+        }
+      }
+
+      // Pull Purchases
+      const purSnap = await getDocs(collection(firestore, 'purchases'));
+      if (!purSnap.empty) {
+        const cloudPurchases: Purchase[] = [];
+        purSnap.forEach(d => cloudPurchases.push(d.data() as Purchase));
+        if (cloudPurchases.length > 0) {
+          this.set(STORAGE_KEYS.PURCHASES, cloudPurchases);
+          stats.purchases = cloudPurchases.length;
+        }
+      }
+
+      // Pull Orders
+      const orderSnap = await getDocs(collection(firestore, 'orders'));
+      if (!orderSnap.empty) {
+        const cloudOrders: SupplierOrder[] = [];
+        orderSnap.forEach(d => cloudOrders.push(d.data() as SupplierOrder));
+        if (cloudOrders.length > 0) {
+          this.set(STORAGE_KEYS.ORDERS, cloudOrders);
+          stats.orders = cloudOrders.length;
+        }
+      }
+
+      // Pull Self Uses
+      const suSnap = await getDocs(collection(firestore, 'self_uses'));
+      if (!suSnap.empty) {
+        const cloudSelfUses: SelfUse[] = [];
+        suSnap.forEach(d => cloudSelfUses.push(d.data() as SelfUse));
+        if (cloudSelfUses.length > 0) {
+          this.set(STORAGE_KEYS.SELF_USES, cloudSelfUses);
+          stats.self_uses = cloudSelfUses.length;
+        }
+      }
+
+      this.cloudSyncState = {
+        status: 'CONNECTED',
+        lastSync: new Date().toLocaleTimeString(),
+        error: null,
+        projectId: 'acl-inventory-mange-final'
+      };
+      this.notify();
+      return { success: true, stats };
+    } catch (e: any) {
+      console.error('Error pulling from Cloud Firestore:', e);
+      this.cloudSyncState = {
+        status: 'ERROR',
+        lastSync: this.cloudSyncState.lastSync,
+        error: e?.message || 'Failed to pull from Cloud Firestore',
+        projectId: 'acl-inventory-mange-final'
+      };
+      this.notify();
+      return { success: false, stats: {}, error: e?.message };
+    }
   }
 
   private get<T>(key: string, defaultValue: T): T {
@@ -150,6 +432,7 @@ class DatabaseService {
 
   public saveSettings(settings: CompanySettings): void {
     this.set(STORAGE_KEYS.SETTINGS, settings);
+    this.pushDocToFirestore('app_metadata', 'settings', settings);
     this.notify();
   }
 
@@ -167,12 +450,14 @@ class DatabaseService {
       users.push(user);
     }
     this.set(STORAGE_KEYS.USERS, users);
+    this.pushDocToFirestore('users', user.id, user);
     this.notify();
   }
 
   public deleteUser(id: string): void {
     const users = this.getUsers().filter(u => u.id !== id);
     this.set(STORAGE_KEYS.USERS, users);
+    this.deleteDocFromFirestore('users', id);
     this.notify();
   }
 
@@ -194,13 +479,110 @@ class DatabaseService {
       parties.push(party);
     }
     this.set(STORAGE_KEYS.PARTIES, parties);
+    this.pushDocToFirestore('parties', party.id, party);
     this.notify();
   }
 
   public deleteParty(id: string): void {
     const parties = this.getParties().filter(p => p.id !== id);
     this.set(STORAGE_KEYS.PARTIES, parties);
+    this.deleteDocFromFirestore('parties', id);
     this.notify();
+  }
+
+  // --- PARTY LOGS (Customer Ledger Statements) ---
+  public getPartyLogs(): PartyLog[] {
+    return this.get(STORAGE_KEYS.PARTY_LOGS, []);
+  }
+
+  public getPartyLogsByPartyId(partyId: string): PartyLog[] {
+    const logs = this.getPartyLogs().filter(l => l.partyId === partyId);
+    logs.sort((a, b) => (a.date > b.date ? 1 : a.date < b.date ? -1 : (a.createdAt > b.createdAt ? 1 : -1)));
+
+    let running = 0;
+    return logs.map(log => {
+      running += (Number(log.balanceChange) || 0);
+      return {
+        ...log,
+        runningBalance: Number(running.toFixed(2))
+      };
+    });
+  }
+
+  public savePartyLog(log: PartyLog): void {
+    const logs = this.getPartyLogs();
+    const index = logs.findIndex(l => l.id === log.id);
+    if (index >= 0) {
+      logs[index] = log;
+    } else {
+      logs.push(log);
+    }
+    this.set(STORAGE_KEYS.PARTY_LOGS, logs);
+    this.pushDocToFirestore('party_logs', log.id, log);
+    this.notify();
+  }
+
+  public recordPartyPayment(
+    partyId: string,
+    amount: number,
+    paymentMode: 'CASH' | 'UPI' | 'COMBINED' = 'CASH',
+    refNo?: string,
+    notes?: string
+  ): PartyLog {
+    const party = this.getPartyById(partyId);
+    const partyName = party?.name || 'Customer';
+    const numAmount = Number(amount) || 0;
+    const paymentRecord: PartyLog = {
+      id: `rcpt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      partyId,
+      partyName,
+      date: new Date().toISOString().split('T')[0],
+      type: 'PAYMENT',
+      refNo: refNo?.trim() || `RCPT-${Date.now().toString().slice(-4)}`,
+      totalAmount: numAmount,
+      paidAmount: numAmount,
+      balanceChange: -numAmount,
+      paymentMode,
+      notes: notes?.trim() || `Payment received via ${paymentMode}`,
+      createdAt: new Date().toISOString()
+    };
+
+    this.savePartyLog(paymentRecord);
+    return paymentRecord;
+  }
+
+  public deletePartyLog(id: string): void {
+    const logs = this.getPartyLogs().filter(l => l.id !== id);
+    this.set(STORAGE_KEYS.PARTY_LOGS, logs);
+    this.deleteDocFromFirestore('party_logs', id);
+    this.notify();
+  }
+
+  public getPartyBalanceSummary(partyId: string): {
+    totalBilled: number;
+    totalPaid: number;
+    outstandingBalance: number;
+  } {
+    const logs = this.getPartyLogsByPartyId(partyId);
+    let totalBilled = 0;
+    let totalPaid = 0;
+    let outstandingBalance = 0;
+
+    logs.forEach(l => {
+      if (l.type === 'SALE') {
+        totalBilled += Number(l.totalAmount) || 0;
+        totalPaid += Number(l.paidAmount) || 0;
+      } else if (l.type === 'PAYMENT') {
+        totalPaid += Number(l.paidAmount) || 0;
+      }
+      outstandingBalance += Number(l.balanceChange) || 0;
+    });
+
+    return {
+      totalBilled: Number(totalBilled.toFixed(2)),
+      totalPaid: Number(totalPaid.toFixed(2)),
+      outstandingBalance: Number(outstandingBalance.toFixed(2))
+    };
   }
 
   // --- SUPPLIERS ---
@@ -221,12 +603,14 @@ class DatabaseService {
       suppliers.push(supplier);
     }
     this.set(STORAGE_KEYS.SUPPLIERS, suppliers);
+    this.pushDocToFirestore('suppliers', supplier.id, supplier);
     this.notify();
   }
 
   public deleteSupplier(id: string): void {
     const suppliers = this.getSuppliers().filter(s => s.id !== id);
     this.set(STORAGE_KEYS.SUPPLIERS, suppliers);
+    this.deleteDocFromFirestore('suppliers', id);
     this.notify();
   }
 
@@ -282,12 +666,14 @@ class DatabaseService {
       }
     }
     this.set(STORAGE_KEYS.ITEMS, items);
+    this.pushDocToFirestore('items', item.id, item);
     this.notify();
   }
 
   public deleteItem(id: string): void {
     const items = this.getItems().filter(i => i.id !== id);
     this.set(STORAGE_KEYS.ITEMS, items);
+    this.deleteDocFromFirestore('items', id);
     // Remove related stock movements
     this.deleteStockMovementsByItemId(id);
     this.notify();
@@ -302,6 +688,7 @@ class DatabaseService {
     const movements = this.getStockMovements();
     movements.push(movement);
     this.set(STORAGE_KEYS.STOCK_MOVEMENTS, movements);
+    this.pushDocToFirestore('stock_movements', movement.id, movement);
   }
 
   public addStockMovement(movement: StockMovement): void {
@@ -328,8 +715,9 @@ class DatabaseService {
     );
     if (index >= 0) {
       movements[index].qtyChange = Number(newOpeningQty) || 0;
+      this.pushDocToFirestore('stock_movements', movements[index].id, movements[index]);
     } else {
-      movements.push({
+      const newMovement: StockMovement = {
         id: `mov-open-${itemId}-${Date.now()}`,
         itemId,
         type: 'OPENING',
@@ -340,7 +728,9 @@ class DatabaseService {
         date: new Date().toISOString().split('T')[0],
         notes: 'Updated opening stock',
         createdAt: new Date().toISOString()
-      });
+      };
+      movements.push(newMovement);
+      this.pushDocToFirestore('stock_movements', newMovement.id, newMovement);
     }
     this.set(STORAGE_KEYS.STOCK_MOVEMENTS, movements);
   }
@@ -363,16 +753,18 @@ class DatabaseService {
       orders.unshift(order);
     }
     this.set(STORAGE_KEYS.ORDERS, orders);
+    this.pushDocToFirestore('orders', order.id, order);
     this.notify();
   }
 
   public deleteOrder(id: string): void {
     const orders = this.getOrders().filter(o => o.id !== id);
     this.set(STORAGE_KEYS.ORDERS, orders);
+    this.deleteDocFromFirestore('orders', id);
     this.notify();
   }
 
-  // --- SALES (Reduces Stock) ---
+  // --- SALES (Reduces Stock & Maintains Party Ledger) ---
   public getSales(): Sale[] {
     return this.get(STORAGE_KEYS.SALES, []);
   }
@@ -385,6 +777,12 @@ class DatabaseService {
     const sales = this.getSales();
     const index = sales.findIndex(s => s.id === sale.id);
 
+    // Calculate balance due and credit status
+    const totalPaid = (Number(sale.recdCash) || 0) + (Number(sale.recdUpi) || 0);
+    const balanceDue = Number((sale.billTotal - totalPaid).toFixed(2));
+    sale.balanceDue = balanceDue;
+    sale.isCreditSale = balanceDue > 0;
+
     // Remove previous stock movements for this sale if editing
     this.deleteStockMovementsByRef('SALE', sale.id);
 
@@ -394,12 +792,13 @@ class DatabaseService {
       sales.unshift(sale);
     }
     this.set(STORAGE_KEYS.SALES, sales);
+    this.pushDocToFirestore('sales', sale.id, sale);
 
     // Create new stock out movements
     const movements = this.getStockMovements();
     sale.items.forEach(item => {
       const qtyChange = item.baseQty !== undefined ? -Math.abs(Number(item.baseQty)) : -Math.abs(Number(item.qty) || 0);
-      movements.push({
+      const mov: StockMovement = {
         id: `mov-sale-${sale.id}-${item.id}-${Date.now()}`,
         itemId: item.itemId,
         type: 'SALE_OUT',
@@ -410,17 +809,49 @@ class DatabaseService {
         date: sale.billDate,
         notes: `Sale to ${sale.partyName} (Rate: ₹${item.salePrice}, Unit: ${item.unit || 'Default'})`,
         createdAt: new Date().toISOString()
-      });
+      };
+      movements.push(mov);
+      this.pushDocToFirestore('stock_movements', mov.id, mov);
     });
     this.set(STORAGE_KEYS.STOCK_MOVEMENTS, movements);
+
+    // Maintain customer statement ledger if sale is associated with a party
+    if (sale.partyId) {
+      const logs = this.getPartyLogs().filter(l => !(l.type === 'SALE' && l.refNo === sale.billNo));
+      const logRecord: PartyLog = {
+        id: `log-sale-${sale.id}`,
+        partyId: sale.partyId,
+        partyName: sale.partyName,
+        date: sale.billDate,
+        type: 'SALE',
+        refNo: sale.billNo,
+        totalAmount: sale.billTotal,
+        paidAmount: totalPaid,
+        balanceChange: balanceDue,
+        notes: balanceDue > 0 ? `Credit Sale (Due: ₹${balanceDue})` : 'Full Payment Received',
+        createdAt: sale.createdAt || new Date().toISOString()
+      };
+      logs.push(logRecord);
+      this.set(STORAGE_KEYS.PARTY_LOGS, logs);
+      this.pushDocToFirestore('party_logs', logRecord.id, logRecord);
+    }
 
     this.notify();
   }
 
   public deleteSale(id: string): void {
+    const sale = this.getSaleById(id);
     const sales = this.getSales().filter(s => s.id !== id);
     this.set(STORAGE_KEYS.SALES, sales);
+    this.deleteDocFromFirestore('sales', id);
     this.deleteStockMovementsByRef('SALE', id);
+
+    if (sale) {
+      const logs = this.getPartyLogs().filter(l => !(l.type === 'SALE' && l.refNo === sale.billNo));
+      this.set(STORAGE_KEYS.PARTY_LOGS, logs);
+      this.deleteDocFromFirestore('party_logs', `log-sale-${sale.id}`);
+    }
+
     this.notify();
   }
 
@@ -446,12 +877,13 @@ class DatabaseService {
       purchases.unshift(purchase);
     }
     this.set(STORAGE_KEYS.PURCHASES, purchases);
+    this.pushDocToFirestore('purchases', purchase.id, purchase);
 
     // Create new stock in movements
     const movements = this.getStockMovements();
     purchase.items.forEach(item => {
       const qtyChange = item.baseQty !== undefined ? Math.abs(Number(item.baseQty)) : Math.abs(Number(item.qty) || 0);
-      movements.push({
+      const mov: StockMovement = {
         id: `mov-pur-${purchase.id}-${item.id}-${Date.now()}`,
         itemId: item.itemId,
         type: 'PURCHASE_IN',
@@ -462,7 +894,9 @@ class DatabaseService {
         date: purchase.recdDate || purchase.billDate,
         notes: `Purchase from ${purchase.supplierName} (Unit: ${item.unit || 'Default'})`,
         createdAt: new Date().toISOString()
-      });
+      };
+      movements.push(mov);
+      this.pushDocToFirestore('stock_movements', mov.id, mov);
     });
     this.set(STORAGE_KEYS.STOCK_MOVEMENTS, movements);
 
@@ -491,6 +925,7 @@ class DatabaseService {
   public deletePurchase(id: string): void {
     const purchases = this.getPurchases().filter(p => p.id !== id);
     this.set(STORAGE_KEYS.PURCHASES, purchases);
+    this.deleteDocFromFirestore('purchases', id);
     this.deleteStockMovementsByRef('PURCHASE', id);
     this.notify();
   }
@@ -517,12 +952,13 @@ class DatabaseService {
       selfUses.unshift(selfUse);
     }
     this.set(STORAGE_KEYS.SELF_USES, selfUses);
+    this.pushDocToFirestore('self_uses', selfUse.id, selfUse);
 
     // Create new stock out movements
     const movements = this.getStockMovements();
     selfUse.items.forEach(item => {
       const qtyChange = item.baseQty !== undefined ? -Math.abs(Number(item.baseQty)) : -Math.abs(Number(item.qty) || 0);
-      movements.push({
+      const mov: StockMovement = {
         id: `mov-su-${selfUse.id}-${item.id}-${Date.now()}`,
         itemId: item.itemId,
         type: 'SELF_USE_OUT',
@@ -533,7 +969,9 @@ class DatabaseService {
         date: selfUse.billDate,
         notes: `Internal Self Use: ${selfUse.remarks || 'Production'} (Unit: ${item.unit || 'Default'})`,
         createdAt: new Date().toISOString()
-      });
+      };
+      movements.push(mov);
+      this.pushDocToFirestore('stock_movements', mov.id, mov);
     });
     this.set(STORAGE_KEYS.STOCK_MOVEMENTS, movements);
 
@@ -543,6 +981,7 @@ class DatabaseService {
   public deleteSelfUse(id: string): void {
     const selfUses = this.getSelfUses().filter(su => su.id !== id);
     this.set(STORAGE_KEYS.SELF_USES, selfUses);
+    this.deleteDocFromFirestore('self_uses', id);
     this.deleteStockMovementsByRef('SELF_USE', id);
     this.notify();
   }
@@ -556,6 +995,7 @@ class DatabaseService {
     const adjustments = this.getStockAdjustments();
     adjustments.unshift(adj);
     this.set(STORAGE_KEYS.STOCK_ADJUSTMENTS, adjustments);
+    this.pushDocToFirestore('stock_adjustments', adj.id, adj);
 
     // Record stock movement
     const movementType = adj.type === 'INCREASE' ? 'ADJUSTMENT_IN' : 'ADJUSTMENT_OUT';
@@ -592,7 +1032,8 @@ class DatabaseService {
       purchases: this.getPurchases(),
       selfUses: this.getSelfUses(),
       stockMovements: this.getStockMovements(),
-      stockAdjustments: this.getStockAdjustments()
+      stockAdjustments: this.getStockAdjustments(),
+      partyLogs: this.getPartyLogs()
     };
     return JSON.stringify(backupData, null, 2);
   }
@@ -617,6 +1058,7 @@ class DatabaseService {
       if (data.selfUses) this.set(STORAGE_KEYS.SELF_USES, data.selfUses);
       if (data.stockMovements) this.set(STORAGE_KEYS.STOCK_MOVEMENTS, data.stockMovements);
       if (data.stockAdjustments) this.set(STORAGE_KEYS.STOCK_ADJUSTMENTS, data.stockAdjustments);
+      if (data.partyLogs) this.set(STORAGE_KEYS.PARTY_LOGS, data.partyLogs);
 
       this.notify();
       return true;
@@ -639,22 +1081,36 @@ class DatabaseService {
     parties: number;
     total: number;
   } {
-    const { fromDate, toDate, modules } = options;
+    const { fromDate, toDate, isAllTime } = options;
+    const mods = options.modules || {
+      orders: Boolean((options as any).deleteOrders || (options as any).orders),
+      purchases: Boolean((options as any).deletePurchases || (options as any).purchases),
+      sales: Boolean((options as any).deleteSales || (options as any).sales),
+      selfUse: Boolean((options as any).deleteSelfUse || (options as any).selfUse),
+      adjustments: Boolean((options as any).deleteStockAdjustments || (options as any).adjustments),
+      openingStock: Boolean((options as any).deleteOpeningStock || (options as any).openingStock),
+      items: Boolean((options as any).deleteItems || (options as any).items),
+      suppliers: Boolean((options as any).deleteSuppliers || (options as any).suppliers),
+      parties: Boolean((options as any).deleteParties || (options as any).parties),
+    };
+
     const filterByDate = (dateVal?: string) => {
+      if (isAllTime) return true;
       if (!dateVal) return true;
+      if (!fromDate || !toDate) return true;
       return dateVal >= fromDate && dateVal <= toDate;
     };
 
     const counts = {
-      orders: modules.orders ? this.getOrders().filter(o => filterByDate(o.orderDate)).length : 0,
-      purchases: modules.purchases ? this.getPurchases().filter(p => filterByDate(p.billDate)).length : 0,
-      sales: modules.sales ? this.getSales().filter(s => filterByDate(s.billDate)).length : 0,
-      selfUse: modules.selfUse ? this.getSelfUses().filter(su => filterByDate(su.billDate)).length : 0,
-      adjustments: modules.adjustments ? this.getStockAdjustments().filter(a => filterByDate(a.date)).length : 0,
-      openingStock: modules.openingStock ? this.getStockMovements().filter(m => m.type === 'OPENING').length : 0,
-      items: modules.items ? this.getItems().length : 0,
-      suppliers: modules.suppliers ? this.getSuppliers().length : 0,
-      parties: modules.parties ? this.getParties().length : 0,
+      orders: mods.orders ? this.getOrders().filter(o => filterByDate(o.orderDate)).length : 0,
+      purchases: mods.purchases ? this.getPurchases().filter(p => filterByDate(p.billDate)).length : 0,
+      sales: mods.sales ? this.getSales().filter(s => filterByDate(s.billDate)).length : 0,
+      selfUse: mods.selfUse ? this.getSelfUses().filter(su => filterByDate(su.billDate)).length : 0,
+      adjustments: mods.adjustments ? this.getStockAdjustments().filter(a => filterByDate(a.date)).length : 0,
+      openingStock: mods.openingStock ? this.getStockMovements().filter(m => m.type === 'OPENING').length : 0,
+      items: mods.items ? this.getItems().length : 0,
+      suppliers: mods.suppliers ? this.getSuppliers().length : 0,
+      parties: mods.parties ? this.getParties().length : 0,
       total: 0
     };
 
@@ -665,9 +1121,23 @@ class DatabaseService {
   }
 
   public deleteDataByFilter(options: DeleteFilterOptions): { [key: string]: number } {
-    const { fromDate, toDate, modules } = options;
+    const { fromDate, toDate, isAllTime } = options;
+    const mods = options.modules || {
+      orders: Boolean((options as any).deleteOrders || (options as any).orders),
+      purchases: Boolean((options as any).deletePurchases || (options as any).purchases),
+      sales: Boolean((options as any).deleteSales || (options as any).sales),
+      selfUse: Boolean((options as any).deleteSelfUse || (options as any).selfUse),
+      adjustments: Boolean((options as any).deleteStockAdjustments || (options as any).adjustments),
+      openingStock: Boolean((options as any).deleteOpeningStock || (options as any).openingStock),
+      items: Boolean((options as any).deleteItems || (options as any).items),
+      suppliers: Boolean((options as any).deleteSuppliers || (options as any).suppliers),
+      parties: Boolean((options as any).deleteParties || (options as any).parties),
+    };
+
     const filterByDate = (dateVal?: string) => {
+      if (isAllTime) return true;
       if (!dateVal) return true;
+      if (!fromDate || !toDate) return true;
       return dateVal >= fromDate && dateVal <= toDate;
     };
 
@@ -684,15 +1154,16 @@ class DatabaseService {
     };
 
     // 1. Delete Orders
-    if (modules.orders) {
+    if (mods.orders) {
       const allOrders = this.getOrders();
+      const ordersToDelete = allOrders.filter(o => filterByDate(o.orderDate));
       const remainingOrders = allOrders.filter(o => !filterByDate(o.orderDate));
-      deletedCounts.orders = allOrders.length - remainingOrders.length;
+      deletedCounts.orders = ordersToDelete.length;
       this.set(STORAGE_KEYS.ORDERS, remainingOrders);
     }
 
     // 2. Delete Purchases
-    if (modules.purchases) {
+    if (mods.purchases) {
       const allPurchases = this.getPurchases();
       const purchasesToDelete = allPurchases.filter(p => filterByDate(p.billDate));
       const remainingPurchases = allPurchases.filter(p => !filterByDate(p.billDate));
@@ -705,7 +1176,7 @@ class DatabaseService {
     }
 
     // 3. Delete Sales
-    if (modules.sales) {
+    if (mods.sales) {
       const allSales = this.getSales();
       const salesToDelete = allSales.filter(s => filterByDate(s.billDate));
       const remainingSales = allSales.filter(s => !filterByDate(s.billDate));
@@ -718,7 +1189,7 @@ class DatabaseService {
     }
 
     // 4. Delete Self Use
-    if (modules.selfUse) {
+    if (mods.selfUse) {
       const allSelfUses = this.getSelfUses();
       const selfUsesToDelete = allSelfUses.filter(su => filterByDate(su.billDate));
       const remainingSelfUses = allSelfUses.filter(su => !filterByDate(su.billDate));
@@ -731,7 +1202,7 @@ class DatabaseService {
     }
 
     // 5. Delete Adjustments
-    if (modules.adjustments) {
+    if (mods.adjustments) {
       const allAdjustments = this.getStockAdjustments();
       const adjustmentsToDelete = allAdjustments.filter(a => filterByDate(a.date));
       const remainingAdjustments = allAdjustments.filter(a => !filterByDate(a.date));
@@ -744,7 +1215,7 @@ class DatabaseService {
     }
 
     // 6. Delete Opening Stock
-    if (modules.openingStock) {
+    if (mods.openingStock) {
       const movements = this.getStockMovements();
       const nonOpening = movements.filter(m => m.type !== 'OPENING');
       deletedCounts.openingStock = movements.length - nonOpening.length;
@@ -755,7 +1226,7 @@ class DatabaseService {
     }
 
     // 7. Delete Items (Only if explicitly checked)
-    if (modules.items) {
+    if (mods.items) {
       const items = this.getItems();
       deletedCounts.items = items.length;
       this.set(STORAGE_KEYS.ITEMS, []);
@@ -763,17 +1234,18 @@ class DatabaseService {
     }
 
     // 8. Delete Suppliers (Only if explicitly checked)
-    if (modules.suppliers) {
+    if (mods.suppliers) {
       const suppliers = this.getSuppliers();
       deletedCounts.suppliers = suppliers.length;
       this.set(STORAGE_KEYS.SUPPLIERS, []);
     }
 
     // 9. Delete Parties (Only if explicitly checked)
-    if (modules.parties) {
+    if (mods.parties) {
       const parties = this.getParties();
       deletedCounts.parties = parties.length;
       this.set(STORAGE_KEYS.PARTIES, []);
+      this.set(STORAGE_KEYS.PARTY_LOGS, []);
     }
 
     this.notify();
@@ -782,10 +1254,11 @@ class DatabaseService {
 }
 
 export interface DeleteFilterOptions {
-  fromDate: string;
-  toDate: string;
-  isCustomDate: boolean;
-  modules: {
+  fromDate?: string;
+  toDate?: string;
+  isCustomDate?: boolean;
+  isAllTime?: boolean;
+  modules?: {
     orders: boolean;
     purchases: boolean;
     sales: boolean;
@@ -796,6 +1269,15 @@ export interface DeleteFilterOptions {
     suppliers?: boolean;
     parties?: boolean;
   };
+  deleteSales?: boolean;
+  deletePurchases?: boolean;
+  deleteOrders?: boolean;
+  deleteSelfUse?: boolean;
+  deleteStockAdjustments?: boolean;
+  deleteOpeningStock?: boolean;
+  deleteItems?: boolean;
+  deleteSuppliers?: boolean;
+  deleteParties?: boolean;
 }
 
 export const db = new DatabaseService();

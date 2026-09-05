@@ -9,10 +9,19 @@ export const INITIAL_COMPANY_SETTINGS: CompanySettings = {
   gstin: '07AAAAA0000A1Z5',
   currencySymbol: '₹',
   defaultGstPercent: 18,
+  defaultTransportPercent: 10,
   invoicePrefix: 'INV-',
+  invoiceNextNumber: 1002,
+  invoicePadDigits: 4,
   purchasePrefix: 'PUR-',
+  purchaseNextNumber: 101,
+  purchasePadDigits: 3,
   selfUsePrefix: 'SU-',
-  orderPrefix: 'ORD-'
+  selfUseNextNumber: 101,
+  selfUsePadDigits: 3,
+  orderPrefix: 'ORD-',
+  orderNextNumber: 103,
+  orderPadDigits: 3
 };
 
 export const INITIAL_USERS: User[] = [
@@ -78,6 +87,7 @@ export const INITIAL_PARTIES: Party[] = [
     gstin: '07AAACG1234Q1Z1',
     openingBalance: 0,
     creditLimit: 50000,
+    allowCredit: true,
     isActive: true,
     createdAt: '2026-08-01'
   },
@@ -96,6 +106,7 @@ export const INITIAL_PARTIES: Party[] = [
     gstin: '07BBBRP5678R1Z2',
     openingBalance: 0,
     creditLimit: 75000,
+    allowCredit: false,
     isActive: true,
     createdAt: '2026-08-01'
   },
@@ -114,6 +125,7 @@ export const INITIAL_PARTIES: Party[] = [
     gstin: '07CCCMS9012S1Z3',
     openingBalance: 0,
     creditLimit: 30000,
+    allowCredit: true,
     isActive: true,
     createdAt: '2026-08-01'
   }

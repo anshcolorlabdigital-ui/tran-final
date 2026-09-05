@@ -22,15 +22,14 @@ export interface ReceiptData {
 export function formatReceiptText(data: ReceiptData): string {
   const displayDate = formatDateToDisplay(data.date);
   let text = `*ORDER*\n\nDate: ${displayDate}\n\n`;
-  text += `S.No.   Item                    Qty\n`;
+  text += `Item                            Qty\n`;
   text += `-------------------------------------\n`;
 
-  data.items.forEach((item, index) => {
-    const snoDisplay = (item.sno || `${1456 + index}`).padEnd(7, ' ');
-    const nameDisplay = item.itemName.padEnd(24, ' ');
-    text += `${snoDisplay} ${nameDisplay} ${item.qty}\n`;
+  data.items.forEach((item) => {
+    const nameDisplay = item.itemName.padEnd(30, ' ');
+    text += `${nameDisplay} ${item.qty}\n`;
     if (item.description && item.description.trim()) {
-      text += `        ↳ (${item.description.trim()})\n`;
+      text += `  ↳ (${item.description.trim()})\n`;
     }
   });
 

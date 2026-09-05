@@ -203,7 +203,6 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
           >
             <thead>
               <tr style={{ borderBottom: '2px solid #000000' }}>
-                <th style={{ padding: '8px 12px', fontWeight: 800, fontSize: '0.95rem', width: '90px' }}>S.No.</th>
                 <th style={{ padding: '8px 12px', fontWeight: 800, fontSize: '0.95rem' }}>Item</th>
                 <th style={{ padding: '8px 12px', fontWeight: 800, fontSize: '0.95rem', textAlign: 'right', width: '90px' }}>Qty</th>
               </tr>
@@ -211,9 +210,6 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
             <tbody>
               {receiptData.items.map((item, idx) => (
                 <tr key={idx} style={{ borderBottom: '1px solid #E5E7EB' }}>
-                  <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontWeight: 700, fontSize: '0.95rem' }}>
-                    {item.sno || `${1456 + idx}`}
-                  </td>
                   <td style={{ padding: '8px 12px', fontWeight: 700, fontSize: '0.95rem' }}>
                     <div>{item.itemName}</div>
                     {item.description && item.description.trim() && (

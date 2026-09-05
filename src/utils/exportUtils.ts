@@ -61,15 +61,15 @@ export function buildExportDataset(options: ExportFilterOptions) {
   const allSuppliers = db.getSuppliers();
   const settings = db.getSettings();
 
-  const incSales = Boolean(modules.sales || modules.sale || modules.reportSales);
-  const incPurchases = Boolean(modules.purchases || modules.purchase || modules.reportPurchases);
-  const incOrders = Boolean(modules.orders || modules.order || modules.orderedSection);
-  const incSelfUse = Boolean(modules.selfUse || modules.reportSelfUse);
-  const incAdjustments = Boolean(modules.adjustments || modules.reportItemStock);
-  const incItems = Boolean(modules.items || modules.item);
-  const incParties = Boolean(modules.parties || modules.party);
-  const incSuppliers = Boolean(modules.suppliers || modules.supplier);
-  const incSettings = Boolean(modules.settings);
+  const incSales = !modules || Boolean(modules.sales || modules.sale || modules.reportSales);
+  const incPurchases = !modules || Boolean(modules.purchases || modules.purchase || modules.reportPurchases);
+  const incOrders = !modules || Boolean(modules.orders || modules.order || modules.orderedSection);
+  const incSelfUse = !modules || Boolean(modules.selfUse || modules.reportSelfUse);
+  const incAdjustments = !modules || Boolean(modules.adjustments || modules.reportItemStock);
+  const incItems = !modules || Boolean(modules.items || modules.item);
+  const incParties = !modules || Boolean(modules.parties || modules.party);
+  const incSuppliers = !modules || Boolean(modules.suppliers || modules.supplier);
+  const incSettings = !modules || Boolean(modules.settings);
 
   return {
     sales: incSales ? filterByDateRange(allSales, 'billDate', fromDate, toDate, isFullHistory) : [],

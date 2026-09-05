@@ -9,6 +9,7 @@ interface ConfirmDialogProps {
   title?: string;
   message: string;
   confirmText?: string;
+  cancelText?: string;
   isDestructive?: boolean;
 }
 
@@ -19,6 +20,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   title = 'Confirmation Required',
   message,
   confirmText = 'Yes, Delete',
+  cancelText = 'Cancel',
   isDestructive = true
 }) => {
   if (!isOpen) return null;
@@ -60,7 +62,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             cursor: 'pointer'
           }}
         >
-          Cancel
+          {cancelText}
         </button>
         <button
           type="button"

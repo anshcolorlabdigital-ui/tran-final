@@ -87,22 +87,13 @@ export const QuickItemModal: React.FC = () => {
       showToast('Item Name is required', 'error');
       return;
     }
-    if (!sno.trim()) {
-      showToast('S.No. / Item Code is required', 'error');
-      return;
-    }
 
-    const existing = db.getItemBySno(sno.trim());
-    if (existing) {
-      showToast(`Item Code / S.No. "${sno}" already exists!`, 'error');
-      return;
-    }
-
+    const finalSno = sno.trim() || StockEngine.getNextItemSno();
     const supObj = suppliers.find(s => s.id === supplierId);
 
     const newItem: Item = {
       id: `item-${Date.now()}`,
-      sno: sno.trim(),
+      sno: finalSno,
       name: name.trim().toUpperCase(),
       hsn: hsn.trim(),
       description: description.trim(),
@@ -155,34 +146,20 @@ export const QuickItemModal: React.FC = () => {
   return (
     <Modal isOpen={quickModal.isOpen} onClose={closeQuickModal} title="Quick Create Item" maxWidth="750px">
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '10px' }}>
-          <div>
-            <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '3px' }}>
-              S.No. / Code *
-            </label>
-            <input
-              type="text"
-              className="input-text-clean"
-              value={sno}
-              onChange={e => setSno(e.target.value)}
-              placeholder="e.g. 1463"
-              required
-            />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '3px' }}>
-              Item Name *
-            </label>
-            <input
-              type="text"
-              className="input-text-clean"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="e.g. ASTER - 12X36"
-              autoFocus
-              required
-            />
-          </div>
+        <div>
+          <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '3px' }}>
+            Item Name *
+          </label>
+          <input
+            type="text"
+            className="input-text-clean"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="e.g. ASTER - 12X36"
+            autoFocus
+            required
+            style={{ fontWeight: 700 }}
+          />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>

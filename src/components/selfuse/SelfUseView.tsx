@@ -7,6 +7,7 @@ import { StockEngine } from '../../db/stockEngine';
 import { getTodayDateString } from '../../utils/dateUtils';
 import { SelfUsePrintSlip } from './SelfUsePrintSlip';
 import { ConfirmDialog } from '../common/ConfirmDialog';
+import { ItemSearchSelect } from '../common/ItemSearchSelect';
 import { Search } from 'lucide-react';
 
 export const SelfUseView: React.FC = () => {
@@ -29,6 +30,8 @@ export const SelfUseView: React.FC = () => {
   const [billNo, setBillNo] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [editingSelfUseId, setEditingSelfUseId] = useState<string | null>(null);
+  const [isViewOnly, setIsViewOnly] = useState(false);
+  const [isEditPromptOpen, setIsEditPromptOpen] = useState(false);
 
   // Line item state
   const [selectedItemId, setSelectedItemId] = useState<string>('');
@@ -73,13 +76,24 @@ export const SelfUseView: React.FC = () => {
     setEditingItemIndex(null);
     const item = items.find(i => i.id === itemId);
     if (item) {
-      const aRate = item.unitA?.basicPrice ?? item.purchaseRate ?? 0;
-      setUnitARate(String(aRate));
+      const settings = db.getSettings();
+      const baseA = Number(item.unitA?.basicPrice ?? item.purchaseRate ?? 0);
+      const gstPctA = Number(item.unitA?.gstPercent ?? item.gstPercent ?? settings.defaultGstPercent ?? 18);
+      const tranPctA = Number(item.unitA?.tranPercent ?? 10);
+      // Landed In-House Cost = Base Price + GST (18%) + Transport (%)
+      const landedRateA = Number((baseA + (baseA * gstPctA / 100) + (baseA * tranPctA / 100)).toFixed(2));
+
+      setUnitARate(String(landedRateA));
       setUnitAQty('1');
 
       if (item.hasSecondaryUnit && item.unitB) {
-        const bRate = item.unitB?.basicPrice ?? Number((aRate / (Number(item.unitB.conversionFactor) || 1)).toFixed(2));
-        setUnitBRate(String(bRate));
+        const conv = Number(item.unitB.conversionFactor) || 1;
+        const baseB = Number(item.unitB.basicPrice ?? (baseA / conv));
+        const gstPctB = Number(item.unitB.gstPercent ?? gstPctA);
+        const tranPctB = Number(item.unitB.tranPercent ?? tranPctA);
+        const landedRateB = Number((baseB + (baseB * gstPctB / 100) + (baseB * tranPctB / 100)).toFixed(2));
+
+        setUnitBRate(String(landedRateB));
         setUnitBQty('1');
       }
     }
@@ -225,6 +239,7 @@ export const SelfUseView: React.FC = () => {
     setEditingSelfUseId(null);
     setIsJustSaved(false);
     setIsTouched(false);
+    setIsViewOnly(false);
     setBillNo(StockEngine.getNextBillNumber('SELF_USE'));
     setBillDate(getTodayDateString());
     setSelfUseItems([]);
@@ -238,6 +253,10 @@ export const SelfUseView: React.FC = () => {
   };
 
   const handleSaveSelfUse = () => {
+    if (isViewOnly) {
+      setIsEditPromptOpen(true);
+      return;
+    }
     if (!billNo.trim()) {
       showAlert("Please enter the Self Use Bill / Voucher Number first.", 'Validation Error', 'warning');
       return;
@@ -264,23 +283,26 @@ export const SelfUseView: React.FC = () => {
     if (editingSelfUseId) {
       setIsJustSaved(true);
       setIsTouched(false);
+      setIsViewOnly(false);
       showToast(`Self Use voucher ${selfUseRecord.billNo} updated! Stock adjusted.`, 'success');
     } else {
       setIsJustSaved(false);
+      setIsViewOnly(false);
       showToast(`Self Use voucher ${selfUseRecord.billNo} saved! Stock updated.`, 'success');
       handleNewEntry();
     }
   };
 
-  const handleLoadSelfUseForEdit = (su: SelfUse) => {
+  const handleLoadSelfUseForEdit = (su: SelfUse, viewOnly: boolean = false) => {
     setIsJustSaved(false);
     setEditingSelfUseId(su.id);
+    setIsViewOnly(viewOnly);
     setIsTouched(true);
     setBillNo(su.billNo);
     setBillDate(su.billDate);
     if (su.category) setSelectedCategory(su.category);
     setSelfUseItems(su.items);
-    showToast(`Loaded Self Use voucher ${su.billNo} for editing`, 'info');
+    showToast(viewOnly ? `Viewing Self Use voucher ${su.billNo}` : `Loaded Self Use voucher ${su.billNo} for editing`, 'info');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -330,11 +352,14 @@ export const SelfUseView: React.FC = () => {
     );
   }, [selfUseHistory, searchHistory]);
 
-  const isEditing = Boolean(editingSelfUseId);
-  const isCreating = Boolean(!isEditing && !isJustSaved && (isTouched || selfUseItems.length > 0 || selectedItemId));
+  const isEditing = Boolean(editingSelfUseId && !isViewOnly);
+  const isViewing = Boolean(editingSelfUseId && isViewOnly);
+  const isCreating = Boolean(!editingSelfUseId && !isJustSaved && (isTouched || selfUseItems.length > 0 || selectedItemId));
 
   const cardStateClass = isJustSaved
     ? 'is-saved-yellow'
+    : isViewing
+    ? 'is-initial-blue'
     : isEditing
     ? 'is-editing-pink'
     : isCreating
@@ -354,6 +379,10 @@ export const SelfUseView: React.FC = () => {
           {isJustSaved ? (
             <span className="active-mode-indicator is-saved">
               ● Saved / Updated Just Now ({billNo})
+            </span>
+          ) : isViewing ? (
+            <span className="active-mode-indicator is-initial" style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #F59E0B' }}>
+              ● Viewing Self Use Voucher: {billNo} (Read Only — Double-Click to Edit)
             </span>
           ) : isEditing ? (
             <span className="active-mode-indicator is-editing">
@@ -376,9 +405,58 @@ export const SelfUseView: React.FC = () => {
         className={`dynamic-entry-card ${cardStateClass}`}
         style={{
           maxWidth: '850px',
-          margin: '0 auto'
+          margin: '0 auto',
+          position: 'relative'
         }}
       >
+        {isViewing && (
+          <div
+            onClick={() => setIsEditPromptOpen(true)}
+            style={{
+              marginBottom: '16px',
+              padding: '10px 16px',
+              background: '#FEF3C7',
+              border: '1.5px solid #F59E0B',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              cursor: 'pointer'
+            }}
+          >
+            <span style={{ fontWeight: 800, color: '#92400E', fontSize: '0.88rem' }}>
+              🔒 View-Only Mode: Self Use voucher is locked against accidental edits. Click anywhere or press button to edit.
+            </span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsEditPromptOpen(true);
+              }}
+              style={{
+                background: '#D97706',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '5px 14px',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                cursor: 'pointer'
+              }}
+            >
+              Unlock / Edit
+            </button>
+          </div>
+        )}
+
+        <div
+          onClickCapture={isViewing ? (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsEditPromptOpen(true);
+          } : undefined}
+          style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}
+        >
         {/* Top Dates & Bill No Row */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -441,29 +519,15 @@ export const SelfUseView: React.FC = () => {
         </div>
 
         {/* ITEM SELECTION matching self use new.jpg */}
-        <div style={{ display: 'grid', gridTemplateColumns: '85px 1fr 34px', gap: '10px', alignItems: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '85px 1fr', gap: '10px', alignItems: 'center' }}>
           <label style={{ fontWeight: 900, fontSize: '1.05rem' }}>ITEM :</label>
-          <select
-            className="input-text-clean"
-            value={selectedItemId}
-            onChange={e => handleItemSelect(e.target.value)}
-            style={{ fontSize: '0.95rem', height: '38px', fontWeight: 700 }}
-          >
-            <option value="">-- Select Item --</option>
-            {filteredCategoryItems.map(i => (
-              <option key={i.id} value={i.id}>
-                [{i.sno}] {i.name} {i.hasSecondaryUnit ? `(${i.unitA?.unitName || 'Unit A'} / ${i.unitB?.unitName || 'Unit B'})` : `(${i.unit || 'Units'})`}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="btn-quick-n"
-            title="Quick Create Item"
-            onClick={() => openQuickModal('ITEM', (newId) => handleItemSelect(newId))}
-          >
-            N
-          </button>
+          <ItemSearchSelect
+            items={filteredCategoryItems}
+            selectedItemId={selectedItemId}
+            onSelect={handleItemSelect}
+            onQuickAdd={() => openQuickModal('ITEM', (newId) => handleItemSelect(newId))}
+            placeholder="Type to search item (e.g. ASTER)..."
+          />
         </div>
 
         {/* DUAL PRICING / CONSUMPTION INPUT CARDS (UNIT-A & UNIT-B) */}
@@ -686,7 +750,7 @@ export const SelfUseView: React.FC = () => {
                     }}
                   >
                     <td style={{ padding: '8px 12px', fontWeight: 800, borderRight: '1px solid #000000' }}>
-                      [{item.sno}] {item.itemName}
+                      {item.itemName}
                     </td>
                     <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, color: '#EA3943', borderRight: '1px solid #000000' }}>
                       {item.qty}
@@ -720,8 +784,8 @@ export const SelfUseView: React.FC = () => {
             type="button"
             className="btn-customer-action-pill"
             onClick={handleDeleteCurrentSelfUse}
-            disabled={!isEditing}
-            style={{ opacity: isEditing ? 1 : 0.5, cursor: isEditing ? 'pointer' : 'not-allowed' }}
+            disabled={!isEditing && !isViewing}
+            style={{ opacity: (isEditing || isViewing) ? 1 : 0.5, cursor: (isEditing || isViewing) ? 'pointer' : 'not-allowed' }}
           >
             Del
           </button>
@@ -732,7 +796,7 @@ export const SelfUseView: React.FC = () => {
             className="btn-customer-save"
             style={{ padding: '10px 48px', fontSize: '1.2rem', minWidth: '160px' }}
           >
-            Save
+            {isViewing ? 'Edit Voucher' : 'Save'}
           </button>
 
           <button
@@ -742,6 +806,7 @@ export const SelfUseView: React.FC = () => {
           >
             Print
           </button>
+        </div>
         </div>
       </div>
 
@@ -793,7 +858,9 @@ export const SelfUseView: React.FC = () => {
                       backgroundColor: editingSelfUseId === su.id ? '#EFF6FF' : 'transparent',
                       cursor: 'pointer'
                     }}
-                    onClick={() => handleLoadSelfUseForEdit(su)}
+                    onClick={() => handleLoadSelfUseForEdit(su, true)}
+                    onDoubleClick={() => handleLoadSelfUseForEdit(su, false)}
+                    title="Single-click to View, Double-click to Edit"
                   >
                     <td>{su.billDate}</td>
                     <td style={{ fontWeight: 800 }}>{su.billNo}</td>
@@ -804,11 +871,11 @@ export const SelfUseView: React.FC = () => {
                         type="button"
                         onClick={e => {
                           e.stopPropagation();
-                          handleLoadSelfUseForEdit(su);
+                          handleLoadSelfUseForEdit(su, false);
                         }}
                         style={{
-                          background: editingSelfUseId === su.id ? '#BFDBFE' : '#E2D2F8',
-                          color: editingSelfUseId === su.id ? '#1E40AF' : '#EA3943',
+                          background: (editingSelfUseId === su.id && !isViewOnly) ? '#BFDBFE' : '#E2D2F8',
+                          color: (editingSelfUseId === su.id && !isViewOnly) ? '#1E40AF' : '#EA3943',
                           border: '1px solid #C4B5FD',
                           borderRadius: '12px',
                           padding: '3px 12px',
@@ -817,7 +884,7 @@ export const SelfUseView: React.FC = () => {
                           cursor: 'pointer'
                         }}
                       >
-                        {editingSelfUseId === su.id ? 'Editing' : 'Load'}
+                        {(editingSelfUseId === su.id && !isViewOnly) ? 'Editing' : 'Edit'}
                       </button>
                     </td>
                   </tr>
@@ -827,6 +894,21 @@ export const SelfUseView: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Edit Mode Prompt Confirmation */}
+      <ConfirmDialog
+        isOpen={isEditPromptOpen}
+        onClose={() => setIsEditPromptOpen(false)}
+        onConfirm={() => {
+          setIsViewOnly(false);
+          setIsEditPromptOpen(false);
+          showToast('Edit mode enabled', 'info');
+        }}
+        title="Enable Edit Mode?"
+        message="Would you like to edit this self use voucher?"
+        confirmText="Yes, Edit"
+        cancelText="No, Keep View Only"
+      />
 
       <ConfirmDialog
         isOpen={isDeleteConfirmOpen}

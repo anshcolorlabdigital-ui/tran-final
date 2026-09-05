@@ -244,9 +244,6 @@ export const DashboardView: React.FC = () => {
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontFamily: 'monospace', color: '#6B7280', fontSize: '0.85rem' }}>
-                            [{summary.item.sno}]
-                          </span>
                           <span>{summary.item.name}</span>
                           <span style={{ fontSize: '0.75rem', color: '#6B7280', fontWeight: 600 }}>
                             (Min: {summary.item.minStock})

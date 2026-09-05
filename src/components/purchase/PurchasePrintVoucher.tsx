@@ -54,7 +54,7 @@ export const PurchasePrintVoucher: React.FC<PurchasePrintVoucherProps> = ({ purc
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', border: '1px solid #000000' }}>
         <thead>
           <tr style={{ background: '#ECECEC', borderBottom: '1px solid #000000' }}>
-            <th style={{ padding: '8px', textAlign: 'left', borderRight: '1px solid #000000' }}>S.No</th>
+            <th style={{ padding: '8px', textAlign: 'center', width: '50px', borderRight: '1px solid #000000' }}>#</th>
             <th style={{ padding: '8px', textAlign: 'left', borderRight: '1px solid #000000' }}>Item Description</th>
             <th style={{ padding: '8px', textAlign: 'right', borderRight: '1px solid #000000' }}>Basic</th>
             <th style={{ padding: '8px', textAlign: 'right', borderRight: '1px solid #000000' }}>GST %</th>
@@ -66,7 +66,7 @@ export const PurchasePrintVoucher: React.FC<PurchasePrintVoucherProps> = ({ purc
         <tbody>
           {purchase.items.map((item, index) => (
             <tr key={index} style={{ borderBottom: '1px solid #E5E7EB' }}>
-              <td style={{ padding: '8px', borderRight: '1px solid #000000' }}>{item.sno || index + 1}</td>
+              <td style={{ padding: '8px', textAlign: 'center', borderRight: '1px solid #000000' }}>{index + 1}</td>
               <td style={{ padding: '8px', fontWeight: 700, borderRight: '1px solid #000000' }}>{item.itemName}</td>
               <td style={{ padding: '8px', textAlign: 'right', borderRight: '1px solid #000000' }}>{formatCurrency(item.basicPrice, false)}</td>
               <td style={{ padding: '8px', textAlign: 'right', borderRight: '1px solid #000000' }}>{item.gstPercent}%</td>

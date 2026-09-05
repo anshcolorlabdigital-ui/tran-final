@@ -19,7 +19,6 @@ export const ItemStockReportView: React.FC = () => {
       if (q) {
         return (
           s.item.name.toLowerCase().includes(q) ||
-          s.item.sno.toLowerCase().includes(q) ||
           (s.item.category && s.item.category.toLowerCase().includes(q))
         );
       }
@@ -63,9 +62,8 @@ export const ItemStockReportView: React.FC = () => {
   };
 
   const handleExportCSV = () => {
-    const headers = ['S.No', 'Item Name', 'Category', 'Unit', 'Opening', 'Purchase In', 'Sale Out', 'Self Use Out', 'Adjustment', 'Closing Stock', 'Min Stock', 'Low Stock', 'Active Order'];
+    const headers = ['Item Name', 'Category', 'Unit', 'Opening', 'Purchase In', 'Sale Out', 'Self Use Out', 'Adjustment', 'Closing Stock', 'Min Stock', 'Low Stock', 'Active Order'];
     const rows = filteredSummaries.map(s => [
-      s.item.sno,
       `"${s.item.name}"`,
       `"${s.item.category || ''}"`,
       `"${s.item.unit || 'Pcs'}"`,
@@ -185,7 +183,6 @@ export const ItemStockReportView: React.FC = () => {
           <table className="custom-table">
             <thead>
               <tr>
-                <th style={{ width: '70px' }}>S.No</th>
                 <th>Item Description</th>
                 <th style={{ textAlign: 'center', width: '90px' }}>Opening</th>
                 <th style={{ textAlign: 'center', width: '90px', color: '#15803D' }}>Purchases</th>
@@ -200,14 +197,13 @@ export const ItemStockReportView: React.FC = () => {
             <tbody>
               {filteredSummaries.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: 'center', padding: '24px', color: '#9CA3AF' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: '24px', color: '#9CA3AF' }}>
                     No stock summary items found matching the filter.
                   </td>
                 </tr>
               ) : (
                 filteredSummaries.map(s => (
                   <tr key={s.item.id} style={{ background: s.isLowStock ? '#FFFBEB' : 'transparent' }}>
-                    <td style={{ fontFamily: 'monospace', fontWeight: 700 }}>{s.item.sno}</td>
                     <td style={{ fontWeight: 800 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span>{s.item.name}</span>

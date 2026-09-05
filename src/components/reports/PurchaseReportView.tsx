@@ -159,7 +159,7 @@ export const PurchaseReportView: React.FC = () => {
             <option value="">All Items</option>
             {items.map(i => (
               <option key={i.id} value={i.id}>
-                [{i.sno}] {i.name}
+                {i.name}
               </option>
             ))}
           </select>

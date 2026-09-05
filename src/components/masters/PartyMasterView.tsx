@@ -2,9 +2,10 @@ import React, { useState, useMemo } from 'react';
 import { db } from '../../db/db';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import { Party } from '../../types';
-import { Search } from 'lucide-react';
+import { Party, PartyLog } from '../../types';
+import { Search, Plus, CreditCard, CheckCircle, XCircle, FileText, ArrowUpRight, ArrowDownLeft, X } from 'lucide-react';
 import { ConfirmDialog } from '../common/ConfirmDialog';
+import { getTodayDateString, formatDateToDisplay } from '../../utils/dateUtils';
 
 export const PartyMasterView: React.FC = () => {
   const { refreshKey, showToast, showAlert } = useApp();
@@ -14,6 +15,8 @@ export const PartyMasterView: React.FC = () => {
   const [selectedPartyId, setSelectedPartyId] = useState<string | null>(null);
   const [isJustSaved, setIsJustSaved] = useState(false);
   const [isTouched, setIsTouched] = useState(false);
+  const [isViewOnly, setIsViewOnly] = useState(false);
+  const [isEditPromptOpen, setIsEditPromptOpen] = useState(false);
 
   // Form Fields matching Customer Screenshot party.jpg
   const [firmName, setFirmName] = useState('');
@@ -30,6 +33,11 @@ export const PartyMasterView: React.FC = () => {
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [mailId, setMailId] = useState('');
+  const [isActive, setIsActive] = useState<boolean>(true);
+  const [allowCredit, setAllowCredit] = useState<boolean>(false);
+  const [partyType, setPartyType] = useState<'DEALER' | 'AMATEUR'>('AMATEUR');
+  const [dealerProfitPercent, setDealerProfitPercent] = useState<string>('10');
+  const [amateurProfitPercent, setAmateurProfitPercent] = useState<string>('25');
 
   const [search, setSearch] = useState('');
   const [deleteDialog, setDeleteDialog] = useState<{ isOpen: boolean; id: string; name: string }>({
@@ -38,10 +46,19 @@ export const PartyMasterView: React.FC = () => {
     name: ''
   });
 
+  // Statement / Ledger Modal State
+  const [statementParty, setStatementParty] = useState<Party | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState<string>('');
+  const [paymentMode, setPaymentMode] = useState<'CASH' | 'UPI' | 'COMBINED'>('CASH');
+  const [paymentRef, setPaymentRef] = useState<string>('');
+  const [paymentNotes, setPaymentNotes] = useState<string>('');
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+
   const handleCreateNew = () => {
     setSelectedPartyId(null);
     setIsJustSaved(false);
     setIsTouched(false);
+    setIsViewOnly(false);
     setFirmName('');
     setGstin('');
     setPropName('');
@@ -56,12 +73,18 @@ export const PartyMasterView: React.FC = () => {
     setCity('');
     setState('');
     setMailId('');
+    setIsActive(true);
+    setAllowCredit(false);
+    setPartyType('AMATEUR');
+    setDealerProfitPercent('10');
+    setAmateurProfitPercent('25');
   };
 
-  const handleEditParty = (party: Party) => {
+  const handleEditParty = (party: Party, viewOnly: boolean = false) => {
     setSelectedPartyId(party.id);
     setIsJustSaved(false);
     setIsTouched(false);
+    setIsViewOnly(viewOnly);
     setFirmName(party.name);
     setGstin(party.gstin || '');
     setPropName(party.propName || '');
@@ -76,11 +99,20 @@ export const PartyMasterView: React.FC = () => {
     setCity(party.city || '');
     setState(party.state || '');
     setMailId(party.email || '');
+    setIsActive(party.isActive !== false);
+    setAllowCredit(Boolean(party.allowCredit));
+    setPartyType(party.partyType || 'AMATEUR');
+    setDealerProfitPercent(party.dealerProfitPercent !== undefined ? String(party.dealerProfitPercent) : '10');
+    setAmateurProfitPercent(party.amateurProfitPercent !== undefined ? String(party.amateurProfitPercent) : '25');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isViewOnly) {
+      setIsEditPromptOpen(true);
+      return;
+    }
     if (!firmName.trim()) {
       showAlert('Firm Name is required', 'Validation Error', 'error');
       return;
@@ -104,7 +136,11 @@ export const PartyMasterView: React.FC = () => {
       email: mailId.trim(),
       openingBalance: 0,
       creditLimit: 50000,
-      isActive: true,
+      isActive,
+      allowCredit,
+      partyType,
+      dealerProfitPercent: partyType === 'DEALER' ? (dealerProfitPercent !== '' ? Number(dealerProfitPercent) : 10) : undefined,
+      amateurProfitPercent: partyType === 'AMATEUR' ? (amateurProfitPercent !== '' ? Number(amateurProfitPercent) : 25) : undefined,
       createdAt: new Date().toISOString()
     };
 
@@ -114,10 +150,12 @@ export const PartyMasterView: React.FC = () => {
     if (selectedPartyId) {
       setIsJustSaved(true);
       setIsTouched(false);
+      setIsViewOnly(false);
       showToast(`Party "${partyRecord.name}" updated successfully!`, 'success');
     } else {
       setIsJustSaved(false);
       setIsTouched(false);
+      setIsViewOnly(false);
       showToast(`Party "${partyRecord.name}" created successfully!`, 'success');
       handleCreateNew();
     }
@@ -148,6 +186,42 @@ export const PartyMasterView: React.FC = () => {
     window.print();
   };
 
+  // Payment Recording in Statement Modal
+  const handleRecordPayment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!statementParty) return;
+
+    const amt = Number(paymentAmount);
+    if (!amt || amt <= 0) {
+      showAlert('Payment amount must be greater than 0', 'Validation Error', 'error');
+      return;
+    }
+
+    db.recordPartyPayment(
+      statementParty.id,
+      amt,
+      paymentMode,
+      paymentRef.trim() || undefined,
+      paymentNotes.trim() || undefined
+    );
+
+    showToast(`Payment of ₹${amt} recorded for ${statementParty.name}!`, 'success');
+    setPaymentAmount('');
+    setPaymentRef('');
+    setPaymentNotes('');
+    setShowPaymentForm(false);
+  };
+
+  const statementLogs: PartyLog[] = useMemo(() => {
+    if (!statementParty) return [];
+    return db.getPartyLogsByPartyId(statementParty.id);
+  }, [statementParty, refreshKey]);
+
+  const statementSummary = useMemo(() => {
+    if (!statementParty) return { totalBilled: 0, totalPaid: 0, outstandingBalance: 0 };
+    return db.getPartyBalanceSummary(statementParty.id);
+  }, [statementParty, refreshKey]);
+
   const filteredParties = useMemo(() => {
     const q = search.toLowerCase().trim();
     if (!q) return parties;
@@ -160,11 +234,14 @@ export const PartyMasterView: React.FC = () => {
     );
   }, [parties, search]);
 
-  const isEditing = Boolean(selectedPartyId);
-  const isCreating = Boolean(!isEditing && !isJustSaved && (isTouched || firmName.trim() !== ''));
+  const isEditing = Boolean(selectedPartyId && !isViewOnly);
+  const isViewing = Boolean(selectedPartyId && isViewOnly);
+  const isCreating = Boolean(!selectedPartyId && !isJustSaved && (isTouched || firmName.trim() !== ''));
 
   const cardStateClass = isJustSaved
     ? 'is-saved-yellow'
+    : isViewing
+    ? 'is-initial-blue'
     : isEditing
     ? 'is-editing-pink'
     : isCreating
@@ -183,6 +260,10 @@ export const PartyMasterView: React.FC = () => {
             <span className="active-mode-indicator is-saved">
               ● Saved / Updated Just Now ({firmName})
             </span>
+          ) : isViewing ? (
+            <span className="active-mode-indicator is-initial" style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #F59E0B' }}>
+              ● Viewing Party: {firmName || 'Saved Party'} (Read Only — Double-Click to Edit)
+            </span>
           ) : isEditing ? (
             <span className="active-mode-indicator is-editing">
               ● Editing Party ({firmName || 'Saved Party'})
@@ -199,16 +280,65 @@ export const PartyMasterView: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Form Container: Light Blue on Initial, Light Green on Creating, Light Pink on Editing */}
+      {/* Main Form Container */}
       <div
         className={`dynamic-entry-card ${cardStateClass}`}
         style={{
           padding: '32px',
           maxWidth: '850px',
-          margin: '0 auto'
+          margin: '0 auto',
+          position: 'relative'
         }}
       >
-        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        {isViewing && (
+          <div
+            onClick={() => setIsEditPromptOpen(true)}
+            style={{
+              marginBottom: '18px',
+              padding: '10px 16px',
+              background: '#FEF3C7',
+              border: '1.5px solid #F59E0B',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              cursor: 'pointer'
+            }}
+          >
+            <span style={{ fontWeight: 800, color: '#92400E', fontSize: '0.88rem' }}>
+              🔒 View-Only Mode: Record is locked against accidental edits. Click anywhere or press button to edit.
+            </span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsEditPromptOpen(true);
+              }}
+              style={{
+                background: '#D97706',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '5px 14px',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                cursor: 'pointer'
+              }}
+            >
+              Unlock / Edit
+            </button>
+          </div>
+        )}
+
+        <form
+          onSubmit={handleSave}
+          onClickCapture={isViewing ? (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsEditPromptOpen(true);
+          } : undefined}
+          style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}
+        >
           
           {/* Row 1: Firm Name & Gst No. */}
           <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '14px' }}>
@@ -447,14 +577,212 @@ export const PartyMasterView: React.FC = () => {
             </div>
           </div>
 
+          {/* CLASSIFICATION: Amateur vs Dealer with Custom Profit % */}
+          <div style={{ background: '#F8FAFC', border: '1.5px solid #CBD5E1', borderRadius: '10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px' }}>
+            <label style={{ display: 'block', fontWeight: 900, fontSize: '0.88rem', color: '#1E293B' }}>
+              Party Classification (Pricing Tier & Profit %)
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <button
+                type="button"
+                onClick={() => { setIsTouched(true); setPartyType('AMATEUR'); }}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  fontWeight: 800,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  border: partyType === 'AMATEUR' ? '2px solid #2563EB' : '1px solid #D1D5DB',
+                  background: partyType === 'AMATEUR' ? '#EFF6FF' : '#FFFFFF',
+                  color: partyType === 'AMATEUR' ? '#1D4ED8' : '#6B7280'
+                }}
+              >
+                👤 Amateur (Retail/Custom Profit %)
+              </button>
+              <button
+                type="button"
+                onClick={() => { setIsTouched(true); setPartyType('DEALER'); }}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  fontWeight: 800,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  border: partyType === 'DEALER' ? '2px solid #7C3AED' : '1px solid #D1D5DB',
+                  background: partyType === 'DEALER' ? '#F5F3FF' : '#FFFFFF',
+                  color: partyType === 'DEALER' ? '#6D28D9' : '#6B7280'
+                }}
+              >
+                🏢 Dealer (Custom Profit %)
+              </button>
+            </div>
+
+            {partyType === 'AMATEUR' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#EFF6FF', padding: '10px 14px', borderRadius: '8px', border: '1px solid #BFDBFE' }}>
+                <label style={{ fontWeight: 800, fontSize: '0.85rem', color: '#1E40AF', whiteSpace: 'nowrap' }}>
+                  Amateur Profit %:
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  className="input-text-clean"
+                  value={amateurProfitPercent}
+                  onChange={e => { setIsTouched(true); setAmateurProfitPercent(e.target.value); }}
+                  placeholder="e.g. 25"
+                  style={{ width: '100px', fontWeight: 800, textAlign: 'center', borderColor: '#3B82F6' }}
+                />
+                <span style={{ fontSize: '0.8rem', color: '#1D4ED8', fontWeight: 700 }}>
+                  This profit % will automatically apply in Sales Entry for this amateur customer.
+                </span>
+              </div>
+            )}
+
+            {partyType === 'DEALER' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#F5F3FF', padding: '10px 14px', borderRadius: '8px', border: '1px solid #DDD6FE' }}>
+                <label style={{ fontWeight: 800, fontSize: '0.85rem', color: '#5B21B6', whiteSpace: 'nowrap' }}>
+                  Dealer Profit %:
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  className="input-text-clean"
+                  value={dealerProfitPercent}
+                  onChange={e => { setIsTouched(true); setDealerProfitPercent(e.target.value); }}
+                  placeholder="e.g. 10"
+                  style={{ width: '100px', fontWeight: 800, textAlign: 'center', borderColor: '#8B5CF6' }}
+                />
+                <span style={{ fontSize: '0.8rem', color: '#6D28D9', fontWeight: 700 }}>
+                  This profit % will automatically replace standard item profit % in Sales Entry for this dealer.
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* PRIVILEGES & STATUS TOGGLES: Active Status & Credit Facility */}
+          <div style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '10px', padding: '14px 16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '2px' }}>
+            {/* Active / Inactive Toggle */}
+            <div>
+              <label style={{ display: 'block', fontWeight: 900, fontSize: '0.86rem', color: '#1E293B', marginBottom: '6px' }}>
+                Party Status (Visibility)
+              </label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => { setIsTouched(true); setIsActive(true); }}
+                  style={{
+                    flex: 1,
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    fontWeight: 800,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    border: isActive ? '2px solid #16A34A' : '1px solid #D1D5DB',
+                    background: isActive ? '#DCFCE7' : '#FFFFFF',
+                    color: isActive ? '#15803D' : '#6B7280'
+                  }}
+                >
+                  <CheckCircle size={15} />
+                  Active (Show Everywhere)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setIsTouched(true); setIsActive(false); }}
+                  style={{
+                    flex: 1,
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    fontWeight: 800,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    border: !isActive ? '2px solid #DC2626' : '1px solid #D1D5DB',
+                    background: !isActive ? '#FEE2E2' : '#FFFFFF',
+                    color: !isActive ? '#B91C1C' : '#6B7280'
+                  }}
+                >
+                  <XCircle size={15} />
+                  Inactive (Hidden from Sales)
+                </button>
+              </div>
+            </div>
+
+            {/* Allow Credit Toggle */}
+            <div>
+              <label style={{ display: 'block', fontWeight: 900, fontSize: '0.86rem', color: '#1E293B', marginBottom: '6px' }}>
+                Credit Facility (Payment Rules)
+              </label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => { setIsTouched(true); setAllowCredit(true); }}
+                  style={{
+                    flex: 1,
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    fontWeight: 800,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    border: allowCredit ? '2px solid #002B99' : '1px solid #D1D5DB',
+                    background: allowCredit ? '#E0E7FF' : '#FFFFFF',
+                    color: allowCredit ? '#002B99' : '#6B7280'
+                  }}
+                >
+                  <CreditCard size={15} />
+                  Allow Credit (Partial Pay)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setIsTouched(true); setAllowCredit(false); }}
+                  style={{
+                    flex: 1,
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    fontWeight: 800,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    border: !allowCredit ? '2px solid #F59E0B' : '1px solid #D1D5DB',
+                    background: !allowCredit ? '#FEF3C7' : '#FFFFFF',
+                    color: !allowCredit ? '#B45309' : '#6B7280'
+                  }}
+                >
+                  <XCircle size={15} />
+                  Cash Only (Full Pay Required)
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Customer Action Buttons: Del, Large Save, Print */}
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', flexWrap: 'wrap', marginTop: '24px' }}>
             <button
               type="button"
               className="btn-customer-action-pill"
               onClick={handleDelete}
-              disabled={!isEditing}
-              style={{ opacity: isEditing ? 1 : 0.5, cursor: isEditing ? 'pointer' : 'not-allowed' }}
+              disabled={!isEditing && !isViewing}
+              style={{ opacity: (isEditing || isViewing) ? 1 : 0.5, cursor: (isEditing || isViewing) ? 'pointer' : 'not-allowed' }}
             >
               Del
             </button>
@@ -464,7 +792,7 @@ export const PartyMasterView: React.FC = () => {
               className="btn-customer-save"
               style={{ padding: '10px 48px', fontSize: '1.2rem', minWidth: '160px' }}
             >
-              Save
+              {isViewing ? 'Edit Party' : 'Save'}
             </button>
 
             <button
@@ -479,10 +807,10 @@ export const PartyMasterView: React.FC = () => {
       </div>
 
       {/* Party Directory Register in the Downside (Always Visible) */}
-      <div id="party-directory-register" style={{ marginTop: '28px', background: '#FFFFFF', border: '2px solid #000000', borderRadius: '12px', padding: '20px', maxWidth: '850px', margin: '28px auto 0', boxShadow: '0 2px 4px rgba(0,0,0,0.04)' }}>
+      <div id="party-directory-register" style={{ marginTop: '28px', background: '#FFFFFF', border: '2px solid #000000', borderRadius: '12px', padding: '20px', maxWidth: '960px', margin: '28px auto 0', boxShadow: '0 2px 4px rgba(0,0,0,0.04)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <h4 style={{ fontWeight: 900, fontSize: '1.1rem', margin: 0 }}>Party Directory (Register)</h4>
+            <h4 style={{ fontWeight: 900, fontSize: '1.1rem', margin: 0 }}>Party Directory (Register & Ledger)</h4>
             <span style={{ fontSize: '0.8rem', background: '#E0E7FF', color: '#3730A3', padding: '2px 10px', borderRadius: '12px', fontWeight: 800 }}>
               {filteredParties.length} {filteredParties.length === 1 ? 'Party' : 'Parties'}
             </span>
@@ -505,63 +833,432 @@ export const PartyMasterView: React.FC = () => {
             <thead>
               <tr>
                 <th>Firm Name</th>
+                <th>Type & Status</th>
                 <th>Prop. Name</th>
                 <th>Mobile</th>
                 <th>CITY / State</th>
-                <th>GST No.</th>
-                <th style={{ textAlign: 'center' }}>Action</th>
+                <th style={{ textAlign: 'right' }}>Balance Due</th>
+                <th style={{ textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredParties.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: '#9CA3AF', fontWeight: 600 }}>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: '#9CA3AF', fontWeight: 600 }}>
                     No parties found matching "{search}".
                   </td>
                 </tr>
               ) : (
-                filteredParties.map(p => (
-                  <tr
-                    key={p.id}
-                    style={{
-                      backgroundColor: selectedPartyId === p.id ? '#EFF6FF' : 'transparent',
-                      cursor: 'pointer'
-                    }}
-                    onClick={() => handleEditParty(p)}
-                  >
-                    <td style={{ fontWeight: 800 }}>{p.name}</td>
-                    <td>{p.propName || '-'}</td>
-                    <td>{p.phone || '-'}</td>
-                    <td>{[p.city, p.state].filter(Boolean).join(', ') || '-'}</td>
-                    <td style={{ fontFamily: 'monospace' }}>{p.gstin || '-'}</td>
-                    <td style={{ textAlign: 'center' }}>
-                      <button
-                        type="button"
-                        onClick={e => {
-                          e.stopPropagation();
-                          handleEditParty(p);
-                        }}
-                        style={{
-                          background: selectedPartyId === p.id ? '#BFDBFE' : '#E2D2F8',
-                          color: selectedPartyId === p.id ? '#1E40AF' : '#EA3943',
-                          border: '1px solid #C4B5FD',
-                          borderRadius: '12px',
-                          padding: '3px 12px',
-                          fontWeight: 800,
-                          fontSize: '0.8rem',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {selectedPartyId === p.id ? 'Editing' : 'Load'}
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                filteredParties.map(p => {
+                  const bal = db.getPartyBalanceSummary(p.id);
+                  const isDealer = p.partyType === 'DEALER';
+                  return (
+                    <tr
+                      key={p.id}
+                      style={{
+                        backgroundColor: selectedPartyId === p.id ? '#EFF6FF' : 'transparent',
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => handleEditParty(p, true)}
+                      onDoubleClick={() => handleEditParty(p, false)}
+                      title="Single-click to View, Double-click to Edit"
+                    >
+                      <td style={{ fontWeight: 800 }}>
+                        {p.name}
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                          <span style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            background: isDealer ? '#F5F3FF' : '#EFF6FF',
+                            color: isDealer ? '#6D28D9' : '#1D4ED8',
+                            border: isDealer ? '1px solid #DDD6FE' : '1px solid #BFDBFE'
+                          }}>
+                            {isDealer
+                              ? `Dealer (${p.dealerProfitPercent ?? 10}%)`
+                              : (p.amateurProfitPercent !== undefined ? `Amateur (${p.amateurProfitPercent}%)` : 'Amateur')}
+                          </span>
+                          <span style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            background: p.isActive !== false ? '#DCFCE7' : '#FEE2E2',
+                            color: p.isActive !== false ? '#15803D' : '#991B1B'
+                          }}>
+                            {p.isActive !== false ? 'Active' : 'Inactive'}
+                          </span>
+                          <span style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            background: p.allowCredit ? '#E0E7FF' : '#FEF3C7',
+                            color: p.allowCredit ? '#3730A3' : '#92400E'
+                          }}>
+                            {p.allowCredit ? 'Credit OK' : 'Cash Only'}
+                          </span>
+                        </div>
+                      </td>
+                      <td>{p.propName || '-'}</td>
+                      <td>{p.phone || '-'}</td>
+                      <td>{[p.city, p.state].filter(Boolean).join(', ') || '-'}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 900, color: bal.outstandingBalance > 0 ? '#DC2626' : '#16A34A' }}>
+                        {bal.outstandingBalance > 0 ? `₹${bal.outstandingBalance}` : '₹0'}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={e => {
+                              e.stopPropagation();
+                              handleEditParty(p, false);
+                            }}
+                            style={{
+                              background: (selectedPartyId === p.id && !isViewOnly) ? '#BFDBFE' : '#E2D2F8',
+                              color: (selectedPartyId === p.id && !isViewOnly) ? '#1E40AF' : '#EA3943',
+                              border: '1px solid #C4B5FD',
+                              borderRadius: '12px',
+                              padding: '3px 10px',
+                              fontWeight: 800,
+                              fontSize: '0.78rem',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {(selectedPartyId === p.id && !isViewOnly) ? 'Editing' : 'Edit'}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={e => {
+                              e.stopPropagation();
+                              setStatementParty(p);
+                            }}
+                            style={{
+                              background: '#DCFCE7',
+                              color: '#15803D',
+                              border: '1px solid #86EFAC',
+                              borderRadius: '12px',
+                              padding: '3px 10px',
+                              fontWeight: 800,
+                              fontSize: '0.78rem',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <FileText size={12} />
+                            Ledger
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* CUSTOMER STATEMENT / LEDGER & CREDIT LOG MODAL */}
+      {statementParty && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            border: '2px solid #000000',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '850px',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)',
+            overflow: 'hidden'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              background: '#D2BEF6',
+              padding: '16px 20px',
+              borderBottom: '2px solid #000000',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <FileText size={22} color="#002B99" />
+                <div>
+                  <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.2rem', color: '#002B99' }}>
+                    Customer Statement & Credit Log: {statementParty.name}
+                  </h3>
+                  <div style={{ fontSize: '0.8rem', color: '#4B5563', fontWeight: 700 }}>
+                    {statementParty.phone && `📞 ${statementParty.phone} | `}
+                    {statementParty.city && `📍 ${statementParty.city} | `}
+                    Status: {statementParty.isActive !== false ? 'Active' : 'Inactive'} |
+                    Credit: {statementParty.allowCredit ? 'Allowed' : 'Cash Only'}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setStatementParty(null); setShowPaymentForm(false); }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  borderRadius: '50%'
+                }}
+              >
+                <X size={22} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              {/* Summary Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
+                <div style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '10px', padding: '12px 16px' }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#64748B' }}>Total Sales Billed</div>
+                  <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#002B99' }}>₹{statementSummary.totalBilled}</div>
+                </div>
+                <div style={{ background: '#F0FDF4', border: '1.5px solid #BBF7D0', borderRadius: '10px', padding: '12px 16px' }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#166534' }}>Total Payments Received</div>
+                  <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#16A34A' }}>₹{statementSummary.totalPaid}</div>
+                </div>
+                <div style={{
+                  background: statementSummary.outstandingBalance > 0 ? '#FEF2F2' : '#F0FDF4',
+                  border: statementSummary.outstandingBalance > 0 ? '1.5px solid #FECACA' : '1.5px solid #BBF7D0',
+                  borderRadius: '10px',
+                  padding: '12px 16px'
+                }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 800, color: statementSummary.outstandingBalance > 0 ? '#991B1B' : '#166534' }}>
+                    Outstanding Balance Due
+                  </div>
+                  <div style={{ fontSize: '1.35rem', fontWeight: 900, color: statementSummary.outstandingBalance > 0 ? '#DC2626' : '#16A34A' }}>
+                    ₹{statementSummary.outstandingBalance}
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Receipt Quick Record Strip */}
+              <div style={{ background: '#F8FAFC', border: '1.5px dashed #CBD5E1', borderRadius: '10px', padding: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: showPaymentForm ? '12px' : 0 }}>
+                  <span style={{ fontWeight: 800, fontSize: '0.92rem', color: '#1E293B' }}>
+                    Collect / Settle Outstanding Balance
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowPaymentForm(!showPaymentForm)}
+                    style={{
+                      background: showPaymentForm ? '#E2E8F0' : '#DCFCE7',
+                      color: showPaymentForm ? '#334155' : '#15803D',
+                      border: '1px solid',
+                      borderColor: showPaymentForm ? '#CBD5E1' : '#86EFAC',
+                      borderRadius: '20px',
+                      padding: '4px 14px',
+                      fontWeight: 800,
+                      fontSize: '0.82rem',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    {showPaymentForm ? 'Hide Form' : '+ Record Payment Receipt'}
+                  </button>
+                </div>
+
+                {showPaymentForm && (
+                  <form onSubmit={handleRecordPayment} style={{ display: 'grid', gridTemplateColumns: '120px 140px 150px 1fr auto', gap: '10px', alignItems: 'flex-end', paddingTop: '8px', borderTop: '1px dashed #E2E8F0' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>Amount (₹) *</label>
+                      <input
+                        type="number"
+                        step="any"
+                        required
+                        className="input-text-clean"
+                        value={paymentAmount}
+                        onChange={e => setPaymentAmount(e.target.value)}
+                        placeholder="e.g. 500"
+                        style={{ fontWeight: 800, padding: '6px 8px' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>Payment Mode</label>
+                      <select
+                        className="input-text-clean"
+                        value={paymentMode}
+                        onChange={e => setPaymentMode(e.target.value as any)}
+                        style={{ fontWeight: 700, padding: '6px 8px', height: '35px' }}
+                      >
+                        <option value="CASH">Cash</option>
+                        <option value="UPI">UPI</option>
+                        <option value="COMBINED">Bank / Other</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>Ref / Cheque No.</label>
+                      <input
+                        type="text"
+                        className="input-text-clean"
+                        value={paymentRef}
+                        onChange={e => setPaymentRef(e.target.value)}
+                        placeholder="e.g. UPI-12345"
+                        style={{ padding: '6px 8px' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>Notes</label>
+                      <input
+                        type="text"
+                        className="input-text-clean"
+                        value={paymentNotes}
+                        onChange={e => setPaymentNotes(e.target.value)}
+                        placeholder="Remarks / details"
+                        style={{ padding: '6px 8px' }}
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      style={{
+                        background: '#16A34A',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '8px 16px',
+                        fontWeight: 900,
+                        fontSize: '0.85rem',
+                        cursor: 'pointer',
+                        height: '35px'
+                      }}
+                    >
+                      Save Receipt
+                    </button>
+                  </form>
+                )}
+              </div>
+
+              {/* Chronological Statement Table */}
+              <div>
+                <h4 style={{ fontWeight: 900, fontSize: '0.95rem', marginBottom: '8px', color: '#1E293B' }}>
+                  Transaction History & Ledger Logs
+                </h4>
+                <div className="custom-table-container">
+                  <table className="custom-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Ref / Bill No.</th>
+                        <th style={{ textAlign: 'right' }}>Total Bill (Debit)</th>
+                        <th style={{ textAlign: 'right' }}>Paid (Credit)</th>
+                        <th style={{ textAlign: 'right' }}>Balance Change</th>
+                        <th>Remarks</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {statementLogs.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: '#9CA3AF', fontWeight: 600 }}>
+                            No statement logs or transactions recorded yet for this party.
+                          </td>
+                        </tr>
+                      ) : (
+                        statementLogs.map(log => (
+                          <tr key={log.id}>
+                            <td>{formatDateToDisplay(log.date)}</td>
+                            <td>
+                              <span style={{
+                                fontSize: '0.75rem',
+                                fontWeight: 800,
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                background: log.type === 'SALE' ? '#E0E7FF' : '#DCFCE7',
+                                color: log.type === 'SALE' ? '#3730A3' : '#15803D'
+                              }}>
+                                {log.type === 'SALE' ? 'Sale Invoice' : 'Payment Received'}
+                              </span>
+                            </td>
+                            <td style={{ fontWeight: 800 }}>{log.refNo || '-'}</td>
+                            <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                              {log.totalAmount ? `₹${log.totalAmount}` : '-'}
+                            </td>
+                            <td style={{ textAlign: 'right', fontWeight: 800, color: '#16A34A' }}>
+                              ₹{log.paidAmount || 0}
+                            </td>
+                            <td style={{
+                              textAlign: 'right',
+                              fontWeight: 900,
+                              color: log.balanceChange > 0 ? '#DC2626' : log.balanceChange < 0 ? '#16A34A' : '#4B5563'
+                            }}>
+                              {log.balanceChange > 0 ? `+₹${log.balanceChange}` : log.balanceChange < 0 ? `-₹${Math.abs(log.balanceChange)}` : '₹0'}
+                            </td>
+                            <td style={{ fontSize: '0.82rem', color: '#6B7280' }}>
+                              {log.notes || '-'}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ padding: '12px 20px', borderTop: '1px solid #E5E7EB', display: 'flex', justifyContent: 'flex-end', background: '#F9FAFB' }}>
+              <button
+                type="button"
+                onClick={() => { setStatementParty(null); setShowPaymentForm(false); }}
+                style={{
+                  background: '#E2E8F0',
+                  color: '#1E293B',
+                  border: '1px solid #CBD5E1',
+                  borderRadius: '20px',
+                  padding: '6px 20px',
+                  fontWeight: 800,
+                  fontSize: '0.88rem',
+                  cursor: 'pointer'
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Mode Prompt Confirmation */}
+      <ConfirmDialog
+        isOpen={isEditPromptOpen}
+        onClose={() => setIsEditPromptOpen(false)}
+        onConfirm={() => {
+          setIsViewOnly(false);
+          setIsEditPromptOpen(false);
+          showToast('Edit mode enabled', 'info');
+        }}
+        title="Enable Edit Mode?"
+        message="Would you like to edit this party record?"
+        confirmText="Yes, Edit"
+        cancelText="No, Keep View Only"
+      />
 
       {/* Delete Confirmation */}
       <ConfirmDialog

@@ -5,6 +5,7 @@ import { useApp } from '../../context/AppContext';
 import { Item, Supplier, SupplierOrder, OrderItem } from '../../types';
 import { StockEngine } from '../../db/stockEngine';
 import { getTodayDateString } from '../../utils/dateUtils';
+import { ItemSearchSelect } from '../common/ItemSearchSelect';
 import { Plus, Trash2 } from 'lucide-react';
 
 interface CreateOrderModalProps {
@@ -33,8 +34,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
   const [orderDate, setOrderDate] = useState<string>(getTodayDateString());
   const [supplierId, setSupplierId] = useState<string>('');
 
-  // Line item input state with bidirectional lookup
-  const [currentSno, setCurrentSno] = useState<string>('');
+  // Line item input state
   const [currentItemId, setCurrentItemId] = useState<string>('');
   const [currentQty, setCurrentQty] = useState<string>('1');
 
@@ -55,24 +55,6 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
 
   if (!isOpen) return null;
 
-  // BIDIRECTIONAL LOOKUP: Handle S.No. change
-  const handleSnoChange = (val: string) => {
-    setCurrentSno(val);
-    const matched = itemsList.find(i => i.sno.trim().toLowerCase() === val.trim().toLowerCase());
-    if (matched) {
-      setCurrentItemId(matched.id);
-    }
-  };
-
-  // BIDIRECTIONAL LOOKUP: Handle Item dropdown change
-  const handleItemChange = (val: string) => {
-    setCurrentItemId(val);
-    const matched = itemsList.find(i => i.id === val);
-    if (matched) {
-      setCurrentSno(matched.sno);
-    }
-  };
-
   // Add Item to Order list
   const handleAddItemToDraft = () => {
     if (!currentItemId) {
@@ -92,7 +74,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
       ...prev,
       {
         id: `draft-${Date.now()}-${Math.random()}`,
-        sno: item.sno,
+        sno: item.sno || '',
         itemId: item.id,
         itemName: item.name,
         qty
@@ -100,7 +82,6 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
     ]);
 
     // Reset input fields
-    setCurrentSno('');
     setCurrentItemId('');
     setCurrentQty('1');
   };
@@ -206,7 +187,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
           </div>
         </div>
 
-        {/* Item Entry Strip with Bidirectional Lookup */}
+        {/* Item Entry Strip */}
         <div
           style={{
             background: '#F3F4F6',
@@ -219,54 +200,22 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
           }}
         >
           <div style={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', color: '#374151' }}>
-            Add Item (Bidirectional Lookup by S.No. or Name)
+            Add Item to Order
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 90px auto', gap: '8px', alignItems: 'flex-end' }}>
-            {/* S.No Input */}
-            <div>
-              <label style={{ display: 'block', fontWeight: 700, fontSize: '0.75rem', marginBottom: '2px' }}>
-                S.No. / Code
-              </label>
-              <input
-                type="text"
-                className="input-text-clean"
-                placeholder="1456"
-                value={currentSno}
-                onChange={e => handleSnoChange(e.target.value)}
-              />
-            </div>
-
-            {/* Item Dropdown */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px auto', gap: '8px', alignItems: 'flex-end' }}>
+            {/* Item Autocomplete Search */}
             <div>
               <label style={{ display: 'block', fontWeight: 700, fontSize: '0.75rem', marginBottom: '2px' }}>
                 Item Name
               </label>
-              <div style={{ display: 'flex', gap: '4px' }}>
-                <select
-                  className="input-text-clean"
-                  value={currentItemId}
-                  onChange={e => handleItemChange(e.target.value)}
-                  style={{ flex: 1 }}
-                >
-                  <option value="">-- Choose Item --</option>
-                  {itemsList.map(i => (
-                    <option key={i.id} value={i.id}>
-                      [{i.sno}] {i.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="btn-quick-n"
-                  title="Quick Add Item"
-                  onClick={() => openQuickModal('ITEM', (newId) => {
-                    handleItemChange(newId);
-                  })}
-                >
-                  N
-                </button>
-              </div>
+              <ItemSearchSelect
+                items={itemsList}
+                selectedItemId={currentItemId}
+                onSelect={(id) => setCurrentItemId(id)}
+                onQuickAdd={() => openQuickModal('ITEM', (newId) => setCurrentItemId(newId))}
+                placeholder="Search item to order..."
+              />
             </div>
 
             {/* Qty Input */}
@@ -280,7 +229,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
                 className="input-text-clean"
                 value={currentQty}
                 onChange={e => setCurrentQty(e.target.value)}
-                style={{ fontWeight: 800, color: '#EA3943' }}
+                style={{ fontWeight: 800, color: '#EA3943', height: '38px' }}
               />
             </div>
 
@@ -289,7 +238,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
               type="button"
               onClick={handleAddItemToDraft}
               className="btn-lime-action"
-              style={{ padding: '7px 14px', height: '36px' }}
+              style={{ padding: '7px 14px', height: '38px' }}
             >
               <Plus size={16} />
               Add
@@ -302,7 +251,6 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
           <table className="custom-table">
             <thead>
               <tr>
-                <th style={{ width: '80px' }}>S.No.</th>
                 <th>Item Name</th>
                 <th style={{ width: '100px', textAlign: 'right' }}>Qty</th>
                 <th style={{ width: '60px', textAlign: 'center' }}>Del</th>
@@ -311,14 +259,13 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
             <tbody>
               {draftItems.length === 0 ? (
                 <tr>
-                  <td colSpan={4} style={{ textAlign: 'center', color: '#9CA3AF', padding: '16px' }}>
-                    No items added yet. Enter S.No. or select an item above.
+                  <td colSpan={3} style={{ textAlign: 'center', color: '#9CA3AF', padding: '16px' }}>
+                    No items added yet. Select an item above.
                   </td>
                 </tr>
               ) : (
                 draftItems.map((d) => (
                   <tr key={d.id}>
-                    <td style={{ fontFamily: 'monospace' }}>{d.sno}</td>
                     <td>{d.itemName}</td>
                     <td style={{ textAlign: 'right', fontWeight: 800, color: '#EA3943' }}>{d.qty}</td>
                     <td style={{ textAlign: 'center' }}>
