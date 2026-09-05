@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { db } from '../../db/db';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { StockEngine } from '../../db/stockEngine';
-import { Save, Search, RefreshCw, AlertCircle } from 'lucide-react';
+import { Save, Search, RefreshCw, AlertCircle, Keyboard } from 'lucide-react';
 
 export const OpeningStockView: React.FC = () => {
   const { refreshKey, showToast } = useApp();
@@ -65,17 +65,50 @@ export const OpeningStockView: React.FC = () => {
     }
   };
 
+  // Global Keyboard Shortcuts (Ctrl+S / Alt+S to save)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey || e.altKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSaveAll();
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [openingStockValues, stockSummaries]);
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, currentIndex: number) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const allInputs = document.querySelectorAll<HTMLInputElement>('.opening-stock-input');
+      const nextInput = allInputs[currentIndex + 1];
+      if (nextInput) {
+        nextInput.focus();
+        nextInput.select();
+      } else {
+        handleSaveAll();
+      }
+    }
+  };
+
   return (
     <div className="content-panel-grey">
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-        <div className="pill-header-lime" style={{ padding: '8px 28px', fontSize: '1.2rem' }}>
-          OPENING STOCK MASTER
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div className="pill-header-lime" style={{ padding: '8px 28px', fontSize: '1.2rem' }}>
+            OPENING STOCK MASTER
+          </div>
+          {/* Keyboard Helper Badge */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#F3F4F6', border: '1px solid #D1D5DB', borderRadius: '20px', padding: '4px 12px', fontSize: '0.78rem', color: '#4B5563', fontWeight: 700 }}>
+            <Keyboard size={14} color="#6B7280" />
+            <span><kbd style={{ background: '#FFFFFF', padding: '1px 5px', border: '1px solid #9CA3AF', borderRadius: '3px' }}>Ctrl+S</kbd> Save | <kbd style={{ background: '#FFFFFF', padding: '1px 5px', border: '1px solid #9CA3AF', borderRadius: '3px' }}>Enter</kbd> Next Row</span>
+          </div>
         </div>
 
         <button onClick={handleSaveAll} className="btn-lime-action">
           <Save size={16} />
-          Save Opening Stock Changes
+          Save Opening Stock Changes (Ctrl+S)
         </button>
       </div>
 
@@ -113,7 +146,7 @@ export const OpeningStockView: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredSummaries.map(s => {
+              {filteredSummaries.map((s, index) => {
                 const currentInput = openingStockValues[s.item.id] ?? String(s.item.openingStock || 0);
 
                 return (
@@ -126,9 +159,10 @@ export const OpeningStockView: React.FC = () => {
                       <input
                         type="number"
                         min="0"
-                        className="input-text-clean"
+                        className="input-text-clean opening-stock-input"
                         value={currentInput}
                         onChange={e => handleQtyChange(s.item.id, e.target.value)}
+                        onKeyDown={e => handleInputKeyDown(e, index)}
                         style={{
                           width: '100px',
                           textAlign: 'center',

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../../db/db';
 import { useApp } from '../../context/AppContext';
 import { SupplierOrder, OrderItem, Supplier, ItemStockSummary } from '../../types';
@@ -7,7 +7,7 @@ import { formatDateToDisplay, getTodayDateString } from '../../utils/dateUtils';
 import { OrderReceiptModal } from './OrderReceiptModal';
 import { CreateOrderModal } from './CreateOrderModal';
 import { ReceiptData } from '../../utils/shareUtils';
-import { Plus, Share2, Package } from 'lucide-react';
+import { Plus, Share2, Package, Keyboard } from 'lucide-react';
 
 export const OrdersView: React.FC = () => {
   const { refreshKey, showToast, selectedDate, setActiveTab } = useApp();
@@ -165,6 +165,24 @@ export const OrdersView: React.FC = () => {
     showToast(`Order #${newOrder.orderNumber} placed! Screenshot slip generated. Moved to ORDERED section.`, 'success');
   };
 
+  // Global Keyboard Shortcuts (Alt+N for New Order, Ctrl+S / Alt+S to place order)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        setIsCreateModalOpen(true);
+      } else if ((e.ctrlKey || e.metaKey || e.altKey) && e.key.toLowerCase() === 's') {
+        const firstSupplierId = Object.keys(draftSupplierItems)[0];
+        if (firstSupplierId) {
+          e.preventDefault();
+          handlePlaceOrder(firstSupplierId);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [draftSupplierItems, draftRemarks]);
+
   const draftSupplierList = Object.values(draftSupplierItems);
 
   return (
@@ -201,6 +219,10 @@ export const OrdersView: React.FC = () => {
           <span style={{ fontSize: '0.8rem', background: '#FFFFFF', color: '#002B99', padding: '2px 12px', borderRadius: '12px', fontWeight: 800, border: '1px solid #002B99' }}>
             {pendingLowStockItems.length} Pending Items
           </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#FFFFFF', border: '1px solid #000000', borderRadius: '20px', padding: '3px 12px', fontSize: '0.78rem', color: '#002B99', fontWeight: 700 }}>
+            <Keyboard size={13} />
+            <span><kbd style={{ background: '#F3F4F6', padding: '1px 5px', border: '1px solid #9CA3AF', borderRadius: '3px' }}>Alt+N</kbd> New Order | <kbd style={{ background: '#F3F4F6', padding: '1px 5px', border: '1px solid #9CA3AF', borderRadius: '3px' }}>Ctrl+S</kbd> Place Order</span>
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -210,7 +232,7 @@ export const OrdersView: React.FC = () => {
             style={{ padding: '8px 20px', fontSize: '0.9rem' }}
           >
             <Plus size={16} />
-            CREATE NEW ORDER
+            CREATE NEW ORDER (Alt+N)
           </button>
         </div>
       </div>

@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Modal } from '../common/Modal';
 import { db } from '../../db/db';
 import { useApp } from '../../context/AppContext';
 import { Item, Supplier, SupplierOrder, OrderItem } from '../../types';
 import { StockEngine } from '../../db/stockEngine';
 import { getTodayDateString } from '../../utils/dateUtils';
-import { ItemSearchSelect } from '../common/ItemSearchSelect';
-import { Plus, Trash2 } from 'lucide-react';
+import { ItemSearchSelect, ItemSearchSelectHandle } from '../common/ItemSearchSelect';
+import { Plus, Trash2, Keyboard } from 'lucide-react';
 
 interface CreateOrderModalProps {
   isOpen: boolean;
@@ -41,6 +41,9 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
   // Draft items in current order
   const [draftItems, setDraftItems] = useState<DraftOrderItem[]>([]);
 
+  const itemSearchRef = useRef<ItemSearchSelectHandle>(null);
+  const qtyInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (isOpen) {
       const items = db.getItems().filter(i => i.isActive !== false);
@@ -50,8 +53,24 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
       if (suppliers.length > 0 && !supplierId) {
         setSupplierId(suppliers[0].id);
       }
+      setTimeout(() => {
+        itemSearchRef.current?.focus();
+      }, 50);
     }
   }, [isOpen, refreshKey]);
+
+  // Global Ctrl+S inside open modal
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey || e.altKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSaveOrder();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, supplierId, draftItems, orderDate]);
 
   if (!isOpen) return null;
 
@@ -59,11 +78,13 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
   const handleAddItemToDraft = () => {
     if (!currentItemId) {
       showToast('Please select an item', 'error');
+      itemSearchRef.current?.focus();
       return;
     }
     const qty = Number(currentQty);
     if (!qty || qty <= 0) {
       showToast('Quantity must be greater than 0', 'error');
+      qtyInputRef.current?.focus();
       return;
     }
 
@@ -81,9 +102,12 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
       }
     ]);
 
-    // Reset input fields
+    // Reset input fields & focus back to item search without popup
     setCurrentItemId('');
     setCurrentQty('1');
+    setTimeout(() => {
+      itemSearchRef.current?.focus();
+    }, 40);
   };
 
   const handleRemoveDraftItem = (id: string) => {
@@ -199,8 +223,14 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
             gap: '8px'
           }}
         >
-          <div style={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', color: '#374151' }}>
-            Add Item to Order
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', color: '#374151' }}>
+              Add Item to Order
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: '#6B7280', fontWeight: 700 }}>
+              <Keyboard size={12} />
+              <span><kbd style={{ background: '#FFFFFF', padding: '1px 4px', border: '1px solid #9CA3AF', borderRadius: '3px' }}>Enter</kbd> Add Item</span>
+            </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px auto', gap: '8px', alignItems: 'flex-end' }}>
@@ -210,9 +240,16 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
                 Item Name
               </label>
               <ItemSearchSelect
+                ref={itemSearchRef}
                 items={itemsList}
                 selectedItemId={currentItemId}
-                onSelect={(id) => setCurrentItemId(id)}
+                onSelect={(id) => {
+                  setCurrentItemId(id);
+                  setTimeout(() => {
+                    qtyInputRef.current?.focus();
+                    qtyInputRef.current?.select();
+                  }, 40);
+                }}
                 onQuickAdd={() => openQuickModal('ITEM', (newId) => setCurrentItemId(newId))}
                 placeholder="Search item to order..."
               />
@@ -224,11 +261,18 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
                 Qty *
               </label>
               <input
+                ref={qtyInputRef}
                 type="number"
                 min="1"
                 className="input-text-clean"
                 value={currentQty}
                 onChange={e => setCurrentQty(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddItemToDraft();
+                  }
+                }}
                 style={{ fontWeight: 800, color: '#EA3943', height: '38px' }}
               />
             </div>
@@ -305,8 +349,9 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
             onClick={handleSaveOrder}
             className="btn-red-action"
             disabled={draftItems.length === 0}
+            title="Place Supplier Order (Ctrl+S)"
           >
-            Place Supplier Order
+            Place Supplier Order (Ctrl+S)
           </button>
         </div>
       </div>

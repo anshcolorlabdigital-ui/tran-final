@@ -28,7 +28,7 @@ export const ItemSearchSelect = forwardRef<ItemSearchSelectHandle, ItemSearchSel
   onSelect,
   onEnterNext,
   onQuickAdd,
-  placeholder = 'Type to search item...',
+  placeholder = 'Type item name / press Enter for list...',
   disabled = false,
   style
 }, ref) => {
@@ -40,6 +40,7 @@ export const ItemSearchSelect = forwardRef<ItemSearchSelectHandle, ItemSearchSel
 
   useImperativeHandle(ref, () => ({
     focus: () => {
+      // Focus input without opening the dropdown automatically
       inputRef.current?.focus();
       inputRef.current?.select();
     },
@@ -84,7 +85,6 @@ export const ItemSearchSelect = forwardRef<ItemSearchSelectHandle, ItemSearchSel
     const handleClickOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
-        // If query doesn't match selected, restore selected name or clear
         if (selectedItem) {
           setQuery(selectedItem.name);
         } else {
@@ -120,16 +120,23 @@ export const ItemSearchSelect = forwardRef<ItemSearchSelectHandle, ItemSearchSel
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!isOpen) {
-      if (e.key === 'ArrowDown' || e.key === 'Enter') {
-        if (selectedItem && e.key === 'Enter' && onEnterNext) {
-          e.preventDefault();
-          onEnterNext();
-          return;
-        }
+      if (e.key === 'ArrowDown') {
         e.preventDefault();
         setIsOpen(true);
         const idx = filteredItems.findIndex(i => i.id === selectedItemId);
         setHighlightedIndex(idx >= 0 ? idx : 0);
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        // If an item is already selected, pressing Enter advances to the next field
+        if (selectedItem && onEnterNext) {
+          onEnterNext();
+          return;
+        }
+        // If no item selected yet, pressing Enter opens the dropdown and shows all items
+        setIsOpen(true);
+        setHighlightedIndex(0);
         return;
       }
       return;
@@ -177,12 +184,13 @@ export const ItemSearchSelect = forwardRef<ItemSearchSelectHandle, ItemSearchSel
           placeholder={placeholder}
           value={query}
           onFocus={() => {
-            setIsOpen(true);
+            // DO NOT open dropdown popup on focus. Only highlight index.
             const idx = filteredItems.findIndex(i => i.id === selectedItemId);
             setHighlightedIndex(idx >= 0 ? idx : 0);
           }}
           onChange={e => {
             setQuery(e.target.value);
+            // Open popup when user actively types in search box
             setIsOpen(true);
             setHighlightedIndex(0);
             if (!e.target.value) {

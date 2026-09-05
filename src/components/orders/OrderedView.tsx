@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { db } from '../../db/db';
 import { SupplierOrder, OrderStatus } from '../../types';
@@ -16,7 +16,8 @@ import {
   Package,
   StickyNote,
   ArrowRight,
-  PlusCircle
+  PlusCircle,
+  Keyboard
 } from 'lucide-react';
 
 export const OrderedView: React.FC = () => {
@@ -79,6 +80,23 @@ export const OrderedView: React.FC = () => {
     });
   };
 
+  // Global keyboard shortcuts (Alt+N to go to Order, Alt+P to view first order slip)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        setActiveTab('ORDER');
+      } else if (e.altKey && e.key.toLowerCase() === 'p') {
+        if (filteredOrders.length > 0) {
+          e.preventDefault();
+          handleOpenShareSlip(filteredOrders[0]);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [filteredOrders]);
+
   // Handler: Open Direct Purchase Entry (Prefilled with this Order)
   const handleOpenPurchaseEntry = (order: SupplierOrder) => {
     if (!hasPermission('CREATE_PURCHASE')) {
@@ -128,6 +146,10 @@ export const OrderedView: React.FC = () => {
           <span style={{ fontSize: '0.85rem', background: '#DBEAFE', color: '#1E40AF', padding: '4px 14px', borderRadius: '12px', fontWeight: 800 }}>
             {filteredOrders.length} {filteredOrders.length === 1 ? 'Order' : 'Orders'} {statusFilter === 'ACTIVE' ? 'Active' : ''}
           </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#FFFFFF', border: '1px solid #000000', borderRadius: '20px', padding: '3px 12px', fontSize: '0.78rem', color: '#1E40AF', fontWeight: 700 }}>
+            <Keyboard size={13} />
+            <span><kbd style={{ background: '#F3F4F6', padding: '1px 5px', border: '1px solid #9CA3AF', borderRadius: '3px' }}>Alt+N</kbd> New Order | <kbd style={{ background: '#F3F4F6', padding: '1px 5px', border: '1px solid #9CA3AF', borderRadius: '3px' }}>Alt+P</kbd> View Slip</span>
+          </div>
         </div>
       </div>
 

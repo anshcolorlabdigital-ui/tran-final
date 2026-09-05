@@ -27,6 +27,7 @@ export interface SearchableSelectProps {
 export interface SearchableSelectHandle {
   focus: () => void;
   select: () => void;
+  clear: () => void;
 }
 
 export const SearchableSelect = forwardRef<SearchableSelectHandle, SearchableSelectProps>(({
@@ -35,7 +36,7 @@ export const SearchableSelect = forwardRef<SearchableSelectHandle, SearchableSel
   onChange,
   onSelectOption,
   onEnterNext,
-  placeholder = 'Type to search...',
+  placeholder = 'Type to search / Enter for list...',
   disabled = false,
   onQuickAdd,
   quickAddTitle = 'Quick Add',
@@ -50,11 +51,18 @@ export const SearchableSelect = forwardRef<SearchableSelectHandle, SearchableSel
 
   useImperativeHandle(ref, () => ({
     focus: () => {
+      // Focus without opening popup automatically
       internalInputRef.current?.focus();
       internalInputRef.current?.select();
     },
     select: () => {
       internalInputRef.current?.select();
+    },
+    clear: () => {
+      setQuery('');
+      setIsOpen(false);
+      onChange('');
+      if (onSelectOption) onSelectOption(null);
     }
   }));
 
@@ -125,47 +133,43 @@ export const SearchableSelect = forwardRef<SearchableSelectHandle, SearchableSel
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!isOpen) {
-      if (e.key === 'ArrowDown' || e.key === 'Enter') {
+      if (e.key === 'ArrowDown') {
         e.preventDefault();
         setIsOpen(true);
-        setHighlightedIndex(filteredOptions.findIndex(o => o.id === value) >= 0 ? filteredOptions.findIndex(o => o.id === value) : 0);
+        const idx = filteredOptions.findIndex(o => o.id === value);
+        setHighlightedIndex(idx >= 0 ? idx : 0);
         return;
       }
-      if (e.key === 'Tab') {
-        return;
-      }
-    }
-
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      if (!isOpen) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (selectedOption && onEnterNext) {
+          onEnterNext();
+          return;
+        }
         setIsOpen(true);
         setHighlightedIndex(0);
         return;
       }
+      return;
+    }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
       setHighlightedIndex(prev => (prev < filteredOptions.length - 1 ? prev + 1 : 0));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      if (!isOpen) {
-        setIsOpen(true);
-        setHighlightedIndex(filteredOptions.length - 1);
-        return;
-      }
       setHighlightedIndex(prev => (prev > 0 ? prev - 1 : filteredOptions.length - 1));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (isOpen && highlightedIndex >= 0 && highlightedIndex < filteredOptions.length) {
+      if (highlightedIndex >= 0 && highlightedIndex < filteredOptions.length) {
         handleSelect(filteredOptions[highlightedIndex], true);
-      } else if (isOpen && filteredOptions.length === 1) {
+      } else if (filteredOptions.length === 1) {
         handleSelect(filteredOptions[0], true);
-      } else if (selectedOption) {
-        // Option already selected and dropdown closed, advance to next field
+      } else if (filteredOptions.length > 0) {
+        handleSelect(filteredOptions[0], true);
+      } else if (selectedOption && onEnterNext) {
         setIsOpen(false);
-        if (onEnterNext) onEnterNext();
-      } else if (isOpen && filteredOptions.length > 0) {
-        handleSelect(filteredOptions[0], true);
-      } else if (!isOpen) {
-        if (onEnterNext) onEnterNext();
+        onEnterNext();
       }
     } else if (e.key === 'Escape') {
       e.preventDefault();
@@ -174,7 +178,7 @@ export const SearchableSelect = forwardRef<SearchableSelectHandle, SearchableSel
         setQuery(selectedOption.label);
       }
     } else if (e.key === 'Tab') {
-      if (isOpen && highlightedIndex >= 0 && highlightedIndex < filteredOptions.length) {
+      if (highlightedIndex >= 0 && highlightedIndex < filteredOptions.length) {
         handleSelect(filteredOptions[highlightedIndex], false);
       }
       setIsOpen(false);
@@ -191,7 +195,7 @@ export const SearchableSelect = forwardRef<SearchableSelectHandle, SearchableSel
           placeholder={placeholder}
           value={query}
           onFocus={() => {
-            setIsOpen(true);
+            // DO NOT open dropdown popup on focus
             const idx = filteredOptions.findIndex(o => o.id === value);
             setHighlightedIndex(idx >= 0 ? idx : 0);
           }}

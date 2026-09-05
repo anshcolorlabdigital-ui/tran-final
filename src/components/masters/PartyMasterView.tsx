@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { db } from '../../db/db';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Party, PartyLog } from '../../types';
-import { Search, Plus, CreditCard, CheckCircle, XCircle, FileText, ArrowUpRight, ArrowDownLeft, X } from 'lucide-react';
+import { Search, Plus, CreditCard, CheckCircle, XCircle, FileText, ArrowUpRight, ArrowDownLeft, X, Keyboard } from 'lucide-react';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { getTodayDateString, formatDateToDisplay } from '../../utils/dateUtils';
 
@@ -186,6 +186,24 @@ export const PartyMasterView: React.FC = () => {
     window.print();
   };
 
+  // Keyboard Shortcuts (Ctrl+S to save, Alt+N for new, Alt+P to print)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey || e.altKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSave({ preventDefault: () => {} } as any);
+      } else if (e.altKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        handleCreateNew();
+      } else if (e.altKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        handlePrint();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedPartyId, firmName, gstin, propName, propPhone, mobile1, mobile2, contactPerson1, contactPerson2, address, block, distt, city, state, mailId, isActive, allowCredit, partyType, dealerProfitPercent, amateurProfitPercent, isViewOnly]);
+
   // Payment Recording in Statement Modal
   const handleRecordPayment = (e: React.FormEvent) => {
     e.preventDefault();
@@ -251,7 +269,7 @@ export const PartyMasterView: React.FC = () => {
   return (
     <div className="content-panel-grey">
       {/* Top Header Strip matching party.jpg */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '8px 48px', minWidth: '160px', textAlign: 'center' }}>
             PARTY
@@ -277,6 +295,15 @@ export const PartyMasterView: React.FC = () => {
               ● Ready for New Party
             </span>
           )}
+        </div>
+
+        {/* Shortcuts indicator */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.78rem', color: '#4B5563', background: '#FFFFFF', padding: '5px 12px', borderRadius: '8px', border: '1px solid #E5E7EB' }}>
+          <span><b>Ctrl+S:</b> Save Party</span>
+          <span style={{ color: '#D1D5DB' }}>|</span>
+          <span><b>Alt+N:</b> New Party</span>
+          <span style={{ color: '#D1D5DB' }}>|</span>
+          <span><b>Alt+P:</b> Print</span>
         </div>
       </div>
 

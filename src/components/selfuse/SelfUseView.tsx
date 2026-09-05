@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '../../db/db';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -7,8 +7,8 @@ import { StockEngine } from '../../db/stockEngine';
 import { getTodayDateString } from '../../utils/dateUtils';
 import { SelfUsePrintSlip } from './SelfUsePrintSlip';
 import { ConfirmDialog } from '../common/ConfirmDialog';
-import { ItemSearchSelect } from '../common/ItemSearchSelect';
-import { Search } from 'lucide-react';
+import { ItemSearchSelect, ItemSearchSelectHandle } from '../common/ItemSearchSelect';
+import { Search, Keyboard } from 'lucide-react';
 
 export const SelfUseView: React.FC = () => {
   const { showToast, showAlert, openQuickModal, refreshKey, selectedDate } = useApp();
@@ -49,6 +49,15 @@ export const SelfUseView: React.FC = () => {
   const [searchHistory, setSearchHistory] = useState('');
 
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+
+  // Navigation refs
+  const itemSearchRef = useRef<ItemSearchSelectHandle>(null);
+  const unitARateInputRef = useRef<HTMLInputElement>(null);
+  const unitAQtyInputRef = useRef<HTMLInputElement>(null);
+  const unitBRateInputRef = useRef<HTMLInputElement>(null);
+  const unitBQtyInputRef = useRef<HTMLInputElement>(null);
+  const billDateInputRef = useRef<HTMLInputElement>(null);
+  const billNoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!editingSelfUseId) {
@@ -96,6 +105,11 @@ export const SelfUseView: React.FC = () => {
         setUnitBRate(String(landedRateB));
         setUnitBQty('1');
       }
+
+      setTimeout(() => {
+        unitAQtyInputRef.current?.focus();
+        unitAQtyInputRef.current?.select();
+      }, 40);
     }
   };
 
@@ -120,11 +134,13 @@ export const SelfUseView: React.FC = () => {
     setIsTouched(true);
     if (!selectedItemId || !selectedItemObj) {
       showAlert('Please select an item first.', 'Selection Required', 'warning');
+      itemSearchRef.current?.focus();
       return;
     }
     const numQty = Number(unitAQty);
     if (!numQty || numQty <= 0) {
       showAlert('Please enter a quantity greater than 0 for Unit A.', 'Invalid Quantity', 'warning');
+      unitAQtyInputRef.current?.focus();
       return;
     }
 
@@ -158,7 +174,12 @@ export const SelfUseView: React.FC = () => {
       showToast(`Added ${numQty} ${unitName} of ${selectedItemObj.name}`, 'success');
     }
 
+    // Reset item input and immediately focus ItemSearchSelect without popup
+    setSelectedItemId('');
     setUnitAQty('1');
+    setTimeout(() => {
+      itemSearchRef.current?.focus();
+    }, 40);
   };
 
   const handleAddUnitBItem = () => {
@@ -170,6 +191,7 @@ export const SelfUseView: React.FC = () => {
     const numQty = Number(unitBQty);
     if (!numQty || numQty <= 0) {
       showAlert('Please enter a quantity greater than 0 for Unit B.', 'Invalid Quantity', 'warning');
+      unitBQtyInputRef.current?.focus();
       return;
     }
 
@@ -205,7 +227,12 @@ export const SelfUseView: React.FC = () => {
       showToast(`Added ${numQty} ${unitName} (${baseQty} primary units) to Self Use`, 'success');
     }
 
+    // Reset item input and focus back to ItemSearchSelect
+    setSelectedItemId('');
     setUnitBQty('1');
+    setTimeout(() => {
+      itemSearchRef.current?.focus();
+    }, 40);
   };
 
   const handleEditItem = (index: number) => {
@@ -217,9 +244,17 @@ export const SelfUseView: React.FC = () => {
     if (item.isSecondaryUnit) {
       setUnitBQty(String(item.qty));
       setUnitBRate(String(item.rate));
+      setTimeout(() => {
+        unitBQtyInputRef.current?.focus();
+        unitBQtyInputRef.current?.select();
+      }, 40);
     } else {
       setUnitAQty(String(item.qty));
       setUnitARate(String(item.rate));
+      setTimeout(() => {
+        unitAQtyInputRef.current?.focus();
+        unitAQtyInputRef.current?.select();
+      }, 40);
     }
     setEditingItemIndex(index);
   };
@@ -250,6 +285,9 @@ export const SelfUseView: React.FC = () => {
     setUnitBRate('0');
     setEditingItemIndex(null);
     showToast('New Self Use entry ready', 'info');
+    setTimeout(() => {
+      itemSearchRef.current?.focus();
+    }, 40);
   };
 
   const handleSaveSelfUse = () => {
@@ -259,10 +297,12 @@ export const SelfUseView: React.FC = () => {
     }
     if (!billNo.trim()) {
       showAlert("Please enter the Self Use Bill / Voucher Number first.", 'Validation Error', 'warning');
+      billNoInputRef.current?.focus();
       return;
     }
     if (selfUseItems.length === 0) {
       showAlert('Please add at least one item to the Self Use voucher.', 'Empty Line Items', 'warning');
+      itemSearchRef.current?.focus();
       return;
     }
 
@@ -330,6 +370,29 @@ export const SelfUseView: React.FC = () => {
     window.print();
   };
 
+  // Global Keyboard Shortcuts (Ctrl+S / Alt+S to save, Alt+N for new, Alt+P for print, Alt+D to delete)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey || e.altKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSaveSelfUse();
+      } else if (e.altKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        handleNewEntry();
+      } else if (e.altKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        handlePrint();
+      } else if (e.altKey && e.key.toLowerCase() === 'd') {
+        if (editingSelfUseId) {
+          e.preventDefault();
+          handleDeleteCurrentSelfUse();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [billNo, billDate, selectedCategory, selfUseItems, editingSelfUseId, isViewOnly]);
+
   const currentSelfUseForPrint: SelfUse = {
     id: editingSelfUseId || 'temp',
     billNo,
@@ -371,7 +434,7 @@ export const SelfUseView: React.FC = () => {
       <SelfUsePrintSlip selfUse={currentSelfUseForPrint} />
 
       {/* Top Header Strip matching self use new.jpg */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '8px 36px', minWidth: '220px', textAlign: 'center' }}>
             SELF USE
@@ -397,6 +460,12 @@ export const SelfUseView: React.FC = () => {
               ● Ready for New Entry
             </span>
           )}
+        </div>
+
+        {/* Keyboard Helper Badge */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#F3F4F6', border: '1px solid #D1D5DB', borderRadius: '20px', padding: '4px 12px', fontSize: '0.78rem', color: '#4B5563', fontWeight: 700 }}>
+          <Keyboard size={14} color="#6B7280" />
+          <span><kbd style={{ background: '#FFFFFF', padding: '1px 5px', border: '1px solid #9CA3AF', borderRadius: '3px' }}>Ctrl+S</kbd> Save | <kbd style={{ background: '#FFFFFF', padding: '1px 5px', border: '1px solid #9CA3AF', borderRadius: '3px' }}>Alt+N</kbd> New | <kbd style={{ background: '#FFFFFF', padding: '1px 5px', border: '1px solid #9CA3AF', borderRadius: '3px' }}>Alt+P</kbd> Print | <kbd style={{ background: '#FFFFFF', padding: '1px 5px', border: '1px solid #9CA3AF', borderRadius: '3px' }}>Enter</kbd> Add & Next</span>
         </div>
       </div>
 
@@ -462,12 +531,19 @@ export const SelfUseView: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <label style={{ fontWeight: 900, fontSize: '0.9rem' }}>BILL DATE</label>
             <input
+              ref={billDateInputRef}
               type="date"
               className="input-text-clean"
               value={billDate}
               onChange={e => {
                 setIsTouched(true);
                 setBillDate(e.target.value);
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  billNoInputRef.current?.focus();
+                }
               }}
               style={{ width: '140px' }}
             />
@@ -476,12 +552,19 @@ export const SelfUseView: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <label style={{ fontWeight: 900, fontSize: '0.9rem' }}>BILL NO.</label>
             <input
+              ref={billNoInputRef}
               type="text"
               className="input-text-clean"
               value={billNo}
               onChange={e => {
                 setIsTouched(true);
                 setBillNo(e.target.value);
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  itemSearchRef.current?.focus();
+                }
               }}
               style={{ width: '140px', fontWeight: 800 }}
             />
@@ -522,6 +605,7 @@ export const SelfUseView: React.FC = () => {
         <div style={{ display: 'grid', gridTemplateColumns: '85px 1fr', gap: '10px', alignItems: 'center' }}>
           <label style={{ fontWeight: 900, fontSize: '1.05rem' }}>ITEM :</label>
           <ItemSearchSelect
+            ref={itemSearchRef}
             items={filteredCategoryItems}
             selectedItemId={selectedItemId}
             onSelect={handleItemSelect}
@@ -563,6 +647,7 @@ export const SelfUseView: React.FC = () => {
                   Rate (₹)
                 </label>
                 <input
+                  ref={unitARateInputRef}
                   type="number"
                   step="0.01"
                   className="input-text-clean"
@@ -570,6 +655,13 @@ export const SelfUseView: React.FC = () => {
                   onChange={e => {
                     setIsTouched(true);
                     setUnitARate(e.target.value);
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      unitAQtyInputRef.current?.focus();
+                      unitAQtyInputRef.current?.select();
+                    }
                   }}
                   style={{ textAlign: 'center', padding: '6px', fontWeight: 700 }}
                 />
@@ -580,6 +672,7 @@ export const SelfUseView: React.FC = () => {
                   Qty ({selectedItemObj?.unitA?.unitName || 'Unit A'})
                 </label>
                 <input
+                  ref={unitAQtyInputRef}
                   type="number"
                   min="1"
                   className="input-text-clean"
@@ -587,6 +680,12 @@ export const SelfUseView: React.FC = () => {
                   onChange={e => {
                     setIsTouched(true);
                     setUnitAQty(e.target.value);
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddUnitAItem();
+                    }
                   }}
                   style={{ textAlign: 'center', padding: '6px', fontWeight: 900, color: '#EA3943' }}
                 />
@@ -655,6 +754,7 @@ export const SelfUseView: React.FC = () => {
                     Rate (₹)
                   </label>
                   <input
+                    ref={unitBRateInputRef}
                     type="number"
                     step="0.01"
                     className="input-text-clean"
@@ -662,6 +762,13 @@ export const SelfUseView: React.FC = () => {
                     onChange={e => {
                       setIsTouched(true);
                       setUnitBRate(e.target.value);
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        unitBQtyInputRef.current?.focus();
+                        unitBQtyInputRef.current?.select();
+                      }
                     }}
                     style={{ textAlign: 'center', padding: '6px', fontWeight: 700 }}
                   />
@@ -672,6 +779,7 @@ export const SelfUseView: React.FC = () => {
                     Qty ({selectedItemObj?.unitB?.unitName || 'Unit B'})
                   </label>
                   <input
+                    ref={unitBQtyInputRef}
                     type="number"
                     min="1"
                     className="input-text-clean"
@@ -679,6 +787,12 @@ export const SelfUseView: React.FC = () => {
                     onChange={e => {
                       setIsTouched(true);
                       setUnitBQty(e.target.value);
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddUnitBItem();
+                      }
                     }}
                     style={{ textAlign: 'center', padding: '6px', fontWeight: 900, color: '#EA3943' }}
                   />
@@ -786,8 +900,9 @@ export const SelfUseView: React.FC = () => {
             onClick={handleDeleteCurrentSelfUse}
             disabled={!isEditing && !isViewing}
             style={{ opacity: (isEditing || isViewing) ? 1 : 0.5, cursor: (isEditing || isViewing) ? 'pointer' : 'not-allowed' }}
+            title="Delete Voucher (Alt+D)"
           >
-            Del
+            Del (Alt+D)
           </button>
 
           <button
@@ -795,16 +910,18 @@ export const SelfUseView: React.FC = () => {
             onClick={handleSaveSelfUse}
             className="btn-customer-save"
             style={{ padding: '10px 48px', fontSize: '1.2rem', minWidth: '160px' }}
+            title="Save Voucher (Ctrl+S)"
           >
-            {isViewing ? 'Edit Voucher' : 'Save'}
+            {isViewing ? 'Edit Voucher' : 'Save (Ctrl+S)'}
           </button>
 
           <button
             type="button"
             className="btn-customer-action-pill"
             onClick={handlePrint}
+            title="Print Slip (Alt+P)"
           >
-            Print
+            Print (Alt+P)
           </button>
         </div>
         </div>

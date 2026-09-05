@@ -336,6 +336,24 @@ export const ItemMasterView: React.FC = () => {
     window.print();
   };
 
+  // Keyboard Shortcuts (Ctrl+S to save, Alt+N for new, Alt+P to print)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey || e.altKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSave({ preventDefault: () => {} } as any);
+      } else if (e.altKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        handleCreateNew();
+      } else if (e.altKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        handlePrint();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedItemId, sno, name, hsn, description, category, supplierId, unitAName, unitABasicPrice, unitAGstPercent, unitATranPercent, unitAProfPercent, unitAMisPercent, unitARoundUp, unitASalePrice, unitAActive, unitBName, unitBConversion, unitBBasicPrice, unitBGstPercent, unitBTranPercent, unitBProfPercent, unitBMisPercent, unitBRoundUp, unitBSalePrice, unitBActive, minStock, openingStock, hasSecondaryUnit, isActive, isViewOnly]);
+
   const filteredSummaries = useMemo(() => {
     const q = search.toLowerCase().trim();
     if (!q) return stockSummaries;
@@ -365,7 +383,7 @@ export const ItemMasterView: React.FC = () => {
   return (
     <div className="content-panel-grey">
       {/* Top Header Strip matching item.jpg */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '8px 48px', minWidth: '160px', textAlign: 'center' }}>
             ITEM
@@ -394,6 +412,15 @@ export const ItemMasterView: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Shortcuts indicator */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.78rem', color: '#4B5563', background: '#FFFFFF', padding: '5px 12px', borderRadius: '8px', border: '1px solid #E5E7EB' }}>
+            <span><b>Ctrl+S:</b> Save Item</span>
+            <span style={{ color: '#D1D5DB' }}>|</span>
+            <span><b>Alt+N:</b> New Item</span>
+            <span style={{ color: '#D1D5DB' }}>|</span>
+            <span><b>Alt+P:</b> Print</span>
+          </div>
+
           {/* 1-Click Load 569 Materials Button */}
           <button
             type="button"

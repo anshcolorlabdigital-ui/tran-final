@@ -1,9 +1,9 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { db } from '../../db/db';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Supplier } from '../../types';
-import { Search, Plus, Printer } from 'lucide-react';
+import { Search, Plus, Printer, Keyboard } from 'lucide-react';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 
 export const SupplierMasterView: React.FC = () => {
@@ -153,6 +153,24 @@ export const SupplierMasterView: React.FC = () => {
     window.print();
   };
 
+  // Keyboard Shortcuts (Ctrl+S to save, Alt+N for new, Alt+P to print)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey || e.altKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSave({ preventDefault: () => {} } as any);
+      } else if (e.altKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        handleCreateNew();
+      } else if (e.altKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        handlePrint();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedSupplierId, firmName, gstNo, propName, propPhone, mobile1, mobile2, contactPerson1, contactPerson2, address, block, distt, city, state, mailId, isViewOnly]);
+
   const filteredSuppliers = useMemo(() => {
     const q = search.toLowerCase().trim();
     if (!q) return suppliers;
@@ -179,7 +197,7 @@ export const SupplierMasterView: React.FC = () => {
   return (
     <div className="content-panel-grey">
       {/* Top Header Strip matching supplier.jpg */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '8px 36px', minWidth: '160px', textAlign: 'center' }}>
             Supplier
@@ -205,6 +223,15 @@ export const SupplierMasterView: React.FC = () => {
               ● Ready for New Supplier
             </span>
           )}
+        </div>
+
+        {/* Shortcuts indicator */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.78rem', color: '#4B5563', background: '#FFFFFF', padding: '5px 12px', borderRadius: '8px', border: '1px solid #E5E7EB' }}>
+          <span><b>Ctrl+S:</b> Save Supplier</span>
+          <span style={{ color: '#D1D5DB' }}>|</span>
+          <span><b>Alt+N:</b> New Supplier</span>
+          <span style={{ color: '#D1D5DB' }}>|</span>
+          <span><b>Alt+P:</b> Print</span>
         </div>
       </div>
 
