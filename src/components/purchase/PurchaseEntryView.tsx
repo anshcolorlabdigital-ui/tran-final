@@ -74,7 +74,7 @@ export const PurchaseEntryView: React.FC = () => {
   const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
 
   const [unitABasicPrice, setUnitABasicPrice] = useState<string>('0');
-  const [unitAGstPercent, setUnitAGstPercent] = useState<string>(String(settings.defaultGstPercent || 18));
+  const [unitAGstPercent, setUnitAGstPercent] = useState<string>(String(settings.defaultGstPercent || 0));
   const [unitAQty, setUnitAQty] = useState<string>('1');
 
   // Items added to the bill
@@ -121,7 +121,7 @@ export const PurchaseEntryView: React.FC = () => {
         const prefilledList: PurchaseItem[] = pendingPurchasePrefill.items.map((it: any) => {
           const itemObj = items.find(i => i.id === it.itemId);
           const bPrice = itemObj?.unitA?.basicPrice ?? itemObj?.purchaseRate ?? 0;
-          const gPercent = itemObj?.unitA?.gstPercent ?? itemObj?.gstPercent ?? (settings.defaultGstPercent || 18);
+          const gPercent = itemObj?.unitA?.gstPercent ?? itemObj?.gstPercent ?? (settings.defaultGstPercent || 0);
           const calc = calculateItemPricing(bPrice, gPercent, 0, Number(it.qty) || 1, 0);
 
           return {
@@ -181,10 +181,10 @@ export const PurchaseEntryView: React.FC = () => {
       if (found.category) setSelectedCategory(found.category);
       const uA = found.unitA || {
         basicPrice: found.purchaseRate || 0,
-        gstPercent: found.gstPercent || settings.defaultGstPercent || 18,
+        gstPercent: found.gstPercent || settings.defaultGstPercent || 0,
       };
       setUnitABasicPrice(String(uA.basicPrice || 0));
-      setUnitAGstPercent(String(uA.gstPercent || settings.defaultGstPercent || 18));
+      setUnitAGstPercent(String(uA.gstPercent || settings.defaultGstPercent || 0));
       setUnitAQty('1');
     }
   };

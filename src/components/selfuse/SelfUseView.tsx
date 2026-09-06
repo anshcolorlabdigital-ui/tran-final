@@ -92,9 +92,9 @@ export const SelfUseView: React.FC = () => {
     if (item) {
       const settings = db.getSettings();
       const baseA = Number(item.unitA?.basicPrice ?? item.purchaseRate ?? 0);
-      const gstPctA = Number(item.unitA?.gstPercent ?? item.gstPercent ?? settings.defaultGstPercent ?? 18);
-      const tranPctA = Number(item.unitA?.tranPercent ?? 10);
-      // Landed In-House Cost = Base Price + GST (18%) + Transport (%)
+      const gstPctA = Number(item.unitA?.gstPercent ?? item.gstPercent ?? settings.defaultGstPercent ?? 0);
+      const tranPctA = Number(item.unitA?.tranPercent ?? settings.defaultTransportPercent ?? 0);
+      // Landed In-House Cost = Base Price + GST (%) + Transport (%)
       const landedRateA = Number((baseA + (baseA * gstPctA / 100) + (baseA * tranPctA / 100)).toFixed(2));
 
       setUnitARate(String(landedRateA));

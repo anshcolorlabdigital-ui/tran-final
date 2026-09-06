@@ -2,13 +2,13 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { db } from '../../db/db';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import { Party, PartyLog } from '../../types';
-import { Search, Plus, CreditCard, CheckCircle, XCircle, FileText, ArrowUpRight, ArrowDownLeft, X, Keyboard } from 'lucide-react';
+import { Party, PartyLog, Sale } from '../../types';
+import { Search, Plus, CreditCard, CheckCircle, XCircle, FileText, ArrowUpRight, ArrowDownLeft, X, Keyboard, Receipt, ExternalLink } from 'lucide-react';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { getTodayDateString, formatDateToDisplay } from '../../utils/dateUtils';
 
 export const PartyMasterView: React.FC = () => {
-  const { refreshKey, showToast, showAlert } = useApp();
+  const { refreshKey, showToast, showAlert, openPartyLedger } = useApp();
   const { hasPermission } = useAuth();
 
   const parties = useMemo(() => db.getParties(), [refreshKey]);
@@ -53,6 +53,7 @@ export const PartyMasterView: React.FC = () => {
   const [paymentRef, setPaymentRef] = useState<string>('');
   const [paymentNotes, setPaymentNotes] = useState<string>('');
   const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [selectedSaleDetail, setSelectedSaleDetail] = useState<Sale | null>(null);
 
   const firmNameInputRef = useRef<HTMLInputElement>(null);
 
@@ -1021,19 +1022,69 @@ export const PartyMasterView: React.FC = () => {
             {/* Modal Header */}
             <div style={{
               background: '#D2BEF6',
-              padding: '16px 20px',
+              padding: '14px 20px',
               borderBottom: '2px solid #000000',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between'
+              justifyContent: 'space-between',
+              gap: '12px'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <FileText size={22} color="#002B99" />
-                <div>
-                  <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.2rem', color: '#002B99' }}>
-                    Customer Statement & Credit Log: {statementParty.name}
-                  </h3>
-                  <div style={{ fontSize: '0.8rem', color: '#4B5563', fontWeight: 700 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1 }}>
+                <FileText size={24} color="#002B99" />
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.2rem', color: '#002B99' }}>
+                      Customer Ledger:
+                    </h3>
+                    {/* Party Switcher Dropdown inside Modal */}
+                    <select
+                      value={statementParty.id}
+                      onChange={e => {
+                        const newParty = parties.find(p => p.id === e.target.value);
+                        if (newParty) setStatementParty(newParty);
+                      }}
+                      className="input-text-clean"
+                      style={{
+                        fontWeight: 900,
+                        fontSize: '0.95rem',
+                        padding: '4px 10px',
+                        background: '#FFFFFF',
+                        border: '2px solid #000000',
+                        borderRadius: '8px',
+                        color: '#002B99',
+                        maxWidth: '260px'
+                      }}
+                    >
+                      {parties.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} {p.city ? `(${p.city})` : ''}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const partyId = statementParty.id;
+                        setStatementParty(null);
+                        openPartyLedger(partyId);
+                      }}
+                      className="btn-classic"
+                      style={{
+                        background: '#002B99',
+                        color: '#FFFFFF',
+                        fontSize: '0.78rem',
+                        padding: '4px 12px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                      title="Open dedicated Party Ledger Report with Date Range & Excel Export"
+                    >
+                      <ExternalLink size={14} /> Full Ledger Report
+                    </button>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#4B5563', fontWeight: 700, marginTop: '2px' }}>
                     {statementParty.phone && `📞 ${statementParty.phone} | `}
                     {statementParty.city && `📍 ${statementParty.city} | `}
                     Status: {statementParty.isActive !== false ? 'Active' : 'Inactive'} |
@@ -1183,9 +1234,14 @@ export const PartyMasterView: React.FC = () => {
 
               {/* Chronological Statement Table */}
               <div>
-                <h4 style={{ fontWeight: 900, fontSize: '0.95rem', marginBottom: '8px', color: '#1E293B' }}>
-                  Transaction History & Ledger Logs
-                </h4>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <h4 style={{ fontWeight: 900, fontSize: '0.95rem', margin: 0, color: '#1E293B' }}>
+                    Transaction History & Ledger Logs
+                  </h4>
+                  <span style={{ fontSize: '0.78rem', color: '#64748B', fontWeight: 600 }}>
+                    💡 Click any bill number to inspect complete itemized log
+                  </span>
+                </div>
                 <div className="custom-table-container">
                   <table className="custom-table">
                     <thead>
@@ -1197,50 +1253,104 @@ export const PartyMasterView: React.FC = () => {
                         <th style={{ textAlign: 'right' }}>Paid (Credit)</th>
                         <th style={{ textAlign: 'right' }}>Balance Change</th>
                         <th>Remarks</th>
+                        <th style={{ textAlign: 'center' }}>Action</th>
                       </tr>
                     </thead>
                     <tbody>
                       {statementLogs.length === 0 ? (
                         <tr>
-                          <td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: '#9CA3AF', fontWeight: 600 }}>
+                          <td colSpan={8} style={{ textAlign: 'center', padding: '24px', color: '#9CA3AF', fontWeight: 600 }}>
                             No statement logs or transactions recorded yet for this party.
                           </td>
                         </tr>
                       ) : (
-                        statementLogs.map(log => (
-                          <tr key={log.id}>
-                            <td>{formatDateToDisplay(log.date)}</td>
-                            <td>
-                              <span style={{
-                                fontSize: '0.75rem',
-                                fontWeight: 800,
-                                padding: '2px 8px',
-                                borderRadius: '4px',
-                                background: log.type === 'SALE' ? '#E0E7FF' : '#DCFCE7',
-                                color: log.type === 'SALE' ? '#3730A3' : '#15803D'
+                        statementLogs.map(log => {
+                          const matchingSale = log.type === 'SALE' && log.refNo
+                            ? db.getSales().find(s => s.billNo === log.refNo || s.id === log.refNo)
+                            : null;
+
+                          return (
+                            <tr key={log.id}>
+                              <td>{formatDateToDisplay(log.date)}</td>
+                              <td>
+                                <span style={{
+                                  fontSize: '0.75rem',
+                                  fontWeight: 800,
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  background: log.type === 'SALE' ? '#E0E7FF' : '#DCFCE7',
+                                  color: log.type === 'SALE' ? '#3730A3' : '#15803D'
+                                }}>
+                                  {log.type === 'SALE' ? 'Sale Invoice' : 'Payment Received'}
+                                </span>
+                              </td>
+                              <td style={{ fontWeight: 800 }}>
+                                {matchingSale ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedSaleDetail(matchingSale)}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      padding: 0,
+                                      color: '#002B99',
+                                      fontWeight: 900,
+                                      textDecoration: 'underline',
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px'
+                                    }}
+                                    title="Click to view full bill details"
+                                  >
+                                    <Receipt size={14} color="#002B99" />
+                                    {log.refNo}
+                                  </button>
+                                ) : (
+                                  log.refNo || '-'
+                                )}
+                              </td>
+                              <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                                {log.totalAmount ? `₹${log.totalAmount}` : '-'}
+                              </td>
+                              <td style={{ textAlign: 'right', fontWeight: 800, color: '#16A34A' }}>
+                                ₹{log.paidAmount || 0}
+                              </td>
+                              <td style={{
+                                textAlign: 'right',
+                                fontWeight: 900,
+                                color: log.balanceChange > 0 ? '#DC2626' : log.balanceChange < 0 ? '#16A34A' : '#4B5563'
                               }}>
-                                {log.type === 'SALE' ? 'Sale Invoice' : 'Payment Received'}
-                              </span>
-                            </td>
-                            <td style={{ fontWeight: 800 }}>{log.refNo || '-'}</td>
-                            <td style={{ textAlign: 'right', fontWeight: 700 }}>
-                              {log.totalAmount ? `₹${log.totalAmount}` : '-'}
-                            </td>
-                            <td style={{ textAlign: 'right', fontWeight: 800, color: '#16A34A' }}>
-                              ₹{log.paidAmount || 0}
-                            </td>
-                            <td style={{
-                              textAlign: 'right',
-                              fontWeight: 900,
-                              color: log.balanceChange > 0 ? '#DC2626' : log.balanceChange < 0 ? '#16A34A' : '#4B5563'
-                            }}>
-                              {log.balanceChange > 0 ? `+₹${log.balanceChange}` : log.balanceChange < 0 ? `-₹${Math.abs(log.balanceChange)}` : '₹0'}
-                            </td>
-                            <td style={{ fontSize: '0.82rem', color: '#6B7280' }}>
-                              {log.notes || '-'}
-                            </td>
-                          </tr>
-                        ))
+                                {log.balanceChange > 0 ? `+₹${log.balanceChange}` : log.balanceChange < 0 ? `-₹${Math.abs(log.balanceChange)}` : '₹0'}
+                              </td>
+                              <td style={{ fontSize: '0.82rem', color: '#6B7280' }}>
+                                {log.notes || '-'}
+                              </td>
+                              <td style={{ textAlign: 'center' }}>
+                                {matchingSale ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedSaleDetail(matchingSale)}
+                                    style={{
+                                      background: '#EFF6FF',
+                                      border: '1px solid #BFDBFE',
+                                      borderRadius: '4px',
+                                      padding: '2px 8px',
+                                      fontSize: '0.75rem',
+                                      fontWeight: 800,
+                                      color: '#1D4ED8',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    View Bill
+                                  </button>
+                                ) : (
+                                  <span style={{ color: '#9CA3AF', fontSize: '0.75rem' }}>-</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>
@@ -1266,6 +1376,169 @@ export const PartyMasterView: React.FC = () => {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DETAILED BILL LOG POPUP MODAL */}
+      {selectedSaleDetail && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10005,
+            padding: '20px'
+          }}
+        >
+          <div
+            style={{
+              background: '#FFFFFF',
+              border: '2px solid #000000',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '900px',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 30px -5px rgba(0, 0, 0, 0.4)',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                background: '#D2BEF6',
+                padding: '16px 22px',
+                borderBottom: '2px solid #000000',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Receipt size={24} color="#002B99" />
+                <div>
+                  <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.25rem', color: '#002B99' }}>
+                    Sale Invoice Detail Log: {selectedSaleDetail.billNo}
+                  </h3>
+                  <div style={{ fontSize: '0.82rem', color: '#4B5563', fontWeight: 700 }}>
+                    Date: {formatDateToDisplay(selectedSaleDetail.billDate)} | Customer: {selectedSaleDetail.partyName}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSaleDetail(null)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    borderRadius: '50%'
+                  }}
+                >
+                  <X size={22} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Key Invoice Summary Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+                <div style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '8px', padding: '10px 12px' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748B' }}>Basic Total</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#002B99' }}>₹{selectedSaleDetail.basicTotal}</div>
+                </div>
+                <div style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '8px', padding: '10px 12px' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748B' }}>GST Total</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#002B99' }}>₹{selectedSaleDetail.gstTotal}</div>
+                </div>
+                <div style={{ background: '#EFF6FF', border: '1.5px solid #BFDBFE', borderRadius: '8px', padding: '10px 12px' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#1E40AF' }}>Bill Total</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#1E40AF' }}>₹{selectedSaleDetail.billTotal}</div>
+                </div>
+                <div style={{ background: '#F0FDF4', border: '1.5px solid #BBF7D0', borderRadius: '8px', padding: '10px 12px' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#166534' }}>Paid / Balance</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#16A34A' }}>
+                    ₹{(selectedSaleDetail.recdCash || 0) + (selectedSaleDetail.recdUpi || 0)}
+                    {selectedSaleDetail.balanceDue ? (
+                      <span style={{ fontSize: '0.8rem', color: '#DC2626', marginLeft: '6px' }}>
+                        (Due: ₹{selectedSaleDetail.balanceDue})
+                      </span>
+                    ) : ''}
+                  </div>
+                </div>
+              </div>
+
+              {/* Items Breakdown Table */}
+              <div style={{ border: '1.5px solid #000000', borderRadius: '8px', overflow: 'hidden' }}>
+                <div style={{ background: '#ECECEC', padding: '8px 12px', fontWeight: 800, fontSize: '0.88rem', borderBottom: '1px solid #000000' }}>
+                  Billed Items & Rate Breakdown
+                </div>
+                <table className="table-clean" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #CBD5E1', fontSize: '0.82rem' }}>
+                      <th style={{ padding: '8px 10px', textAlign: 'center', width: '40px' }}>#</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'left' }}>Item Name</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'right', width: '85px' }}>Basic (₹)</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'right', width: '70px' }}>GST %</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'right', width: '85px' }}>GST Amt</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'right', width: '85px' }}>Nett (₹)</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'right', width: '90px' }}>Rate (₹)</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'center', width: '70px' }}>Qty</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'right', width: '100px' }}>Amount (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedSaleDetail.items.map((item, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', fontSize: '0.85rem' }}>
+                        <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700 }}>{idx + 1}</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800 }}>
+                          {item.itemName} {item.unit ? `(${item.unit})` : ''}
+                        </td>
+                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{item.basicPrice}</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>{item.gstPercent}%</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{item.gstAmt}</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{item.nettPrice}</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#002B99' }}>
+                          ₹{item.salePrice || item.mrp}
+                        </td>
+                        <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 900 }}>{item.qty}</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, color: '#002B99' }}>
+                          ₹{item.amount}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Payment Details Footer */}
+              <div style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '8px', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
+                <div>
+                  <span style={{ fontWeight: 800, color: '#475569' }}>Payment Mode: </span>
+                  <span style={{ fontWeight: 700 }}>
+                    Cash: ₹{selectedSaleDetail.recdCash || 0} | UPI/Online: ₹{selectedSaleDetail.recdUpi || 0}
+                  </span>
+                </div>
+                {selectedSaleDetail.notes && (
+                  <div>
+                    <span style={{ fontWeight: 800, color: '#475569' }}>Remarks: </span>
+                    <span>{selectedSaleDetail.notes}</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

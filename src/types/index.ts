@@ -374,5 +374,7 @@ export type ActiveNavTab =
   | 'REPORT_PURCHASES'
   | 'REPORT_SELF_USE'
   | 'REPORT_ITEM_STOCK'
+  | 'REPORT_PARTY_LEDGER'
+  | 'REPORT_ITEM_LEDGER'
   | 'ADMIN'
   | 'USER';

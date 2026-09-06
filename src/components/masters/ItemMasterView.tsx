@@ -11,7 +11,7 @@ import { calculateItemUnitBreakdown } from '../../utils/calculations';
 import { loadBundledMaterialsCatalog } from '../../utils/excelEngine';
 
 export const ItemMasterView: React.FC = () => {
-  const { refreshKey, showToast, showAlert } = useApp();
+  const { refreshKey, showToast, showAlert, openItemLedger } = useApp();
   const { hasPermission } = useAuth();
 
   const items = useMemo(() => db.getItems(), [refreshKey]);
@@ -46,8 +46,8 @@ export const ItemMasterView: React.FC = () => {
   // Unit A State
   const [unitAName, setUnitAName] = useState('Roll');
   const [unitABasicPrice, setUnitABasicPrice] = useState('0');
-  const [unitAGstPercent, setUnitAGstPercent] = useState('18');
-  const [unitATranPercent, setUnitATranPercent] = useState('10');
+  const [unitAGstPercent, setUnitAGstPercent] = useState('0');
+  const [unitATranPercent, setUnitATranPercent] = useState('0');
   const [unitAProfAm, setUnitAProfAm] = useState('0');
   const [unitAProfDeal, setUnitAProfDeal] = useState('0');
   const [unitAMisPercent, setUnitAMisPercent] = useState('0');
@@ -61,8 +61,8 @@ export const ItemMasterView: React.FC = () => {
   const [unitBName, setUnitBName] = useState('Mt.');
   const [unitBConversion, setUnitBConversion] = useState('40');
   const [unitBBasicPrice, setUnitBBasicPrice] = useState('0');
-  const [unitBGstPercent, setUnitBGstPercent] = useState('18');
-  const [unitBTranPercent, setUnitBTranPercent] = useState('10');
+  const [unitBGstPercent, setUnitBGstPercent] = useState('0');
+  const [unitBTranPercent, setUnitBTranPercent] = useState('0');
   const [unitBProfAm, setUnitBProfAm] = useState('0');
   const [unitBProfDeal, setUnitBProfDeal] = useState('0');
   const [unitBMisPercent, setUnitBMisPercent] = useState('0');
@@ -72,7 +72,7 @@ export const ItemMasterView: React.FC = () => {
   const [unitBMrp, setUnitBMrp] = useState('0');
   const [unitBActive, setUnitBActive] = useState(true);
 
-  const [minStock, setMinStock] = useState('100');
+  const [minStock, setMinStock] = useState('0');
   const [openingStock, setOpeningStock] = useState('0');
   const [isViewOnly, setIsViewOnly] = useState(false);
   const [isEditPromptOpen, setIsEditPromptOpen] = useState(false);
@@ -241,8 +241,8 @@ export const ItemMasterView: React.FC = () => {
 
     setUnitAName('Roll');
     setUnitABasicPrice('0');
-    setUnitAGstPercent('18');
-    setUnitATranPercent('10');
+    setUnitAGstPercent('0');
+    setUnitATranPercent('0');
     setUnitAProfAm('0');
     setUnitAProfDeal('0');
     setUnitAMisPercent('0');
@@ -255,8 +255,8 @@ export const ItemMasterView: React.FC = () => {
     setUnitBName('Mt.');
     setUnitBConversion('40');
     setUnitBBasicPrice('0');
-    setUnitBGstPercent('18');
-    setUnitBTranPercent('10');
+    setUnitBGstPercent('0');
+    setUnitBTranPercent('0');
     setUnitBProfAm('0');
     setUnitBProfDeal('0');
     setUnitBMisPercent('0');
@@ -266,7 +266,7 @@ export const ItemMasterView: React.FC = () => {
     setUnitBMrp('0');
     setUnitBActive(true);
 
-    setMinStock('10');
+    setMinStock('0');
     setOpeningStock('0');
     showToast('Ready to create new item', 'info');
   };
@@ -381,10 +381,10 @@ export const ItemMasterView: React.FC = () => {
     setDeleteDialog({ isOpen: true, id: selectedItemId, name });
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (deleteDialog.id) {
-      db.deleteItem(deleteDialog.id);
-      showToast(`Item "${deleteDialog.name}" deleted from master.`, 'info');
+      await db.deleteItem(deleteDialog.id);
+      showToast(`Item "${deleteDialog.name}" deleted from master and Firestore.`, 'info');
       setDeleteDialog({ isOpen: false, id: '', name: '' });
       handleCreateNew();
     }
@@ -1298,25 +1298,47 @@ export const ItemMasterView: React.FC = () => {
                       </span>
                     </td>
                     <td style={{ textAlign: 'center' }}>
-                      <button
-                        type="button"
-                        onClick={e => {
-                          e.stopPropagation();
-                          loadItemIntoForm(s.item, false);
-                        }}
-                        style={{
-                          background: selectedItemId === s.item.id && !isViewOnly ? '#BFDBFE' : '#E2D2F8',
-                          color: selectedItemId === s.item.id && !isViewOnly ? '#1E40AF' : '#EA3943',
-                          border: '1px solid #C4B5FD',
-                          borderRadius: '12px',
-                          padding: '3px 12px',
-                          fontWeight: 800,
-                          fontSize: '0.8rem',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {selectedItemId === s.item.id && !isViewOnly ? 'Editing' : selectedItemId === s.item.id ? 'Viewing' : 'Edit'}
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                        <button
+                          type="button"
+                          onClick={e => {
+                            e.stopPropagation();
+                            loadItemIntoForm(s.item, false);
+                          }}
+                          style={{
+                            background: selectedItemId === s.item.id && !isViewOnly ? '#BFDBFE' : '#E2D2F8',
+                            color: selectedItemId === s.item.id && !isViewOnly ? '#1E40AF' : '#EA3943',
+                            border: '1px solid #C4B5FD',
+                            borderRadius: '12px',
+                            padding: '3px 10px',
+                            fontWeight: 800,
+                            fontSize: '0.78rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {selectedItemId === s.item.id && !isViewOnly ? 'Editing' : selectedItemId === s.item.id ? 'Viewing' : 'Edit'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={e => {
+                            e.stopPropagation();
+                            openItemLedger(s.item.id);
+                          }}
+                          style={{
+                            background: '#D2BEF6',
+                            color: '#002B99',
+                            border: '1px solid #000000',
+                            borderRadius: '12px',
+                            padding: '3px 10px',
+                            fontWeight: 800,
+                            fontSize: '0.78rem',
+                            cursor: 'pointer'
+                          }}
+                          title="Open full item stock ledger"
+                        >
+                          Ledger
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

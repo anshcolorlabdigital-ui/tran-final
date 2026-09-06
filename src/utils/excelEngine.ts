@@ -83,8 +83,8 @@ export function importItemsFromExcel(
   const existingItems = db.getItems();
   const settings = db.getSettings();
 
-  const defaultGst = options?.defaultGst ?? settings.defaultGstPercent ?? 18;
-  const defaultTransport = options?.defaultTransport ?? settings.defaultTransportPercent ?? 10;
+  const defaultGst = options?.defaultGst ?? 0;
+  const defaultTransport = options?.defaultTransport ?? 0;
 
   const createdSuppliers: Supplier[] = [];
   const importedItems: Item[] = [];
@@ -102,38 +102,25 @@ export function importItemsFromExcel(
   });
 
   rawRows.forEach((row, index) => {
-    const rowNum = index + 2; // Excel 1-based index + header
-
     // Match column names loosely with all phonetic and common variations
     const rawItemName = String(
       getColumnValue(row, [
         'item',
         'itemname',
-        'material',
-        'materialname',
-        'name',
-        'product',
-        'productname',
+        'itemdescription',
         'description',
         'particulars',
-        'itemdescription'
+        'material',
+        'product',
+        'name'
       ])
     ).trim();
 
+    if (!rawItemName) return; // Skip completely empty rows
+
     const rawCategory = String(
-      getColumnValue(row, [
-        'category',
-        'catagary',
-        'catagory',
-        'categary',
-        'group',
-        'itemcategory',
-        'type',
-        'cat',
-        'categoryname',
-        'groupname'
-      ])
-    ).trim();
+      getColumnValue(row, ['category', 'catagory', 'catagary', 'group', 'type', 'itemgroup'])
+    );
 
     const rawSupplier = String(
       getColumnValue(row, [
@@ -141,72 +128,62 @@ export function importItemsFromExcel(
         'suppliername',
         'vendor',
         'vendorname',
-        'firm',
-        'firmname',
         'party',
-        'manufacturer',
         'company',
-        'distributor'
+        'dealer'
       ])
     ).trim();
 
     const rawBasePrice = getColumnValue(row, [
       'baseprice',
       'basicprice',
+      'besicprice',
       'purchaserate',
       'purcrate',
       'purrate',
-      'base',
+      'purchaseprice',
       'rate',
       'price',
       'cost',
-      'purchaseprice',
-      'mrp',
-      'salerate'
+      'base',
+      'basic',
+      'amount',
+      'buyingrate'
     ]);
 
-    const rawSno = getColumnValue(row, [
-      'sno',
-      'srno',
-      'serialno',
-      'code',
-      'no',
-      'sr',
-      'empty'
-    ]);
+    const rawSno = getColumnValue(row, ['sno', 'serialno', 'code', 'itemcode', 'id']);
 
-    // Skip blank rows
-    if (!rawItemName && !rawCategory && !rawSupplier && !rawBasePrice) {
-      return;
-    }
+    const rawGst = getColumnValue(row, ['gst', 'gstpercent', 'tax', 'taxpercent', 'gst%']);
+    const rowGst = rawGst !== '' && !isNaN(Number(rawGst)) ? Number(rawGst) : defaultGst;
 
-    if (!rawItemName) {
-      errors.push(`Row ${rowNum}: Skipped because Item Name is missing.`);
-      return;
-    }
+    const rawTran = getColumnValue(row, ['tran', 'tranpercent', 'transport', 'freight', 'transport%']);
+    const rowTran = rawTran !== '' && !isNaN(Number(rawTran)) ? Number(rawTran) : defaultTransport;
 
-    // Parse numeric price
-    let basePrice = 0;
-    if (typeof rawBasePrice === 'number') {
-      basePrice = rawBasePrice;
-    } else if (rawBasePrice) {
-      const cleaned = String(rawBasePrice).replace(/[^0-9.-]+/g, '');
-      const parsed = parseFloat(cleaned);
-      if (!isNaN(parsed)) basePrice = parsed;
-    }
+    const rawProfAm = getColumnValue(row, ['profam', 'profpercentam', 'amateurprof', 'amateurmargin']);
+    const rowProfAm = rawProfAm !== '' && !isNaN(Number(rawProfAm)) ? Number(rawProfAm) : 0;
 
-    // Match or auto-create supplier
-    let matchedSupplier: Supplier | undefined = undefined;
-    const cleanSupplierName = rawSupplier.trim().toUpperCase();
+    const rawProfDeal = getColumnValue(row, ['profdeal', 'profpercentdeal', 'dealerprof', 'dealermargin', 'profit', 'prof']);
+    const rowProfDeal = rawProfDeal !== '' && !isNaN(Number(rawProfDeal)) ? Number(rawProfDeal) : 0;
 
-    if (cleanSupplierName) {
-      if (supplierNameMap.has(cleanSupplierName)) {
-        matchedSupplier = supplierNameMap.get(cleanSupplierName);
+    const rawMisc = getColumnValue(row, ['misc', 'mis', 'mispercent', 'other']);
+    const rowMisc = rawMisc !== '' && !isNaN(Number(rawMisc)) ? Number(rawMisc) : 0;
+
+    const rawMinStock = getColumnValue(row, ['minstock', 'reorder', 'minimumstock']);
+    const rowMinStock = rawMinStock !== '' && !isNaN(Number(rawMinStock)) ? Number(rawMinStock) : (existingItems.find(it => it.name.trim().toUpperCase() === rawItemName.toUpperCase())?.minStock ?? 0);
+
+    const basePrice = Number(rawBasePrice) || 0;
+
+    // Resolve or auto-create Supplier
+    let matchedSupplier: Supplier | undefined;
+    if (rawSupplier) {
+      const supKey = rawSupplier.toUpperCase();
+      if (supplierNameMap.has(supKey)) {
+        matchedSupplier = supplierNameMap.get(supKey);
       } else {
-        // Auto-create supplier with clean default fields
+        // Create new Supplier on the fly with empty details
         const newSupplier: Supplier = {
           id: `sup-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          name: cleanSupplierName,
+          name: rawSupplier.toUpperCase(),
           address: '',
           phone: '',
           gstin: '',
@@ -215,7 +192,7 @@ export function importItemsFromExcel(
           createdAt: new Date().toISOString()
         };
         db.saveSupplier(newSupplier);
-        supplierNameMap.set(cleanSupplierName, newSupplier);
+        supplierNameMap.set(supKey, newSupplier);
         createdSuppliers.push(newSupplier);
         matchedSupplier = newSupplier;
       }
@@ -237,11 +214,14 @@ export function importItemsFromExcel(
 
     const unitA = calculateItemUnitBreakdown(
       basePrice,
-      defaultGst,
-      defaultTransport,
-      25, // default profit %
-      2,  // default misc %
-      0   // roundup
+      rowGst,
+      rowTran,
+      rowProfAm,
+      rowMisc,
+      0,
+      undefined,
+      rowProfDeal,
+      0
     );
 
     const itemRecord: Item = {
@@ -253,11 +233,14 @@ export function importItemsFromExcel(
       supplierId: matchedSupplier?.id || existingItem?.supplierId || '',
       supplierName: matchedSupplier?.name || existingItem?.supplierName || '',
       unit: existingItem?.unit || 'Roll',
-      minStock: existingItem?.minStock ?? 100,
+      minStock: rowMinStock,
       openingStock: existingItem?.openingStock ?? 0,
       purchaseRate: basePrice,
       saleRate: unitA.salePrice,
-      gstPercent: defaultGst,
+      mrp: unitA.mrp,
+      gstPercent: rowGst,
+      profPercentAm: rowProfAm,
+      profPercentDeal: rowProfDeal,
       unitA,
       hasSecondaryUnit: existingItem?.hasSecondaryUnit ?? false,
       unitB: existingItem?.unitB,
@@ -594,15 +577,21 @@ export function restoreDatabaseFromExcel(fileData: ArrayBuffer | Uint8Array): {
           if (!name) return;
 
           const basePrice = Number(getColumnValue(r, ['basepricepurchaserate', 'baseprice', 'purchaserate', 'purcrate', 'rate', 'price'])) || 0;
-          const gst = Number(getColumnValue(r, ['gst', 'gstpercent'])) || 18;
-          const tran = Number(getColumnValue(r, ['transport', 'tranpercent'])) || 10;
-          const prof = Number(getColumnValue(r, ['profit', 'profpercent'])) || 25;
-          const misc = Number(getColumnValue(r, ['misc', 'mispercent'])) || 2;
+          const gstVal = getColumnValue(r, ['gst', 'gstpercent']);
+          const gst = gstVal !== '' && !isNaN(Number(gstVal)) ? Number(gstVal) : 0;
+          const tranVal = getColumnValue(r, ['transport', 'tranpercent', 'tran']);
+          const tran = tranVal !== '' && !isNaN(Number(tranVal)) ? Number(tranVal) : 0;
+          const profAmVal = getColumnValue(r, ['profam', 'profpercentam', 'amateurmargin', 'amateurprof']);
+          const profAm = profAmVal !== '' && !isNaN(Number(profAmVal)) ? Number(profAmVal) : 0;
+          const profDealVal = getColumnValue(r, ['profdeal', 'profpercentdeal', 'profit', 'profpercent', 'dealermargin']);
+          const profDeal = profDealVal !== '' && !isNaN(Number(profDealVal)) ? Number(profDealVal) : 0;
+          const miscVal = getColumnValue(r, ['misc', 'mispercent', 'mis']);
+          const misc = miscVal !== '' && !isNaN(Number(miscVal)) ? Number(miscVal) : 0;
           const sno = String(getColumnValue(r, ['sno', 'serialno', 'code', 'empty'])) || '';
           const category = String(getColumnValue(r, ['category', 'catagary', 'catagory', 'group'])) || 'GENERAL';
           const supplierName = String(getColumnValue(r, ['suppliername', 'supplier', 'vendor'])) || '';
 
-          const unitA = calculateItemUnitBreakdown(basePrice, gst, tran, prof, misc, 0);
+          const unitA = calculateItemUnitBreakdown(basePrice, gst, tran, profAm, misc, 0, undefined, profDeal, 0);
 
           const item: Item = {
             id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -611,11 +600,14 @@ export function restoreDatabaseFromExcel(fileData: ArrayBuffer | Uint8Array): {
             category: category.toUpperCase(),
             supplierName: supplierName.toUpperCase(),
             unit: String(getColumnValue(r, ['primaryunit', 'unit'])) || 'Roll',
-            minStock: Number(getColumnValue(r, ['minstock', 'reorder'])) || 100,
+            minStock: Number(getColumnValue(r, ['minstock', 'reorder'])) || 0,
             openingStock: Number(getColumnValue(r, ['openingstock'])) || 0,
             purchaseRate: basePrice,
             saleRate: unitA.salePrice,
+            mrp: unitA.mrp,
             gstPercent: gst,
+            profPercentAm: profAm,
+            profPercentDeal: profDeal,
             unitA,
             isActive: String(getColumnValue(r, ['status', 'active'])).toLowerCase() !== 'inactive',
             createdAt: new Date().toISOString()
@@ -696,6 +688,217 @@ export function restoreDatabaseFromExcel(fileData: ArrayBuffer | Uint8Array): {
           restoredCounts.parties += 1;
         });
       }
+
+      // 4. Sales Sheet
+      if (lower.includes('sale')) {
+        const salesByBill = new Map<string, any[]>();
+        rows.forEach(r => {
+          const billNo = String(getColumnValue(r, ['billno', 'invoiceno', 'bill'])).trim();
+          if (!billNo) return;
+          if (!salesByBill.has(billNo)) salesByBill.set(billNo, []);
+          salesByBill.get(billNo)!.push(r);
+        });
+
+        salesByBill.forEach((billRows, billNo) => {
+          const firstRow = billRows[0];
+          const partyName = String(getColumnValue(firstRow, ['partyname', 'party', 'customer'])).trim() || 'CASH';
+          const billDate = String(getColumnValue(firstRow, ['billdate', 'date'])) || new Date().toISOString().split('T')[0];
+          const grandTotal = Number(getColumnValue(firstRow, ['billgrandtotal', 'grandtotal', 'amount', 'total'])) || 0;
+          const recdCash = Number(getColumnValue(firstRow, ['recdcash', 'cash'])) || 0;
+          const recdUpi = Number(getColumnValue(firstRow, ['recdupi', 'upi'])) || 0;
+
+          const saleItems = billRows.map((br, idx) => {
+            const itemName = String(getColumnValue(br, ['itemname', 'item', 'particulars'])).trim();
+            const basicPrice = Number(getColumnValue(br, ['basicprice', 'rate'])) || 0;
+            const gstPercent = Number(getColumnValue(br, ['gstpercent', 'gst%'])) || 0;
+            const gstAmt = Number(getColumnValue(br, ['gstamount', 'gstamt'])) || 0;
+            const nettPrice = Number(getColumnValue(br, ['nettprice'])) || basicPrice;
+            const salePrice = Number(getColumnValue(br, ['saleprice', 'mrp'])) || basicPrice;
+            const qty = Number(getColumnValue(br, ['qty', 'quantity'])) || 1;
+            const amount = Number(getColumnValue(br, ['lineamount', 'amount'])) || salePrice * qty;
+
+            return {
+              id: `sitem-${Date.now()}-${idx}`,
+              sno: String(getColumnValue(br, ['itemsno', 'sno'])) || '',
+              itemId: `item-gen-${Date.now()}`,
+              itemName,
+              unit: String(getColumnValue(br, ['unit'])) || 'Roll',
+              basicPrice,
+              gstPercent,
+              gstAmt,
+              nettPrice,
+              salePrice,
+              mrp: salePrice,
+              qty,
+              amount
+            };
+          });
+
+          const sale: Sale = {
+            id: `sale-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            billNo,
+            billDate,
+            partyId: '',
+            partyName,
+            items: saleItems,
+            basicTotal: saleItems.reduce((acc, it) => acc + (it.basicPrice * it.qty), 0),
+            gstTotal: saleItems.reduce((acc, it) => acc + (it.gstAmt * it.qty), 0),
+            roundUp: 0,
+            billTotal: grandTotal || saleItems.reduce((acc, it) => acc + it.amount, 0),
+            recdCash,
+            recdUpi,
+            balanceDue: 0,
+            createdAt: new Date().toISOString()
+          };
+          db.saveSale(sale);
+          restoredCounts.sales += 1;
+        });
+      }
+
+      // 5. Purchases Sheet
+      if (lower.includes('purch')) {
+        const purByBill = new Map<string, any[]>();
+        rows.forEach(r => {
+          const billNo = String(getColumnValue(r, ['billno', 'invoiceno', 'bill'])).trim();
+          if (!billNo) return;
+          if (!purByBill.has(billNo)) purByBill.set(billNo, []);
+          purByBill.get(billNo)!.push(r);
+        });
+
+        purByBill.forEach((billRows, billNo) => {
+          const firstRow = billRows[0];
+          const supplierName = String(getColumnValue(firstRow, ['suppliername', 'supplier', 'vendor'])).trim();
+          const billDate = String(getColumnValue(firstRow, ['billdate', 'date'])) || new Date().toISOString().split('T')[0];
+          const grandTotal = Number(getColumnValue(firstRow, ['billgrandtotal', 'grandtotal', 'amount'])) || 0;
+
+          const purItems = billRows.map((br, idx) => {
+            const itemName = String(getColumnValue(br, ['itemname', 'item', 'particulars'])).trim();
+            const basicPrice = Number(getColumnValue(br, ['basicprice', 'rate'])) || 0;
+            const gstPercent = Number(getColumnValue(br, ['gstpercent', 'gst%'])) || 0;
+            const gstAmt = Number(getColumnValue(br, ['gstamount', 'gstamt'])) || 0;
+            const nettPrice = Number(getColumnValue(br, ['nettprice'])) || basicPrice;
+            const qty = Number(getColumnValue(br, ['qtyinwarded', 'qty', 'quantity'])) || 1;
+            const amount = Number(getColumnValue(br, ['lineamount', 'amount'])) || nettPrice * qty;
+
+            return {
+              id: `pitem-${Date.now()}-${idx}`,
+              sno: String(getColumnValue(br, ['itemsno', 'sno'])) || '',
+              itemId: `item-gen-${Date.now()}`,
+              itemName,
+              unit: String(getColumnValue(br, ['unit'])) || 'Roll',
+              basicPrice,
+              gstPercent,
+              gstAmt,
+              nettPrice,
+              qty,
+              amount
+            };
+          });
+
+          const purchase: Purchase = {
+            id: `purch-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            billNo,
+            billDate,
+            recdDate: billDate,
+            supplierId: '',
+            supplierName,
+            items: purItems,
+            basicTotal: purItems.reduce((acc, it) => acc + (it.basicPrice * it.qty), 0),
+            gstTotal: purItems.reduce((acc, it) => acc + (it.gstAmt * it.qty), 0),
+            roundUp: 0,
+            billTotal: grandTotal || purItems.reduce((acc, it) => acc + it.amount, 0),
+            recdCash: 0,
+            recdUpi: 0,
+            createdAt: new Date().toISOString()
+          };
+          db.savePurchase(purchase);
+          restoredCounts.purchases += 1;
+        });
+      }
+
+      // 6. Orders Sheet
+      if (lower.includes('order')) {
+        const ordersByNum = new Map<string, any[]>();
+        rows.forEach(r => {
+          const orderNumber = String(getColumnValue(r, ['ordernumber', 'orderno', 'number'])).trim();
+          if (!orderNumber) return;
+          if (!ordersByNum.has(orderNumber)) ordersByNum.set(orderNumber, []);
+          ordersByNum.get(orderNumber)!.push(r);
+        });
+
+        ordersByNum.forEach((ordRows, orderNumber) => {
+          const firstRow = ordRows[0];
+          const supplierName = String(getColumnValue(firstRow, ['suppliername', 'supplier', 'vendor'])).trim();
+          const orderDate = String(getColumnValue(firstRow, ['orderdate', 'date'])) || new Date().toISOString().split('T')[0];
+          const status = String(getColumnValue(firstRow, ['status'])) || 'ORDERED';
+
+          const orderItems = ordRows.map((orow, idx) => ({
+            id: `oitem-${Date.now()}-${idx}`,
+            sno: String(getColumnValue(orow, ['sno'])) || '',
+            itemId: `item-gen-${Date.now()}`,
+            itemName: String(getColumnValue(orow, ['itemname', 'item'])).trim(),
+            orderedQty: Number(getColumnValue(orow, ['orderedqty', 'qty'])) || 0,
+            receivedQty: Number(getColumnValue(orow, ['receivedqty', 'recdqty'])) || 0,
+            orderDate,
+            status: status as any
+          }));
+
+          const supplierOrder: SupplierOrder = {
+            id: `ord-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            orderNumber,
+            orderDate,
+            supplierId: '',
+            supplierName,
+            status: status as any,
+            items: orderItems,
+            createdAt: new Date().toISOString()
+          };
+          db.saveOrder(supplierOrder);
+          restoredCounts.orders += 1;
+        });
+      }
+
+      // 7. Self Use Sheet
+      if (lower.includes('selfuse') || lower.includes('self_use') || lower.includes('internal')) {
+        const selfUseByVoucher = new Map<string, any[]>();
+        rows.forEach(r => {
+          const billNo = String(getColumnValue(r, ['voucherno', 'billno', 'refno'])).trim();
+          if (!billNo) return;
+          if (!selfUseByVoucher.has(billNo)) selfUseByVoucher.set(billNo, []);
+          selfUseByVoucher.get(billNo)!.push(r);
+        });
+
+        selfUseByVoucher.forEach((vRows, billNo) => {
+          const firstRow = vRows[0];
+          const category = String(getColumnValue(firstRow, ['category', 'department'])).trim();
+          const billDate = String(getColumnValue(firstRow, ['date', 'billdate'])) || new Date().toISOString().split('T')[0];
+          const remarks = String(getColumnValue(firstRow, ['purpose', 'remarks', 'reason'])).trim();
+
+          const suItems = vRows.map((vr, idx) => ({
+            id: `suitem-${Date.now()}-${idx}`,
+            sno: String(getColumnValue(vr, ['sno'])) || '',
+            itemId: `item-gen-${Date.now()}`,
+            itemName: String(getColumnValue(vr, ['itemname', 'item'])).trim(),
+            unit: String(getColumnValue(vr, ['unit'])) || 'Roll',
+            rate: Number(getColumnValue(vr, ['rate'])) || 0,
+            qty: Number(getColumnValue(vr, ['qtyconsumed', 'qty'])) || 0,
+            amount: Number(getColumnValue(vr, ['amount'])) || 0
+          }));
+
+          const selfUse: SelfUse = {
+            id: `su-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            billNo,
+            billDate,
+            category,
+            items: suItems,
+            totalAmount: suItems.reduce((acc, it) => acc + it.amount, 0),
+            remarks,
+            createdAt: new Date().toISOString()
+          };
+          db.saveSelfUse(selfUse);
+          restoredCounts.selfUse += 1;
+        });
+      }
     });
 
     // Fallback: If standard multi-sheet tables yielded 0 restored records, but the file contains items, run importItemsFromExcel!
@@ -705,6 +908,9 @@ export function restoreDatabaseFromExcel(fileData: ArrayBuffer | Uint8Array): {
       restoredCounts.items = importResult.importedCount;
       restoredCounts.suppliers = importResult.createdSuppliersCount;
     }
+
+    // Push all restored records to Firestore
+    db.pushAllToCloudFirestore().catch(() => {});
 
     return {
       success: true,

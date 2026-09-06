@@ -19,33 +19,33 @@ export const QuickItemModal: React.FC = () => {
 
   // Unit A
   const [unitAName, setUnitAName] = useState('Roll');
-  const [unitABasicPrice, setUnitABasicPrice] = useState('1000');
-  const [unitAGstPercent, setUnitAGstPercent] = useState('18');
-  const [unitATranPercent, setUnitATranPercent] = useState('10');
+  const [unitABasicPrice, setUnitABasicPrice] = useState('0');
+  const [unitAGstPercent, setUnitAGstPercent] = useState('0');
+  const [unitATranPercent, setUnitATranPercent] = useState('0');
   const [unitAProfAm, setUnitAProfAm] = useState('0');
   const [unitAProfDeal, setUnitAProfDeal] = useState('0');
   const [unitAMisPercent, setUnitAMisPercent] = useState('0');
   const [unitARoundUpSale, setUnitARoundUpSale] = useState('0');
   const [unitARoundUpMrp, setUnitARoundUpMrp] = useState('0');
-  const [unitASalePrice, setUnitASalePrice] = useState('500');
-  const [unitAMrp, setUnitAMrp] = useState('500');
+  const [unitASalePrice, setUnitASalePrice] = useState('0');
+  const [unitAMrp, setUnitAMrp] = useState('0');
 
   // Unit B
   const [hasUnitB, setHasUnitB] = useState(true);
   const [unitBName, setUnitBName] = useState('Mt.');
   const [unitBConversion, setUnitBConversion] = useState('40');
-  const [unitBBasicPrice, setUnitBBasicPrice] = useState('1000');
-  const [unitBGstPercent, setUnitBGstPercent] = useState('18');
-  const [unitBTranPercent, setUnitBTranPercent] = useState('10');
+  const [unitBBasicPrice, setUnitBBasicPrice] = useState('0');
+  const [unitBGstPercent, setUnitBGstPercent] = useState('0');
+  const [unitBTranPercent, setUnitBTranPercent] = useState('0');
   const [unitBProfAm, setUnitBProfAm] = useState('0');
   const [unitBProfDeal, setUnitBProfDeal] = useState('0');
   const [unitBMisPercent, setUnitBMisPercent] = useState('0');
   const [unitBRoundUpSale, setUnitBRoundUpSale] = useState('0');
   const [unitBRoundUpMrp, setUnitBRoundUpMrp] = useState('0');
-  const [unitBSalePrice, setUnitBSalePrice] = useState('500');
-  const [unitBMrp, setUnitBMrp] = useState('500');
+  const [unitBSalePrice, setUnitBSalePrice] = useState('0');
+  const [unitBMrp, setUnitBMrp] = useState('0');
 
-  const [minStock, setMinStock] = useState('10');
+  const [minStock, setMinStock] = useState('0');
   const [openingStock, setOpeningStock] = useState('0');
 
   // Auto initialize next SNO on open
@@ -55,10 +55,24 @@ export const QuickItemModal: React.FC = () => {
       setName('');
       setHsn('');
       setDescription('');
+      setUnitABasicPrice('0');
+      setUnitAGstPercent('0');
+      setUnitATranPercent('0');
+      setUnitAProfAm('0');
+      setUnitAProfDeal('0');
+      setUnitAMisPercent('0');
       setUnitARoundUpSale('0');
       setUnitARoundUpMrp('0');
+      setUnitBBasicPrice('0');
+      setUnitBGstPercent('0');
+      setUnitBTranPercent('0');
+      setUnitBProfAm('0');
+      setUnitBProfDeal('0');
+      setUnitBMisPercent('0');
       setUnitBRoundUpSale('0');
       setUnitBRoundUpMrp('0');
+      setMinStock('0');
+      setOpeningStock('0');
       if (suppliers.length > 0 && !supplierId) {
         setSupplierId(suppliers[0].id);
       }

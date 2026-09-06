@@ -2,11 +2,11 @@ import React, { useState, useMemo } from 'react';
 import { db } from '../../db/db';
 import { useApp } from '../../context/AppContext';
 import { StockEngine } from '../../db/stockEngine';
-import { Download, Printer, Search, AlertTriangle } from 'lucide-react';
+import { Download, Printer, Search, AlertTriangle, Boxes } from 'lucide-react';
 import { formatDateToDisplay } from '../../utils/dateUtils';
 
 export const ItemStockReportView: React.FC = () => {
-  const { refreshKey } = useApp();
+  const { refreshKey, openItemLedger } = useApp();
 
   const stockSummaries = useMemo(() => StockEngine.getAllItemsStockSummary(), [refreshKey]);
   const [search, setSearch] = useState('');
@@ -184,20 +184,21 @@ export const ItemStockReportView: React.FC = () => {
             <thead>
               <tr>
                 <th>Item Description</th>
-                <th style={{ textAlign: 'center', width: '90px' }}>Opening</th>
-                <th style={{ textAlign: 'center', width: '90px', color: '#15803D' }}>Purchases</th>
-                <th style={{ textAlign: 'center', width: '90px', color: '#EA3943' }}>Sales</th>
-                <th style={{ textAlign: 'center', width: '90px', color: '#B45309' }}>Self Use</th>
-                <th style={{ textAlign: 'center', width: '90px' }}>Adjust</th>
-                <th style={{ textAlign: 'center', width: '100px', color: '#002B99' }}>Closing</th>
-                <th style={{ textAlign: 'center', width: '85px' }}>Min Stock</th>
-                <th style={{ textAlign: 'center', width: '140px' }}>Order Status</th>
+                <th style={{ textAlign: 'center', width: '80px' }}>Opening</th>
+                <th style={{ textAlign: 'center', width: '80px', color: '#15803D' }}>Purchases</th>
+                <th style={{ textAlign: 'center', width: '80px', color: '#EA3943' }}>Sales</th>
+                <th style={{ textAlign: 'center', width: '80px', color: '#B45309' }}>Self Use</th>
+                <th style={{ textAlign: 'center', width: '80px' }}>Adjust</th>
+                <th style={{ textAlign: 'center', width: '95px', color: '#002B99' }}>Closing</th>
+                <th style={{ textAlign: 'center', width: '75px' }}>Min Stock</th>
+                <th style={{ textAlign: 'center', width: '130px' }}>Order Status</th>
+                <th style={{ textAlign: 'center', width: '90px' }}>Ledger</th>
               </tr>
             </thead>
             <tbody>
               {filteredSummaries.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', padding: '24px', color: '#9CA3AF' }}>
+                  <td colSpan={10} style={{ textAlign: 'center', padding: '24px', color: '#9CA3AF' }}>
                     No stock summary items found matching the filter.
                   </td>
                 </tr>
@@ -206,7 +207,23 @@ export const ItemStockReportView: React.FC = () => {
                   <tr key={s.item.id} style={{ background: s.isLowStock ? '#FFFBEB' : 'transparent' }}>
                     <td style={{ fontWeight: 800 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span>{s.item.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => openItemLedger(s.item.id)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            fontWeight: 800,
+                            color: '#002B99',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            textDecoration: 'underline'
+                          }}
+                          title="Click to open full transaction ledger"
+                        >
+                          {s.item.name}
+                        </button>
                         {s.isLowStock && (
                           <span
                             style={{
@@ -258,6 +275,24 @@ export const ItemStockReportView: React.FC = () => {
                         <span style={{ color: '#9CA3AF', fontSize: '0.8rem' }}>-</span>
                       )}
                     </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => openItemLedger(s.item.id)}
+                        className="btn-classic"
+                        style={{
+                          background: '#D2BEF6',
+                          color: '#002B99',
+                          fontWeight: 800,
+                          fontSize: '0.74rem',
+                          padding: '3px 8px',
+                          border: '1.5px solid #000000'
+                        }}
+                        title="Open complete Item Transaction Ledger"
+                      >
+                        Ledger
+                      </button>
+                    </td>
                   </tr>
                 ))
               )}
@@ -275,7 +310,7 @@ export const ItemStockReportView: React.FC = () => {
                 <td style={{ textAlign: 'center', fontWeight: 900, fontSize: '1.1rem', color: '#002B99' }}>
                   {totals.totalClosing}
                 </td>
-                <td colSpan={2}></td>
+                <td colSpan={3}></td>
               </tr>
             </tfoot>
           </table>

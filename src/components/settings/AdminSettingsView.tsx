@@ -138,9 +138,11 @@ export const AdminSettingsView: React.FC = () => {
   const [importResult, setImportResult] = useState<ExcelImportResult | null>(null);
 
   // --- DELETE STATE ---
-  const [deleteDateMode, setDeleteDateMode] = useState<'ALL_TIME' | 'THIS_MONTH' | 'CUSTOM'>('THIS_MONTH');
+  const [deleteDateMode, setDeleteDateMode] = useState<'ALL_TIME' | 'THIS_MONTH' | 'CUSTOM'>('ALL_TIME');
   const [deleteFromDate, setDeleteFromDate] = useState(firstOfMonthStr);
   const [deleteToDate, setDeleteToDate] = useState(todayStr);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isPurgingA2, setIsPurgingA2] = useState(false);
 
   // CRITICAL: Item, Supplier, Opening Stock, and Party are UNCHECKED (OFF) by default for safety!
   const [deleteModules, setDeleteModules] = useState<SidebarModulesSelection>({
@@ -607,36 +609,56 @@ export const AdminSettingsView: React.FC = () => {
   };
 
   // Delete Data Execution
-  const executeDelete = () => {
+  const executeDelete = async () => {
     const hasAny = Object.values(deleteModules).some(Boolean);
     if (!hasAny) {
       showToast('Please select at least one module to delete', 'error');
       return;
     }
 
-    const options: DeleteFilterOptions = {
-      fromDate: deleteEffectiveFrom,
-      toDate: deleteEffectiveTo,
-      isCustomDate: deleteDateMode === 'CUSTOM',
-      isAllTime: deleteDateMode === 'ALL_TIME',
-      modules: {
-        orders: Boolean(deleteModules.order || deleteModules.orderedSection),
-        purchases: Boolean(deleteModules.purchase || deleteModules.reportPurchases),
-        sales: Boolean(deleteModules.sale || deleteModules.reportSales),
-        selfUse: Boolean(deleteModules.selfUse || deleteModules.reportSelfUse),
-        adjustments: Boolean(deleteModules.reportItemStock),
-        openingStock: Boolean(deleteModules.openingStock),
-        items: Boolean(deleteModules.item),
-        suppliers: Boolean(deleteModules.supplier),
-        parties: Boolean(deleteModules.party)
-      }
-    };
-
-    const deletedCounts = db.deleteDataByFilter(options);
+    setIsDeleting(true);
     setIsDeleteConfirmOpen(false);
+    showToast('Deleting selected data from Cloud Firestore & local state...', 'info');
 
-    const total = Object.values(deletedCounts).reduce((acc, c) => acc + c, 0);
-    showToast(`Successfully deleted ${total} records matching selected modules and date scope.`, 'success');
+    try {
+      const options: DeleteFilterOptions = {
+        fromDate: deleteEffectiveFrom,
+        toDate: deleteEffectiveTo,
+        isCustomDate: deleteDateMode === 'CUSTOM',
+        isAllTime: deleteDateMode === 'ALL_TIME',
+        modules: {
+          orders: Boolean(deleteModules.order || deleteModules.orderedSection),
+          purchases: Boolean(deleteModules.purchase || deleteModules.reportPurchases),
+          sales: Boolean(deleteModules.sale || deleteModules.reportSales),
+          selfUse: Boolean(deleteModules.selfUse || deleteModules.reportSelfUse),
+          adjustments: Boolean(deleteModules.reportItemStock),
+          openingStock: Boolean(deleteModules.openingStock),
+          items: Boolean(deleteModules.item),
+          suppliers: Boolean(deleteModules.supplier),
+          parties: Boolean(deleteModules.party)
+        }
+      };
+
+      const deletedCounts = await db.deleteDataByFilter(options);
+      const total = Object.values(deletedCounts).reduce((acc, c) => acc + c, 0);
+      showToast(`Successfully deleted ${total} records from Cloud Firestore & local database.`, 'success');
+    } catch (e: any) {
+      showToast(`Failed to delete data: ${e.message}`, 'error');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handlePurgeA2 = async () => {
+    setIsPurgingA2(true);
+    try {
+      const res = await db.purgeOrphanedTestItems();
+      showToast(`Purged ${res.purgedCount} test artifacts (A2222) from Cloud Firestore & local state!`, 'success');
+    } catch (e: any) {
+      showToast(`Error purging test item: ${e.message}`, 'error');
+    } finally {
+      setIsPurgingA2(false);
+    }
   };
 
   const handleResetDatabase = () => {
@@ -1448,25 +1470,47 @@ export const AdminSettingsView: React.FC = () => {
           <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'center', borderTop: '1.5px dashed #D1D5DB', paddingTop: '18px' }}>
             <button
               type="button"
-              disabled={deletePreviewCounts.total === 0}
+              disabled={deletePreviewCounts.total === 0 || isDeleting}
               onClick={() => setIsDeleteConfirmOpen(true)}
               style={{
-                backgroundColor: deletePreviewCounts.total > 0 ? '#EA3943' : '#D1D5DB',
+                backgroundColor: deletePreviewCounts.total > 0 && !isDeleting ? '#EA3943' : '#D1D5DB',
                 color: '#FFFFFF',
-                border: deletePreviewCounts.total > 0 ? '2px solid #991B1B' : '1px solid #9CA3AF',
+                border: deletePreviewCounts.total > 0 && !isDeleting ? '2px solid #991B1B' : '1px solid #9CA3AF',
                 borderRadius: 'var(--radius-pill)',
                 padding: '10px 28px',
                 fontWeight: 900,
                 fontSize: '0.98rem',
-                cursor: deletePreviewCounts.total > 0 ? 'pointer' : 'not-allowed',
+                cursor: deletePreviewCounts.total > 0 && !isDeleting ? 'pointer' : 'not-allowed',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '8px',
-                boxShadow: deletePreviewCounts.total > 0 ? '0 2px 6px rgba(234,57,67,0.3)' : 'none'
+                boxShadow: deletePreviewCounts.total > 0 && !isDeleting ? '0 2px 6px rgba(234,57,67,0.3)' : 'none'
               }}
             >
-              <Trash2 size={18} />
-              <span>Delete Selected Data ({deletePreviewCounts.total} Records)</span>
+              {isDeleting ? <RefreshCw className="animate-spin" size={18} /> : <Trash2 size={18} />}
+              <span>{isDeleting ? 'Deleting from Cloud Firestore...' : `Delete Selected Data (${deletePreviewCounts.total} Records)`}</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={isPurgingA2}
+              onClick={handlePurgeA2}
+              style={{
+                background: '#FEF3C7',
+                color: '#92400E',
+                border: '1.5px solid #F59E0B',
+                borderRadius: 'var(--radius-pill)',
+                padding: '9px 20px',
+                fontWeight: 800,
+                fontSize: '0.88rem',
+                cursor: isPurgingA2 ? 'not-allowed' : 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              {isPurgingA2 ? <RefreshCw className="animate-spin" size={15} /> : <Zap size={15} />}
+              <span>{isPurgingA2 ? 'Purging A2222...' : 'Clean & Purge "A2222" Test Artifacts'}</span>
             </button>
 
             <button
@@ -1662,7 +1706,7 @@ service cloud.firestore {
                   />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
                     <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '4px' }}>
                       Phone
@@ -1685,36 +1729,6 @@ service cloud.firestore {
                       value={formData.gstin}
                       onChange={e => setFormData({ ...formData, gstin: e.target.value })}
                       style={{ fontFamily: 'monospace', fontWeight: 700 }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '4px' }}>
-                      Default GST %
-                    </label>
-                    <input
-                      type="number"
-                      step="any"
-                      min="0"
-                      max="100"
-                      className="input-text-clean"
-                      value={formData.defaultGstPercent || 18}
-                      onChange={e => setFormData({ ...formData, defaultGstPercent: Number(e.target.value) || 0 })}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '4px' }}>
-                      Default Transport %
-                    </label>
-                    <input
-                      type="number"
-                      step="any"
-                      min="0"
-                      max="100"
-                      className="input-text-clean"
-                      value={formData.defaultTransportPercent ?? 10}
-                      onChange={e => setFormData({ ...formData, defaultTransportPercent: Number(e.target.value) || 0 })}
                     />
                   </div>
                 </div>

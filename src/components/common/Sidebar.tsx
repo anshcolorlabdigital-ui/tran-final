@@ -84,6 +84,8 @@ export const Sidebar: React.FC = () => {
         {navItem('REPORT_PURCHASES', 'PURCHASES')}
         {navItem('REPORT_SELF_USE', 'SELF USE')}
         {navItem('REPORT_ITEM_STOCK', 'ITEM STOCK', lowStockItems.length > 0 ? lowStockItems.length : undefined)}
+        {navItem('REPORT_PARTY_LEDGER', 'PARTY LEDGER')}
+        {navItem('REPORT_ITEM_LEDGER', 'ITEM LEDGER')}
       </div>
 
       {/* SECTION 4: SETTING */}

@@ -16,6 +16,8 @@ import { SalesReportView } from './components/reports/SalesReportView';
 import { PurchaseReportView } from './components/reports/PurchaseReportView';
 import { SelfUseReportView } from './components/reports/SelfUseReportView';
 import { ItemStockReportView } from './components/reports/ItemStockReportView';
+import { PartyLedgerReportView } from './components/reports/PartyLedgerReportView';
+import { ItemLedgerReportView } from './components/reports/ItemLedgerReportView';
 import { AdminSettingsView } from './components/settings/AdminSettingsView';
 import { UserPermissionsView } from './components/settings/UserPermissionsView';
 import { QuickPartyModal } from './components/common/QuickPartyModal';
@@ -57,6 +59,10 @@ export const App: React.FC = () => {
         return <SelfUseReportView />;
       case 'REPORT_ITEM_STOCK':
         return <ItemStockReportView />;
+      case 'REPORT_PARTY_LEDGER':
+        return <PartyLedgerReportView />;
+      case 'REPORT_ITEM_LEDGER':
+        return <ItemLedgerReportView />;
       case 'ADMIN':
         return <AdminSettingsView />;
       case 'USER':

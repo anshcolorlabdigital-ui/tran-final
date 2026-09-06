@@ -42,6 +42,12 @@ interface AppContextType {
   triggerRefresh: () => void;
   pendingPurchasePrefill: any | null;
   setPendingPurchasePrefill: (data: any | null) => void;
+  selectedLedgerPartyId: string | null;
+  setSelectedLedgerPartyId: (partyId: string | null) => void;
+  openPartyLedger: (partyId: string) => void;
+  selectedLedgerItemId: string | null;
+  setSelectedLedgerItemId: (itemId: string | null) => void;
+  openItemLedger: (itemId: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -53,6 +59,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [refreshKey, setRefreshKey] = useState<number>(0);
   const [pendingPurchasePrefill, setPendingPurchasePrefill] = useState<any | null>(null);
+  const [selectedLedgerPartyId, setSelectedLedgerPartyId] = useState<string | null>(null);
+  const [selectedLedgerItemId, setSelectedLedgerItemId] = useState<string | null>(null);
   const [alertModal, setAlertModal] = useState<AlertModalState>({
     isOpen: false,
     message: '',
@@ -66,6 +74,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const triggerRefresh = useCallback(() => {
     setRefreshKey(prev => prev + 1);
+  }, []);
+
+  const openPartyLedger = useCallback((partyId: string) => {
+    setSelectedLedgerPartyId(partyId);
+    setActiveTab('REPORT_PARTY_LEDGER');
+  }, []);
+
+  const openItemLedger = useCallback((itemId: string) => {
+    setSelectedLedgerItemId(itemId);
+    setActiveTab('REPORT_ITEM_LEDGER');
   }, []);
 
   useEffect(() => {
@@ -136,7 +154,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         refreshKey,
         triggerRefresh,
         pendingPurchasePrefill,
-        setPendingPurchasePrefill
+        setPendingPurchasePrefill,
+        selectedLedgerPartyId,
+        setSelectedLedgerPartyId,
+        openPartyLedger,
+        selectedLedgerItemId,
+        setSelectedLedgerItemId,
+        openItemLedger
       }}
     >
       {children}

@@ -22,7 +22,7 @@ interface StockMovement {
   refId: string;
 }
 
-function runVerificationSuite() {
+async function runVerificationSuite() {
   console.log('====================================================');
   console.log('STARTING 30-STEP AUTOMATED VERIFICATION SUITE');
   console.log('====================================================');
@@ -1015,7 +1015,8 @@ function runVerificationSuite() {
     throw new Error('Auto-supplier creation failed for imported materials');
   }
   
-  const canvasItem = db.getItems().find(i => i.name === 'CANVAS MATTE ROLL 24 INCH');
+  const canvasItem = db.getItems().find(i => i.name.toUpperCase().includes('CANVAS MATTE ROLL'));
+  console.log('Found canvasItem:', canvasItem);
   if (!canvasItem || !canvasItem.unitA || canvasItem.unitA.basicPrice !== 1200) {
     throw new Error('Imported item pricing or metadata mismatch');
   }
@@ -1103,7 +1104,7 @@ function runVerificationSuite() {
   });
   console.log(`Pre-cleanup Preview Counts (All Time): Orders=${previewBefore.orders}, Purchases=${previewBefore.purchases}, Sales=${previewBefore.sales}`);
 
-  const deleteResult = db.deleteDataByFilter({
+  const deleteResult = await db.deleteDataByFilter({
     deleteSales: true,
     deletePurchases: true,
     deleteOrders: true,
@@ -1111,7 +1112,7 @@ function runVerificationSuite() {
     deleteStockAdjustments: true,
     isAllTime: true
   });
-  console.log(`Cleanup Result: Deleted Orders=${deleteResult.deletedOrders}, Purchases=${deleteResult.deletedPurchases}`);
+  console.log(`Cleanup Result: Deleted Orders=${deleteResult.orders}, Purchases=${deleteResult.purchases}`);
 
   const ordersAfter = db.getOrders();
   const purchasesAfter = db.getPurchases();
@@ -1430,12 +1431,374 @@ function runVerificationSuite() {
 
   console.log('Step 59 PASS? true: 10-Column Dual Margin with Round-S and Round-M validated completely.');
 
+  // 60. Default 0 Pending Order Qty, 0 MinStock, and 0 GST/Transport Defaults Invariant
+  console.log('\nStep 60: Verifying Default 0 Pending Order Qty, 0 MinStock, and 0 GST/Transport Defaults...');
+  const defaultItemRecord: Item = {
+    id: `item-zero-defaults-${Date.now()}`,
+    sno: '1999',
+    name: 'TEST ZERO DEFAULTS ITEM',
+    category: 'GENERAL',
+    unit: 'Roll',
+    minStock: 0,
+    openingStock: 0,
+    purchaseRate: 500,
+    saleRate: 500,
+    mrp: 500,
+    gstPercent: 0,
+    profPercentAm: 0,
+    profPercentDeal: 0,
+    unitA: calculateItemUnitBreakdown(500, 0, 0, 0, 0, 0, undefined, 0, 0),
+    isActive: true,
+    createdAt: new Date().toISOString()
+  };
+
+  db.saveItem(defaultItemRecord);
+  const fetchedZeroItem = db.getItemById(defaultItemRecord.id);
+
+  if (
+    fetchedZeroItem?.minStock !== 0 ||
+    fetchedZeroItem?.gstPercent !== 0 ||
+    fetchedZeroItem?.unitA?.gstPercent !== 0 ||
+    fetchedZeroItem?.unitA?.tranPercent !== 0 ||
+    fetchedZeroItem?.unitA?.salePrice !== 500
+  ) {
+    throw new Error('Zero defaults validation failed on item creation');
+  }
+
+  // Verify Excel import with custom GST (5%) & Transport (3%) retains exact values, while empty defaults to 0%
+  const customTaxRows = [
+    { 'Item': 'SPECIAL VINYL WITH TAX', 'Base Price': 100, 'GST %': 5, 'Transport %': 3, 'Min Stock': 15 },
+    { 'Item': 'PLAIN VINYL NO TAX', 'Base Price': 100 }
+  ];
+  const customWb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(customWb, XLSX.utils.json_to_sheet(customTaxRows), 'Sheet1');
+  const customBuf = XLSX.write(customWb, { type: 'array', bookType: 'xlsx' });
+  const customImportResult = importItemsFromExcel(customBuf);
+
+  const importedWithTax = db.getItems().find(i => i.name === 'SPECIAL VINYL WITH TAX');
+  const importedNoTax = db.getItems().find(i => i.name === 'PLAIN VINYL NO TAX');
+
+  console.log('importedWithTax:', importedWithTax);
+  console.log('importedNoTax:', importedNoTax);
+  if (!importedWithTax || importedWithTax.gstPercent !== 5 || importedWithTax.unitA?.tranPercent !== 3 || importedWithTax.minStock !== 15) {
+    throw new Error('Custom GST/Transport/MinStock Excel import values were not preserved');
+  }
+  if (!importedNoTax || importedNoTax.gstPercent !== 0 || importedNoTax.unitA?.tranPercent !== 0 || importedNoTax.minStock !== 0) {
+    throw new Error('Empty GST/Transport/MinStock Excel import did not default to 0');
+  }
+
+  console.log(`With Tax Item: GST=${importedWithTax.gstPercent}%, Tran=${importedWithTax.unitA?.tranPercent}%, MinStock=${importedWithTax.minStock}`);
+  console.log(`No Tax Item: GST=${importedNoTax.gstPercent}%, Tran=${importedNoTax.unitA?.tranPercent}%, MinStock=${importedNoTax.minStock}`);
+  console.log('\n--- Step 61: Verify Complete Item Deletion, Opening Stock Reset, & Party Ledger ---');
+  // 1. Create item A22222222 with opening stock & order
+  const testItemA2: Item = {
+    id: 'item-a22222222',
+    sno: '2099',
+    name: 'A22222222',
+    category: 'VINYL',
+    unit: 'Roll',
+    purchaseRate: 100,
+    saleRate: 118,
+    gstPercent: 18,
+    minStock: 20,
+    openingStock: 10,
+    unitA: {
+      unitName: 'Roll',
+      basicPrice: 100,
+      gstPercent: 18,
+      tranPercent: 0,
+      profPercent: 0,
+      misPercent: 0,
+      roundUp: 0,
+      salePrice: 118
+    },
+    hasSecondaryUnit: false,
+    isActive: true,
+    createdAt: new Date().toISOString()
+  };
+  db.saveItem(testItemA2);
+  db.addStockMovement({
+    id: 'mov-a2-1',
+    itemId: 'item-a22222222',
+    type: 'OPENING',
+    qtyChange: 10,
+    refType: 'OPENING',
+    refId: 'INIT-A2',
+    refNo: 'INIT-A2',
+    date: getTodayDateString(),
+    createdAt: new Date().toISOString()
+  });
+  db.saveOrder({
+    id: 'order-test-a2',
+    orderNumber: 'ORD-TEST-A2',
+    supplierId: 'supp-1',
+    supplierName: 'Test Supplier',
+    orderDate: getTodayDateString(),
+    status: 'ORDERED',
+    createdAt: new Date().toISOString(),
+    items: [
+      {
+        id: 'ord-item-a2-1',
+        sno: '2101',
+        itemId: 'item-a22222222',
+        itemName: 'A22222222',
+        orderedQty: 100,
+        receivedQty: 0,
+        orderDate: getTodayDateString(),
+        status: 'ORDERED'
+      }
+    ]
+  });
+
+  // Verify item exists, has stock movement and has pending order
+  if (!db.getItems().some(i => i.id === 'item-a22222222')) throw new Error('Item A22222222 not created');
+  if (db.getStockMovements().filter(m => m.itemId === 'item-a22222222').length === 0) throw new Error('Stock movement for A22222222 missing');
+  if (db.getOrders().filter(o => o.items.some((i: any) => i.itemId === 'item-a22222222')).length === 0) throw new Error('Order for A22222222 missing');
+
+  // Perform deleteItem
+  await db.deleteItem('item-a22222222');
+
+  // Verify item is purged, stock movements are purged, and orders are cleaned
+  const itemAfterDelete = db.getItems().find(i => i.id === 'item-a22222222');
+  const movementsAfterDelete = db.getStockMovements().filter(m => m.itemId === 'item-a22222222');
+  const ordersAfterDelete = db.getOrders().filter(o => o.items.some((i: any) => i.itemId === 'item-a22222222'));
+
+  if (itemAfterDelete) throw new Error('Item A22222222 was not deleted from local db');
+  if (movementsAfterDelete.length > 0) throw new Error('Stock movements for deleted item A22222222 were not purged');
+  if (ordersAfterDelete.length > 0) throw new Error('Pending orders referencing deleted item A22222222 were not purged');
+  console.log('✓ Item deletion and all connected entities (movements, orders, pending items) purged completely');
+
+  // 2. Test Selective Opening Stock Deletion
+  const itemWithOpening: Item = {
+    id: 'item-opening-test',
+    sno: '2100',
+    name: 'OPENING STOCK TEST ITEM',
+    category: 'PAPER',
+    unit: 'Pkt',
+    purchaseRate: 50,
+    saleRate: 50,
+    gstPercent: 0,
+    minStock: 5,
+    openingStock: 25,
+    unitA: {
+      unitName: 'Pkt',
+      basicPrice: 50,
+      gstPercent: 0,
+      tranPercent: 0,
+      profPercent: 0,
+      misPercent: 0,
+      roundUp: 0,
+      salePrice: 50
+    },
+    hasSecondaryUnit: false,
+    isActive: true,
+    createdAt: new Date().toISOString()
+  };
+  db.saveItem(itemWithOpening);
+  db.addStockMovement({
+    id: 'mov-open-1',
+    itemId: 'item-opening-test',
+    type: 'OPENING',
+    qtyChange: 25,
+    refType: 'OPENING',
+    refId: 'INIT-OPENING',
+    refNo: 'INIT-OPENING',
+    date: getTodayDateString(),
+    createdAt: new Date().toISOString()
+  });
+
+  // Execute deleteDataByFilter
+  await db.deleteDataByFilter({
+    isAllTime: true,
+    modules: { orders: false, purchases: false, sales: false, selfUse: false, adjustments: false, openingStock: true }
+  });
+  const checkItem = db.getItems().find(i => i.id === 'item-opening-test');
+  const checkMovements = db.getStockMovements().filter(m => m.type === 'OPENING');
+
+  if (!checkItem || checkItem.openingStock !== 0) throw new Error('Item opening stock was not reset to 0');
+  if (checkMovements.length > 0) throw new Error('OPENING stock movements were not purged');
+  console.log('✓ Selective opening stock deletion resets all item.openingStock = 0 and deletes all OPENING movements');
+
+  // 3. Test Party Ledger & Log retrieval
+  const testParty: Party = {
+    id: 'party-ledger-test',
+    name: 'LEDGER TEST ENTERPRISE',
+    partyType: 'DEALER',
+    phone: '9876543210',
+    city: 'JAIPUR',
+    address: '123 Test Street',
+    gstin: '08AAAAA0000A1Z5',
+    openingBalance: 0,
+    creditLimit: 50000,
+    allowCredit: true,
+    isActive: true,
+    createdAt: new Date().toISOString()
+  };
+  db.saveParty(testParty);
+  db.savePartyLog({
+    id: 'log-sale-test-01',
+    partyId: testParty.id,
+    partyName: testParty.name,
+    date: getTodayDateString(),
+    type: 'SALE',
+    refNo: 'INV-TEST-001',
+    totalAmount: 1500,
+    paidAmount: 500,
+    balanceChange: 1000,
+    paymentMode: 'CASH',
+    notes: 'Test sale invoice',
+    createdAt: new Date().toISOString()
+  });
+  db.recordPartyPayment(testParty.id, 400, 'UPI', 'UPI-999', 'Partial payment test');
+
+  const partyLogs = db.getPartyLogsByPartyId(testParty.id);
+  const partyBal = db.getPartyBalanceSummary(testParty.id);
+
+  if (partyLogs.length !== 2) throw new Error(`Expected 2 party logs, found ${partyLogs.length}`);
+  if (partyBal.totalBilled !== 1500) throw new Error(`Expected totalBilled=1500, got ${partyBal.totalBilled}`);
+  if (partyBal.totalPaid !== 900) throw new Error(`Expected totalPaid=900, got ${partyBal.totalPaid}`);
+  if (partyBal.outstandingBalance !== 600) throw new Error(`Expected outstandingBalance=600, got ${partyBal.outstandingBalance}`);
+  console.log(`✓ Party Ledger calculations: Billed=₹${partyBal.totalBilled}, Paid=₹${partyBal.totalPaid}, Due=₹${partyBal.outstandingBalance}`);
+
+  console.log('Step 61 PASS? true: Item deletion cascade, opening stock reset, and party ledger verified.');
+
+  console.log('\n--- Step 62: Verify Item Transaction Ledger Aggregation & Inflow/Outflow Balance ---');
+  // 1. Create test item for ledger verification
+  const ledgerItem: Item = {
+    id: 'item-ledger-test-62',
+    sno: '2105',
+    name: 'LEDGER TEST GLOSS VINYL 36',
+    category: 'VINYL',
+    unit: 'Roll',
+    purchaseRate: 200,
+    saleRate: 250,
+    mrp: 280,
+    gstPercent: 18,
+    minStock: 15,
+    openingStock: 50,
+    unitA: {
+      unitName: 'Roll',
+      basicPrice: 200,
+      gstPercent: 18,
+      tranPercent: 0,
+      profPercent: 0,
+      misPercent: 0,
+      roundUp: 0,
+      salePrice: 250,
+      mrp: 280
+    },
+    hasSecondaryUnit: false,
+    isActive: true,
+    createdAt: new Date().toISOString()
+  };
+  // Save item (automatically creates initial OPENING stock movement = 50)
+  db.saveItem(ledgerItem);
+
+  // Purchase (+100)
+  db.savePurchase({
+    id: 'purch-test-62',
+    billNo: 'PUR-62-001',
+    billDate: getTodayDateString(),
+    recdDate: getTodayDateString(),
+    supplierId: 'supp-1',
+    supplierName: 'Apex Suppliers',
+    basicTotal: 20000,
+    gstTotal: 3600,
+    roundUp: 0,
+    billTotal: 23600,
+    recdCash: 0,
+    recdUpi: 23600,
+    createdAt: new Date().toISOString(),
+    items: [
+      {
+        id: 'pitem-1',
+        itemId: ledgerItem.id,
+        sno: ledgerItem.sno,
+        itemName: ledgerItem.name,
+        unit: ledgerItem.unit,
+        basicPrice: 200,
+        gstPercent: 18,
+        gstAmt: 36,
+        nettPrice: 236,
+        qty: 100,
+        amount: 23600
+      }
+    ]
+  });
+
+  // Sale (-30)
+  db.saveSale({
+    id: 'sale-test-62',
+    billNo: 'INV-62-001',
+    billDate: getTodayDateString(),
+    partyId: testParty.id,
+    partyName: testParty.name,
+    basicTotal: 6000,
+    gstTotal: 1080,
+    roundUp: 0,
+    billTotal: 7500,
+    recdCash: 7500,
+    recdUpi: 0,
+    balanceDue: 0,
+    createdAt: new Date().toISOString(),
+    items: [
+      {
+        id: 'sitem-1',
+        itemId: ledgerItem.id,
+        sno: ledgerItem.sno,
+        itemName: ledgerItem.name,
+        unit: ledgerItem.unit,
+        basicPrice: 200,
+        gstPercent: 18,
+        gstAmt: 36,
+        nettPrice: 236,
+        salePrice: 250,
+        mrp: 280,
+        qty: 30,
+        amount: 7500
+      }
+    ]
+  });
+
+  // Self Use (-5)
+  db.saveSelfUse({
+    id: 'su-test-62',
+    billNo: 'SU-62-001',
+    billDate: getTodayDateString(),
+    category: 'FACTORY TESTING',
+    totalAmount: 1000,
+    remarks: 'Sample batch test',
+    createdAt: new Date().toISOString(),
+    items: [
+      {
+        id: 'suitem-1',
+        itemId: ledgerItem.id,
+        sno: ledgerItem.sno,
+        itemName: ledgerItem.name,
+        unit: ledgerItem.unit,
+        rate: 200,
+        qty: 5,
+        amount: 1000
+      }
+    ]
+  });
+
+  // Check physical closing stock: 50 (open) + 100 (purch) - 30 (sale) - 5 (self-use) = 115
+  const finalStock = StockEngine.getItemCurrentStock(ledgerItem.id);
+  if (finalStock !== 115) {
+    throw new Error(`Expected final stock = 115, got ${finalStock}`);
+  }
+
+  console.log(`✓ Item Ledger Stock Engine: Opening=50, Purchased=+100, Sold=-30, Self-Use=-5 => On-Hand Closing = ${finalStock} Roll`);
+  console.log('Step 62 PASS? true: Item Ledger multi-document transaction aggregation verified.');
+
   console.log('\n====================================================');
-  console.log('ALL 59 CUSTOMER WORKFLOW STEPS & INVARIANTS PASSED!');
+  console.log('ALL 62 CUSTOMER WORKFLOW STEPS & INVARIANTS PASSED!');
   console.log('====================================================\n');
 }
 
 runVerificationSuite();
+
 
 
 

@@ -132,7 +132,7 @@ class DatabaseService {
     this.notify();
   }
 
-  private async pushDocToFirestore(collectionName: string, docId: string, data: any): Promise<void> {
+  public async pushDocToFirestore(collectionName: string, docId: string, data: any): Promise<void> {
     try {
       if (typeof window === 'undefined') return;
       const cleanData = JSON.parse(JSON.stringify(data));
@@ -144,7 +144,7 @@ class DatabaseService {
     }
   }
 
-  private async deleteDocFromFirestore(collectionName: string, docId: string): Promise<void> {
+  public async deleteDocFromFirestore(collectionName: string, docId: string): Promise<void> {
     try {
       if (typeof window === 'undefined') return;
       const docRef = doc(firestore, collectionName, String(docId));
@@ -152,6 +152,47 @@ class DatabaseService {
       this.updateSyncSuccess();
     } catch (err: any) {
       console.warn(`Firestore delete warning for ${collectionName}/${docId}:`, err);
+    }
+  }
+
+  public async batchDeleteDocs(collectionName: string, docIds: string[]): Promise<void> {
+    if (typeof window === 'undefined' || !docIds || docIds.length === 0) return;
+    try {
+      const CHUNK_SIZE = 400;
+      for (let i = 0; i < docIds.length; i += CHUNK_SIZE) {
+        const chunk = docIds.slice(i, i + CHUNK_SIZE);
+        const batch = writeBatch(firestore);
+        chunk.forEach(id => {
+          if (id) {
+            batch.delete(doc(firestore, collectionName, String(id)));
+          }
+        });
+        await batch.commit();
+      }
+      this.updateSyncSuccess();
+    } catch (err: any) {
+      console.warn(`Firestore batch delete warning for ${collectionName}:`, err);
+    }
+  }
+
+  public async batchSetDocs<T extends { id: string }>(collectionName: string, items: T[]): Promise<void> {
+    if (typeof window === 'undefined' || !items || items.length === 0) return;
+    try {
+      const CHUNK_SIZE = 400;
+      for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+        const chunk = items.slice(i, i + CHUNK_SIZE);
+        const batch = writeBatch(firestore);
+        chunk.forEach(item => {
+          if (item && item.id) {
+            const cleanData = JSON.parse(JSON.stringify(item));
+            batch.set(doc(firestore, collectionName, String(item.id)), cleanData, { merge: true });
+          }
+        });
+        await batch.commit();
+      }
+      this.updateSyncSuccess();
+    } catch (err: any) {
+      console.warn(`Firestore batch set warning for ${collectionName}:`, err);
     }
   }
 
@@ -176,38 +217,21 @@ class DatabaseService {
             this.set(STORAGE_KEYS.SETTINGS, cloudSettings);
             this.updateSyncSuccess();
           }
-        } else {
-          // Push initial settings if not yet present in Firestore
-          const currentSettings = this.getSettings();
-          setDoc(doc(firestore, 'app_metadata', 'settings'), currentSettings, { merge: true }).catch(() => {});
         }
       }, (err) => {
         this.handleSyncError(err);
       });
       this.unsubs.push(settingsUnsub);
 
-      // 2. Generic helper for real-time collection synchronization
+      // 2. Pure real-time collection synchronization (Firestore is single source of truth)
       const setupCollectionSync = <T extends { id: string }>(
         collectionName: string,
-        storageKey: string,
-        getLocalData: () => T[]
+        storageKey: string
       ) => {
         const unsub = onSnapshot(collection(firestore, collectionName), (snapshot) => {
-          if (!snapshot.empty) {
-            const cloudDocs = snapshot.docs.map(d => d.data() as T);
-            this.set(storageKey, cloudDocs);
-            this.updateSyncSuccess();
-          } else {
-            // Auto-push initial local records to cloud if cloud collection is empty
-            const localRecords = getLocalData();
-            if (localRecords && localRecords.length > 0) {
-              localRecords.forEach(rec => {
-                if (rec && rec.id) {
-                  setDoc(doc(firestore, collectionName, String(rec.id)), rec).catch(() => {});
-                }
-              });
-            }
-          }
+          const cloudDocs = snapshot.docs.map(d => d.data() as T);
+          this.set(storageKey, cloudDocs);
+          this.updateSyncSuccess();
         }, (err) => {
           this.handleSyncError(err);
         });
@@ -215,17 +239,17 @@ class DatabaseService {
       };
 
       // Set up real-time bidirectional listeners for all master and transaction entities
-      setupCollectionSync<Item>('items', STORAGE_KEYS.ITEMS, () => this.getItems());
-      setupCollectionSync<Supplier>('suppliers', STORAGE_KEYS.SUPPLIERS, () => this.getSuppliers());
-      setupCollectionSync<Party>('parties', STORAGE_KEYS.PARTIES, () => this.getParties());
-      setupCollectionSync<Sale>('sales', STORAGE_KEYS.SALES, () => this.getSales());
-      setupCollectionSync<Purchase>('purchases', STORAGE_KEYS.PURCHASES, () => this.getPurchases());
-      setupCollectionSync<SupplierOrder>('orders', STORAGE_KEYS.ORDERS, () => this.getOrders());
-      setupCollectionSync<SelfUse>('self_uses', STORAGE_KEYS.SELF_USES, () => this.getSelfUses());
-      setupCollectionSync<StockAdjustment>('stock_adjustments', STORAGE_KEYS.STOCK_ADJUSTMENTS, () => this.getStockAdjustments());
-      setupCollectionSync<PartyLog>('party_logs', STORAGE_KEYS.PARTY_LOGS, () => this.getPartyLogs());
-      setupCollectionSync<User>('users', STORAGE_KEYS.USERS, () => this.getUsers());
-      setupCollectionSync<StockMovement>('stock_movements', STORAGE_KEYS.STOCK_MOVEMENTS, () => this.getStockMovements());
+      setupCollectionSync<Item>('items', STORAGE_KEYS.ITEMS);
+      setupCollectionSync<Supplier>('suppliers', STORAGE_KEYS.SUPPLIERS);
+      setupCollectionSync<Party>('parties', STORAGE_KEYS.PARTIES);
+      setupCollectionSync<Sale>('sales', STORAGE_KEYS.SALES);
+      setupCollectionSync<Purchase>('purchases', STORAGE_KEYS.PURCHASES);
+      setupCollectionSync<SupplierOrder>('orders', STORAGE_KEYS.ORDERS);
+      setupCollectionSync<SelfUse>('self_uses', STORAGE_KEYS.SELF_USES);
+      setupCollectionSync<StockAdjustment>('stock_adjustments', STORAGE_KEYS.STOCK_ADJUSTMENTS);
+      setupCollectionSync<PartyLog>('party_logs', STORAGE_KEYS.PARTY_LOGS);
+      setupCollectionSync<User>('users', STORAGE_KEYS.USERS);
+      setupCollectionSync<StockMovement>('stock_movements', STORAGE_KEYS.STOCK_MOVEMENTS);
 
     } catch (err: any) {
       this.handleSyncError(err);
@@ -240,42 +264,17 @@ class DatabaseService {
       // Push settings
       await setDoc(doc(firestore, 'app_metadata', 'settings'), this.getSettings());
 
-      // Push parties
-      for (const p of this.getParties()) {
-        await setDoc(doc(firestore, 'parties', p.id), p);
-      }
-      // Push items
-      for (const i of this.getItems()) {
-        await setDoc(doc(firestore, 'items', i.id), i);
-      }
-      // Push suppliers
-      for (const s of this.getSuppliers()) {
-        await setDoc(doc(firestore, 'suppliers', s.id), s);
-      }
-      // Push orders
-      for (const o of this.getOrders()) {
-        await setDoc(doc(firestore, 'orders', o.id), o);
-      }
-      // Push sales
-      for (const s of this.getSales()) {
-        await setDoc(doc(firestore, 'sales', s.id), s);
-      }
-      // Push purchases
-      for (const pu of this.getPurchases()) {
-        await setDoc(doc(firestore, 'purchases', pu.id), pu);
-      }
-      // Push self uses
-      for (const su of this.getSelfUses()) {
-        await setDoc(doc(firestore, 'self_uses', su.id), su);
-      }
-      // Push stock adjustments
-      for (const a of this.getStockAdjustments()) {
-        await setDoc(doc(firestore, 'stock_adjustments', a.id), a);
-      }
-      // Push party logs
-      for (const l of this.getPartyLogs()) {
-        await setDoc(doc(firestore, 'party_logs', l.id), l);
-      }
+      // Push all collections with fast batches
+      await this.batchSetDocs('parties', this.getParties());
+      await this.batchSetDocs('items', this.getItems());
+      await this.batchSetDocs('suppliers', this.getSuppliers());
+      await this.batchSetDocs('orders', this.getOrders());
+      await this.batchSetDocs('sales', this.getSales());
+      await this.batchSetDocs('purchases', this.getPurchases());
+      await this.batchSetDocs('self_uses', this.getSelfUses());
+      await this.batchSetDocs('stock_adjustments', this.getStockAdjustments());
+      await this.batchSetDocs('party_logs', this.getPartyLogs());
+      await this.batchSetDocs('stock_movements', this.getStockMovements());
 
       this.cloudSyncState = {
         status: 'CONNECTED',
@@ -310,7 +309,10 @@ class DatabaseService {
         sales: 0,
         purchases: 0,
         orders: 0,
-        self_uses: 0
+        self_uses: 0,
+        stock_movements: 0,
+        stock_adjustments: 0,
+        party_logs: 0
       };
 
       // Pull Settings
@@ -320,82 +322,24 @@ class DatabaseService {
         if (cloudSettings) this.set(STORAGE_KEYS.SETTINGS, cloudSettings);
       }
 
-      // Pull Items
-      const itemsSnap = await getDocs(collection(firestore, 'items'));
-      if (!itemsSnap.empty) {
-        const cloudItems: Item[] = [];
-        itemsSnap.forEach(d => cloudItems.push(d.data() as Item));
-        if (cloudItems.length > 0) {
-          this.set(STORAGE_KEYS.ITEMS, cloudItems);
-          stats.items = cloudItems.length;
-        }
-      }
+      // Helper to pull collection
+      const pullCollection = async <T extends { id: string }>(colName: string, storageKey: string, statKey: string) => {
+        const snap = await getDocs(collection(firestore, colName));
+        const docs = snap.docs.map(d => d.data() as T);
+        this.set(storageKey, docs);
+        stats[statKey] = docs.length;
+      };
 
-      // Pull Suppliers
-      const supSnap = await getDocs(collection(firestore, 'suppliers'));
-      if (!supSnap.empty) {
-        const cloudSuppliers: Supplier[] = [];
-        supSnap.forEach(d => cloudSuppliers.push(d.data() as Supplier));
-        if (cloudSuppliers.length > 0) {
-          this.set(STORAGE_KEYS.SUPPLIERS, cloudSuppliers);
-          stats.suppliers = cloudSuppliers.length;
-        }
-      }
-
-      // Pull Parties
-      const partySnap = await getDocs(collection(firestore, 'parties'));
-      if (!partySnap.empty) {
-        const cloudParties: Party[] = [];
-        partySnap.forEach(d => cloudParties.push(d.data() as Party));
-        if (cloudParties.length > 0) {
-          this.set(STORAGE_KEYS.PARTIES, cloudParties);
-          stats.parties = cloudParties.length;
-        }
-      }
-
-      // Pull Sales
-      const salesSnap = await getDocs(collection(firestore, 'sales'));
-      if (!salesSnap.empty) {
-        const cloudSales: Sale[] = [];
-        salesSnap.forEach(d => cloudSales.push(d.data() as Sale));
-        if (cloudSales.length > 0) {
-          this.set(STORAGE_KEYS.SALES, cloudSales);
-          stats.sales = cloudSales.length;
-        }
-      }
-
-      // Pull Purchases
-      const purSnap = await getDocs(collection(firestore, 'purchases'));
-      if (!purSnap.empty) {
-        const cloudPurchases: Purchase[] = [];
-        purSnap.forEach(d => cloudPurchases.push(d.data() as Purchase));
-        if (cloudPurchases.length > 0) {
-          this.set(STORAGE_KEYS.PURCHASES, cloudPurchases);
-          stats.purchases = cloudPurchases.length;
-        }
-      }
-
-      // Pull Orders
-      const orderSnap = await getDocs(collection(firestore, 'orders'));
-      if (!orderSnap.empty) {
-        const cloudOrders: SupplierOrder[] = [];
-        orderSnap.forEach(d => cloudOrders.push(d.data() as SupplierOrder));
-        if (cloudOrders.length > 0) {
-          this.set(STORAGE_KEYS.ORDERS, cloudOrders);
-          stats.orders = cloudOrders.length;
-        }
-      }
-
-      // Pull Self Uses
-      const suSnap = await getDocs(collection(firestore, 'self_uses'));
-      if (!suSnap.empty) {
-        const cloudSelfUses: SelfUse[] = [];
-        suSnap.forEach(d => cloudSelfUses.push(d.data() as SelfUse));
-        if (cloudSelfUses.length > 0) {
-          this.set(STORAGE_KEYS.SELF_USES, cloudSelfUses);
-          stats.self_uses = cloudSelfUses.length;
-        }
-      }
+      await pullCollection<Item>('items', STORAGE_KEYS.ITEMS, 'items');
+      await pullCollection<Supplier>('suppliers', STORAGE_KEYS.SUPPLIERS, 'suppliers');
+      await pullCollection<Party>('parties', STORAGE_KEYS.PARTIES, 'parties');
+      await pullCollection<Sale>('sales', STORAGE_KEYS.SALES, 'sales');
+      await pullCollection<Purchase>('purchases', STORAGE_KEYS.PURCHASES, 'purchases');
+      await pullCollection<SupplierOrder>('orders', STORAGE_KEYS.ORDERS, 'orders');
+      await pullCollection<SelfUse>('self_uses', STORAGE_KEYS.SELF_USES, 'self_uses');
+      await pullCollection<StockMovement>('stock_movements', STORAGE_KEYS.STOCK_MOVEMENTS, 'stock_movements');
+      await pullCollection<StockAdjustment>('stock_adjustments', STORAGE_KEYS.STOCK_ADJUSTMENTS, 'stock_adjustments');
+      await pullCollection<PartyLog>('party_logs', STORAGE_KEYS.PARTY_LOGS, 'party_logs');
 
       this.cloudSyncState = {
         status: 'CONNECTED',
@@ -438,48 +382,31 @@ class DatabaseService {
   }
 
   public initDatabase(forceReset = false): void {
-    const isInitializedV2 = safeGetStorage('rmms_initialized_v2');
-    if (!isInitializedV2 || forceReset) {
-      const isFresh = !safeGetStorage(STORAGE_KEYS.SETTINGS);
-      if (isFresh || forceReset) {
-        this.set(STORAGE_KEYS.SETTINGS, INITIAL_COMPANY_SETTINGS);
-        this.set(STORAGE_KEYS.USERS, INITIAL_USERS);
-        this.set(STORAGE_KEYS.PARTIES, INITIAL_PARTIES);
-        this.set(STORAGE_KEYS.SUPPLIERS, INITIAL_SUPPLIERS);
-        this.set(STORAGE_KEYS.ITEMS, INITIAL_ITEMS);
-        this.set(STORAGE_KEYS.ORDERS, INITIAL_ORDERS);
-        this.set(STORAGE_KEYS.SALES, INITIAL_SALES);
-        this.set(STORAGE_KEYS.PURCHASES, []);
-        this.set(STORAGE_KEYS.SELF_USES, []);
-        this.set(STORAGE_KEYS.STOCK_MOVEMENTS, INITIAL_STOCK_MOVEMENTS);
-        this.set(STORAGE_KEYS.STOCK_ADJUSTMENTS, []);
-      } else {
-        // Upgrade existing data with missing suppliers and item unit configs
-        const suppliers = this.get<Supplier[]>(STORAGE_KEYS.SUPPLIERS, []);
-        INITIAL_SUPPLIERS.forEach(s => {
-          if (!suppliers.some(existing => existing.name.toUpperCase() === s.name.toUpperCase())) {
-            suppliers.push(s);
-          }
-        });
-        this.set(STORAGE_KEYS.SUPPLIERS, suppliers);
-
-        const items = this.get<Item[]>(STORAGE_KEYS.ITEMS, []);
-        INITIAL_ITEMS.forEach(initItem => {
-          const item = items.find(i => i.sno === initItem.sno);
-          if (item) {
-            if (!item.unitA && initItem.unitA) item.unitA = initItem.unitA;
-            if (!item.unitB && initItem.unitB) item.unitB = initItem.unitB;
-            if (!item.hsn && initItem.hsn) item.hsn = initItem.hsn;
-            if (!item.supplierName && initItem.supplierName) {
-              item.supplierName = initItem.supplierName;
-              item.supplierId = initItem.supplierId;
-            }
-          }
-        });
-        this.set(STORAGE_KEYS.ITEMS, items);
-      }
-      safeSetStorage('rmms_initialized_v2', 'true');
+    if (forceReset) {
+      this.set(STORAGE_KEYS.SETTINGS, INITIAL_COMPANY_SETTINGS);
+      this.set(STORAGE_KEYS.USERS, INITIAL_USERS);
+      this.set(STORAGE_KEYS.PARTIES, INITIAL_PARTIES);
+      this.set(STORAGE_KEYS.SUPPLIERS, INITIAL_SUPPLIERS);
+      this.set(STORAGE_KEYS.ITEMS, INITIAL_ITEMS);
+      this.set(STORAGE_KEYS.ORDERS, INITIAL_ORDERS);
+      this.set(STORAGE_KEYS.SALES, INITIAL_SALES);
+      this.set(STORAGE_KEYS.PURCHASES, []);
+      this.set(STORAGE_KEYS.SELF_USES, []);
+      this.set(STORAGE_KEYS.STOCK_MOVEMENTS, INITIAL_STOCK_MOVEMENTS);
+      this.set(STORAGE_KEYS.STOCK_ADJUSTMENTS, []);
+      this.set(STORAGE_KEYS.PARTY_LOGS, []);
+      this.pushAllToCloudFirestore().catch(() => {});
       this.notify();
+    } else {
+      // Ensure basic system settings/users default if missing
+      if (!safeGetStorage(STORAGE_KEYS.SETTINGS)) {
+        this.set(STORAGE_KEYS.SETTINGS, INITIAL_COMPANY_SETTINGS);
+      }
+      if (!safeGetStorage(STORAGE_KEYS.USERS)) {
+        this.set(STORAGE_KEYS.USERS, INITIAL_USERS);
+      }
+      // Purge any lingering A2222 test artifacts asynchronously
+      this.purgeOrphanedTestItems().catch(() => {});
     }
   }
 
@@ -728,13 +655,111 @@ class DatabaseService {
     this.notify();
   }
 
-  public deleteItem(id: string): void {
-    const items = this.getItems().filter(i => i.id !== id);
-    this.set(STORAGE_KEYS.ITEMS, items);
-    this.deleteDocFromFirestore('items', id);
-    // Remove related stock movements
-    this.deleteStockMovementsByItemId(id);
+  public async deleteItem(idOrSnoOrName: string): Promise<void> {
+    const target = (idOrSnoOrName || '').trim();
+    const items = this.getItems();
+    const foundItem = items.find(
+      i => i.id === target || i.sno === target || i.name.toUpperCase() === target.toUpperCase()
+    );
+
+    const targetId = foundItem ? foundItem.id : target;
+    const targetSno = foundItem ? foundItem.sno : target;
+    const targetName = foundItem ? foundItem.name.toUpperCase() : target.toUpperCase();
+
+    // 1. Remove from items
+    const remainingItems = items.filter(
+      i => i.id !== targetId && i.sno !== targetSno && i.name.toUpperCase() !== targetName
+    );
+    this.set(STORAGE_KEYS.ITEMS, remainingItems);
+    await this.deleteDocFromFirestore('items', targetId);
+
+    // 2. Remove all related stock movements (OPENING, PURCHASE_IN, SALE_OUT, SELF_USE_OUT, ADJUSTMENT)
+    const allMovements = this.getStockMovements();
+    const movToDelete = allMovements.filter(
+      m => m.itemId === targetId || m.itemId === targetSno || m.refId === targetId
+    );
+    const remainingMovements = allMovements.filter(
+      m => m.itemId !== targetId && m.itemId !== targetSno && m.refId !== targetId
+    );
+    this.set(STORAGE_KEYS.STOCK_MOVEMENTS, remainingMovements);
+    if (movToDelete.length > 0) {
+      await this.batchDeleteDocs('stock_movements', movToDelete.map(m => m.id));
+    }
+
+    // 3. Remove this item from all active and placed orders
+    const allOrders = this.getOrders();
+    const ordersToDeleteIds: string[] = [];
+    const ordersToUpdate: SupplierOrder[] = [];
+    const updatedOrdersList: SupplierOrder[] = [];
+
+    for (const ord of allOrders) {
+      const remainingItems = ord.items.filter(
+        oi => oi.itemId !== targetId && oi.sno !== targetSno && oi.itemName.toUpperCase() !== targetName
+      );
+      if (remainingItems.length === 0) {
+        ordersToDeleteIds.push(ord.id);
+      } else if (remainingItems.length !== ord.items.length) {
+        const updatedOrd = { ...ord, items: remainingItems };
+        ordersToUpdate.push(updatedOrd);
+        updatedOrdersList.push(updatedOrd);
+      } else {
+        updatedOrdersList.push(ord);
+      }
+    }
+
+    if (ordersToDeleteIds.length > 0) {
+      await this.batchDeleteDocs('orders', ordersToDeleteIds);
+    }
+    if (ordersToUpdate.length > 0) {
+      await this.batchSetDocs('orders', ordersToUpdate);
+    }
+    this.set(STORAGE_KEYS.ORDERS, updatedOrdersList);
+
     this.notify();
+  }
+
+  public async purgeOrphanedTestItems(): Promise<{ purgedCount: number }> {
+    const items = this.getItems();
+    const testItems = items.filter(
+      i => i.name.toUpperCase().includes('A2222') || i.sno.includes('A2222') || i.id.includes('a2222')
+    );
+    let purgedCount = 0;
+    for (const ti of testItems) {
+      await this.deleteItem(ti.id);
+      purgedCount++;
+    }
+
+    // Clean up any remaining movements or orders referencing A2222
+    const allMovements = this.getStockMovements();
+    const orphanMov = allMovements.filter(
+      m => m.itemId.toLowerCase().includes('a2222') || m.refId.toLowerCase().includes('a2222') || m.refNo.toLowerCase().includes('a2222')
+    );
+    if (orphanMov.length > 0) {
+      const remainingMov = allMovements.filter(m => !orphanMov.includes(m));
+      this.set(STORAGE_KEYS.STOCK_MOVEMENTS, remainingMov);
+      await this.batchDeleteDocs('stock_movements', orphanMov.map(m => m.id));
+      purgedCount += orphanMov.length;
+    }
+
+    const allOrders = this.getOrders();
+    for (const ord of allOrders) {
+      const hasA2 = ord.items.some(
+        oi => oi.itemId.toLowerCase().includes('a2222') || oi.itemName.toUpperCase().includes('A2222')
+      );
+      if (hasA2) {
+        const remainingLines = ord.items.filter(
+          oi => !oi.itemId.toLowerCase().includes('a2222') && !oi.itemName.toUpperCase().includes('A2222')
+        );
+        if (remainingLines.length === 0) {
+          await this.deleteDocFromFirestore('orders', ord.id);
+        } else {
+          const updatedOrd = { ...ord, items: remainingLines };
+          await this.pushDocToFirestore('orders', ord.id, updatedOrd);
+        }
+      }
+    }
+    this.notify();
+    return { purgedCount };
   }
 
   // --- STOCK MOVEMENTS ---
@@ -1184,7 +1209,7 @@ class DatabaseService {
     return counts;
   }
 
-  public deleteDataByFilter(options: DeleteFilterOptions): { [key: string]: number } {
+  public async deleteDataByFilter(options: DeleteFilterOptions): Promise<{ [key: string]: number }> {
     const { fromDate, toDate, isAllTime } = options;
     const mods = options.modules || {
       orders: Boolean((options as any).deleteOrders || (options as any).orders),
@@ -1224,7 +1249,9 @@ class DatabaseService {
       const remainingOrders = allOrders.filter(o => !filterByDate(o.orderDate));
       deletedCounts.orders = ordersToDelete.length;
       this.set(STORAGE_KEYS.ORDERS, remainingOrders);
-      ordersToDelete.forEach(o => this.deleteDocFromFirestore('orders', o.id));
+      if (ordersToDelete.length > 0) {
+        await this.batchDeleteDocs('orders', ordersToDelete.map(o => o.id));
+      }
     }
 
     // 2. Delete Purchases
@@ -1235,10 +1262,18 @@ class DatabaseService {
       deletedCounts.purchases = purchasesToDelete.length;
       this.set(STORAGE_KEYS.PURCHASES, remainingPurchases);
 
-      purchasesToDelete.forEach(p => {
-        this.deleteStockMovementsByRef('PURCHASE', p.id);
-        this.deleteDocFromFirestore('purchases', p.id);
-      });
+      const purIds = purchasesToDelete.map(p => p.id);
+      if (purIds.length > 0) {
+        await this.batchDeleteDocs('purchases', purIds);
+
+        const allMovements = this.getStockMovements();
+        const movToDelete = allMovements.filter(m => m.refType === 'PURCHASE' && purIds.includes(m.refId));
+        const remainingMovements = allMovements.filter(m => !(m.refType === 'PURCHASE' && purIds.includes(m.refId)));
+        this.set(STORAGE_KEYS.STOCK_MOVEMENTS, remainingMovements);
+        if (movToDelete.length > 0) {
+          await this.batchDeleteDocs('stock_movements', movToDelete.map(m => m.id));
+        }
+      }
     }
 
     // 3. Delete Sales
@@ -1249,11 +1284,23 @@ class DatabaseService {
       deletedCounts.sales = salesToDelete.length;
       this.set(STORAGE_KEYS.SALES, remainingSales);
 
-      salesToDelete.forEach(s => {
-        this.deleteStockMovementsByRef('SALE', s.id);
-        this.deleteDocFromFirestore('sales', s.id);
-        this.deleteDocFromFirestore('party_logs', `log-sale-${s.id}`);
-      });
+      const saleIds = salesToDelete.map(s => s.id);
+      if (saleIds.length > 0) {
+        await this.batchDeleteDocs('sales', saleIds);
+
+        const allMovements = this.getStockMovements();
+        const movToDelete = allMovements.filter(m => m.refType === 'SALE' && saleIds.includes(m.refId));
+        const remainingMovements = allMovements.filter(m => !(m.refType === 'SALE' && saleIds.includes(m.refId)));
+        this.set(STORAGE_KEYS.STOCK_MOVEMENTS, remainingMovements);
+        if (movToDelete.length > 0) {
+          await this.batchDeleteDocs('stock_movements', movToDelete.map(m => m.id));
+        }
+
+        const partyLogsToDelete = saleIds.map(id => `log-sale-${id}`);
+        await this.batchDeleteDocs('party_logs', partyLogsToDelete);
+        const remainingLogs = this.getPartyLogs().filter(l => !partyLogsToDelete.includes(l.id));
+        this.set(STORAGE_KEYS.PARTY_LOGS, remainingLogs);
+      }
     }
 
     // 4. Delete Self Use
@@ -1264,10 +1311,18 @@ class DatabaseService {
       deletedCounts.selfUse = selfUsesToDelete.length;
       this.set(STORAGE_KEYS.SELF_USES, remainingSelfUses);
 
-      selfUsesToDelete.forEach(su => {
-        this.deleteStockMovementsByRef('SELF_USE', su.id);
-        this.deleteDocFromFirestore('self_uses', su.id);
-      });
+      const suIds = selfUsesToDelete.map(su => su.id);
+      if (suIds.length > 0) {
+        await this.batchDeleteDocs('self_uses', suIds);
+
+        const allMovements = this.getStockMovements();
+        const movToDelete = allMovements.filter(m => m.refType === 'SELF_USE' && suIds.includes(m.refId));
+        const remainingMovements = allMovements.filter(m => !(m.refType === 'SELF_USE' && suIds.includes(m.refId)));
+        this.set(STORAGE_KEYS.STOCK_MOVEMENTS, remainingMovements);
+        if (movToDelete.length > 0) {
+          await this.batchDeleteDocs('stock_movements', movToDelete.map(m => m.id));
+        }
+      }
     }
 
     // 5. Delete Adjustments
@@ -1278,21 +1333,36 @@ class DatabaseService {
       deletedCounts.adjustments = adjustmentsToDelete.length;
       this.set(STORAGE_KEYS.STOCK_ADJUSTMENTS, remainingAdjustments);
 
-      adjustmentsToDelete.forEach(a => {
-        this.deleteStockMovementsByRef('ADJUSTMENT', a.id);
-        this.deleteDocFromFirestore('stock_adjustments', a.id);
-      });
+      const adjIds = adjustmentsToDelete.map(a => a.id);
+      if (adjIds.length > 0) {
+        await this.batchDeleteDocs('stock_adjustments', adjIds);
+
+        const allMovements = this.getStockMovements();
+        const movToDelete = allMovements.filter(m => m.refType === 'ADJUSTMENT' && adjIds.includes(m.refId));
+        const remainingMovements = allMovements.filter(m => !(m.refType === 'ADJUSTMENT' && adjIds.includes(m.refId)));
+        this.set(STORAGE_KEYS.STOCK_MOVEMENTS, remainingMovements);
+        if (movToDelete.length > 0) {
+          await this.batchDeleteDocs('stock_movements', movToDelete.map(m => m.id));
+        }
+      }
     }
 
-    // 6. Delete Opening Stock
+    // 6. Delete Opening Stock (Wipes ALL OPENING movements & resets openingStock = 0 on all items)
     if (mods.openingStock) {
       const movements = this.getStockMovements();
       const nonOpening = movements.filter(m => m.type !== 'OPENING');
-      deletedCounts.openingStock = movements.length - nonOpening.length;
+      const openingToDelete = movements.filter(m => m.type === 'OPENING');
+      deletedCounts.openingStock = openingToDelete.length;
       this.set(STORAGE_KEYS.STOCK_MOVEMENTS, nonOpening);
+      if (openingToDelete.length > 0) {
+        await this.batchDeleteDocs('stock_movements', openingToDelete.map(m => m.id));
+      }
 
       const items = this.getItems().map(it => ({ ...it, openingStock: 0 }));
       this.set(STORAGE_KEYS.ITEMS, items);
+      if (items.length > 0) {
+        await this.batchSetDocs('items', items);
+      }
     }
 
     // 7. Delete Items (Only if explicitly checked)
@@ -1301,7 +1371,16 @@ class DatabaseService {
       deletedCounts.items = items.length;
       this.set(STORAGE_KEYS.ITEMS, []);
       this.set(STORAGE_KEYS.STOCK_MOVEMENTS, []);
-      items.forEach(i => this.deleteDocFromFirestore('items', i.id));
+      if (items.length > 0) {
+        await this.batchDeleteDocs('items', items.map(i => i.id));
+      }
+      await this.batchDeleteDocs('stock_movements', this.getStockMovements().map(m => m.id));
+
+      const allOrders = this.getOrders();
+      if (allOrders.length > 0) {
+        await this.batchDeleteDocs('orders', allOrders.map(o => o.id));
+      }
+      this.set(STORAGE_KEYS.ORDERS, []);
     }
 
     // 8. Delete Suppliers (Only if explicitly checked)
@@ -1309,7 +1388,9 @@ class DatabaseService {
       const suppliers = this.getSuppliers();
       deletedCounts.suppliers = suppliers.length;
       this.set(STORAGE_KEYS.SUPPLIERS, []);
-      suppliers.forEach(s => this.deleteDocFromFirestore('suppliers', s.id));
+      if (suppliers.length > 0) {
+        await this.batchDeleteDocs('suppliers', suppliers.map(s => s.id));
+      }
     }
 
     // 9. Delete Parties (Only if explicitly checked)
@@ -1318,7 +1399,10 @@ class DatabaseService {
       deletedCounts.parties = parties.length;
       this.set(STORAGE_KEYS.PARTIES, []);
       this.set(STORAGE_KEYS.PARTY_LOGS, []);
-      parties.forEach(p => this.deleteDocFromFirestore('parties', p.id));
+      if (parties.length > 0) {
+        await this.batchDeleteDocs('parties', parties.map(p => p.id));
+      }
+      await this.batchDeleteDocs('party_logs', this.getPartyLogs().map(l => l.id));
     }
 
     this.notify();

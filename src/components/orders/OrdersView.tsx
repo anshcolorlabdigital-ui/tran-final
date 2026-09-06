@@ -57,7 +57,7 @@ export const OrdersView: React.FC = () => {
     const supplier = suppliers.find(s => s.id === supplierId);
     if (!supplier) return;
 
-    const qtyToOrder = pendingOverrides[summary.item.id] ?? Math.max(1, summary.item.minStock * 2 || 10);
+    const qtyToOrder = pendingOverrides[summary.item.id] !== undefined ? pendingOverrides[summary.item.id] : 0;
     const orderDate = getTodayDateString();
 
     const newOrderItem: OrderItem = {
@@ -454,7 +454,7 @@ export const OrdersView: React.FC = () => {
           ) : (
             pendingLowStockItems.map(summary => {
               const currentQty =
-                pendingOverrides[summary.item.id] ?? Math.max(1, summary.item.minStock * 2 || 10);
+                pendingOverrides[summary.item.id] !== undefined ? pendingOverrides[summary.item.id] : 0;
 
               return (
                 <div
@@ -504,11 +504,11 @@ export const OrdersView: React.FC = () => {
                   <div>
                     <input
                       type="number"
-                      min="1"
+                      min="0"
                       className="input-text-clean"
                       value={currentQty}
                       onChange={e => {
-                        const val = Number(e.target.value) || 1;
+                        const val = e.target.value === '' ? 0 : Number(e.target.value);
                         setPendingOverrides(prev => ({
                           ...prev,
                           [summary.item.id]: val
