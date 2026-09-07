@@ -51,6 +51,10 @@ interface AppContextType {
   selectedLedgerItemId: string | null;
   setSelectedLedgerItemId: (itemId: string | null) => void;
   openItemLedger: (itemId: string) => void;
+  isMobileMenuOpen: boolean;
+  setIsMobileMenuOpen: (open: boolean) => void;
+  toggleMobileMenu: () => void;
+  closeMobileMenu: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -65,6 +69,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedLedgerPartyId, setSelectedLedgerPartyId] = useState<string | null>(null);
   const [selectedLedgerSupplierId, setSelectedLedgerSupplierId] = useState<string | null>(null);
   const [selectedLedgerItemId, setSelectedLedgerItemId] = useState<string | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [alertModal, setAlertModal] = useState<AlertModalState>({
     isOpen: false,
     message: '',
@@ -76,24 +81,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     type: null
   });
 
+  const toggleMobileMenu = useCallback(() => {
+    setIsMobileMenuOpen(prev => !prev);
+  }, []);
+
+  const closeMobileMenu = useCallback(() => {
+    setIsMobileMenuOpen(false);
+  }, []);
+
+  const handleSetActiveTab = useCallback((tab: ActiveNavTab) => {
+    setActiveTab(tab);
+    setIsMobileMenuOpen(false);
+  }, []);
+
   const triggerRefresh = useCallback(() => {
     setRefreshKey(prev => prev + 1);
   }, []);
 
   const openPartyLedger = useCallback((partyId: string) => {
     setSelectedLedgerPartyId(partyId);
-    setActiveTab('REPORT_PARTY_LEDGER');
-  }, []);
+    handleSetActiveTab('REPORT_PARTY_LEDGER');
+  }, [handleSetActiveTab]);
 
   const openSupplierLedger = useCallback((supplierId: string) => {
     setSelectedLedgerSupplierId(supplierId);
-    setActiveTab('REPORT_SUPPLIER_LEDGER');
-  }, []);
+    handleSetActiveTab('REPORT_SUPPLIER_LEDGER');
+  }, [handleSetActiveTab]);
 
   const openItemLedger = useCallback((itemId: string) => {
     setSelectedLedgerItemId(itemId);
-    setActiveTab('REPORT_ITEM_LEDGER');
-  }, []);
+    handleSetActiveTab('REPORT_ITEM_LEDGER');
+  }, [handleSetActiveTab]);
 
   useEffect(() => {
     const unsubscribe = db.subscribe(() => {
@@ -146,7 +164,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider
       value={{
         activeTab,
-        setActiveTab,
+        setActiveTab: handleSetActiveTab,
         selectedDate,
         setSelectedDate,
         settings,
@@ -172,7 +190,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         openSupplierLedger,
         selectedLedgerItemId,
         setSelectedLedgerItemId,
-        openItemLedger
+        openItemLedger,
+        isMobileMenuOpen,
+        setIsMobileMenuOpen,
+        toggleMobileMenu,
+        closeMobileMenu
       }}
     >
       {children}

@@ -89,17 +89,158 @@ button, input, select, textarea {
   align-items: center;
   justify-content: space-between;
   box-shadow: var(--shadow-sm);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.header-left-group {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.mobile-hamburger-btn {
+  display: none;
+  background: #FFFFFF;
+  border: 1.5px solid #000000;
+  border-radius: 8px;
+  padding: 6px;
+  cursor: pointer;
+  color: #111827;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.mobile-hamburger-btn:hover {
+  background-color: #F3F4F6;
+  transform: translateY(-1px);
+}
+
+.mobile-hamburger-btn:active {
+  transform: translateY(0);
 }
 
 .app-title {
   font-family: 'Outfit', 'Inter', sans-serif;
   font-weight: 900;
-  font-size: 1.5rem;
+  font-size: 1.45rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: #000000;
-  line-height: 1.1;
-  text-align: center;
+  line-height: 1.15;
+}
+
+.header-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.header-action-widget {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #FFFFFF;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid #000000;
+  box-shadow: var(--shadow-sm);
+}
+
+.widget-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #374151;
+}
+
+.date-input {
+  border: none;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #000000;
+  outline: none;
+  cursor: pointer;
+  background: transparent;
+}
+
+.date-display-badge {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #111827;
+  margin-left: 4px;
+}
+
+.header-sync-btn {
+  background: #FFFFFF;
+  border: 1px solid #000000;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700;
+  font-size: 0.8rem;
+  transition: all 0.15s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.header-sync-btn:hover {
+  background-color: #F3F4F6;
+  transform: translateY(-1px);
+}
+
+.user-select {
+  border: none;
+  font-weight: 800;
+  font-size: 0.9rem;
+  outline: none;
+  cursor: pointer;
+  background: transparent;
+}
+
+.role-badge {
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.role-badge.role-admin {
+  background-color: #DCFCE7;
+  color: #166534;
+}
+
+.role-badge.role-operator {
+  background-color: #FEF3C7;
+  color: #92400E;
+}
+
+/* Mobile Drawer Backdrop & Drawer Header Defaults */
+.mobile-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  z-index: 999;
+  animation: fadeInBackdrop 0.2s ease-out;
+}
+
+@keyframes fadeInBackdrop {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.mobile-drawer-header {
+  display: none;
 }
 
 /* Main Body Layout */
@@ -717,32 +858,239 @@ button, input, select, textarea {
   100% { transform: scale(1); }
 }
 
-/* Responsive Mobile / Tablet Breakpoints */
-@media (max-width: 900px) {
-  .app-body-container {
+/* ==========================================================================
+   Responsive Mobile & Tablet Design Rules (Breakpoint <= 992px & <= 640px)
+   ========================================================================== */
+
+@media (max-width: 992px) {
+  /* Show Hamburger Menu Button */
+  .mobile-hamburger-btn {
+    display: inline-flex;
+  }
+
+  /* Header adjustments on mobile */
+  .app-top-header {
+    padding: 10px 14px;
     flex-direction: column;
-    padding: 12px;
-    gap: 16px;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .header-left-group {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .app-title {
+    font-size: 1.15rem;
+    text-align: left;
+  }
+
+  .header-actions-group {
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .header-action-widget {
+    padding: 4px 8px;
+  }
+
+  .header-action-widget.date-widget {
+    flex: 1 1 auto;
+    min-width: 160px;
+  }
+
+  .date-display-badge {
+    display: none; /* Hide date display text on mobile screens to save space */
+  }
+
+  .header-action-widget.user-widget {
+    flex: 1 1 auto;
+  }
+
+  /* Mobile Navigation Drawer */
+  .mobile-drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #CBD5E1;
+    margin-bottom: 8px;
+  }
+
+  .mobile-drawer-title {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 900;
+    font-size: 1.1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #111827;
+  }
+
+  .mobile-drawer-close-btn {
+    background: #FFFFFF;
+    border: 1.5px solid #000000;
+    border-radius: 8px;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #111827;
+    transition: background-color 0.15s ease;
+  }
+
+  .mobile-drawer-close-btn:hover {
+    background-color: #FEE2E2;
+    color: #DC2626;
   }
 
   .app-sidebar {
-    width: 100%;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 12px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 290px;
+    max-width: 85vw;
+    background-color: #ECECEC;
+    z-index: 1000;
+    padding: 16px 14px 28px 14px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.35);
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
   }
 
+  .app-sidebar.mobile-open {
+    transform: translateX(0);
+  }
+
+  /* Main Container */
+  .app-body-container {
+    padding: 10px 8px;
+    gap: 12px;
+    flex-direction: column;
+  }
+
+  .app-content-area {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .content-panel-grey {
+    padding: 14px 10px;
+    border-radius: 10px;
+    min-height: auto;
+  }
+
+  /* Sales & Dashboard Metric Cards */
   .sales-metric-row {
     grid-template-columns: 1fr;
-    gap: 12px;
+    gap: 10px;
+    margin: 10px 0 16px 0;
   }
 
   .metric-circle-card {
     aspect-ratio: auto;
-    border-radius: var(--radius-card);
-    padding: 12px 20px;
+    border-radius: 12px;
+    padding: 12px 18px;
     flex-direction: row;
     justify-content: space-between;
+    align-items: center;
+  }
+
+  /* Horizontal Scrolling for all Tables & Reports */
+  .custom-table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+    margin-bottom: 14px;
+    border-radius: 6px;
+  }
+
+  .custom-table {
+    min-width: 600px;
+  }
+
+  /* Master & Report Dynamic Cards */
+  .dynamic-entry-card {
+    padding: 14px 10px;
+    border-radius: 10px;
+    gap: 12px;
+  }
+
+  .active-mode-indicator {
+    font-size: 0.85rem;
+    padding: 4px 12px;
+  }
+
+  /* Save / Action buttons full width or flex wrap */
+  .btn-customer-save {
+    padding: 10px 24px;
+    font-size: 1.1rem;
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-top-header {
+    padding: 8px 10px;
+  }
+
+  .app-title {
+    font-size: 1.05rem;
+    line-height: 1.2;
+  }
+
+  .header-actions-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .header-action-widget.date-widget,
+  .header-action-widget.user-widget,
+  .header-sync-btn {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .pill-nav-btn {
+    font-size: 0.88rem;
+    padding: 8px 14px;
+  }
+
+  .pill-header-lime {
+    font-size: 0.95rem;
+    padding: 7px 14px;
+  }
+
+  /* Modals on small screens */
+  .modal-backdrop {
+    padding: 8px !important;
+  }
+
+  .modal-content {
+    max-height: 92vh !important;
+    width: 100% !important;
+  }
+
+  .toast-container {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+  }
+
+  .toast-item {
+    width: 100%;
+    font-size: 0.85rem;
   }
 }
 
