@@ -2149,8 +2149,147 @@ async function runVerificationSuite() {
   console.log('✓ Outgoing supplier payment of ₹6,000 accurately reduces payable balance to ₹9,000');
   console.log('Step 67 PASS? true: Supplier opening balance, date, purchases, payments, and supplier ledger verified.');
 
+  console.log('\n--- Step 68: Verify Party & Supplier Balance Rollover on Transaction Deletion / Cleanup ---');
+  const rolloverPartyId = `party-roll-${Date.now()}`;
+  const rolloverParty: Party = {
+    id: rolloverPartyId,
+    name: 'ROLLOVER TEST CUSTOMER',
+    phone: '9988776655',
+    address: 'Commercial Complex',
+    city: 'JAIPUR',
+    gstin: '08XYZ1234F1Z1',
+    creditLimit: 50000,
+    partyType: 'DEALER',
+    openingBalance: 1000,
+    openingBalanceDate: '2026-04-01',
+    isActive: true,
+    createdAt: '2026-04-01T09:00:00.000Z'
+  };
+  db.saveParty(rolloverParty);
+
+  // Record Sale of ₹4,000 (Paid ₹1,000, Due ₹3,000) -> Net Outstanding = 1000 + 3000 = 4000
+  db.savePartyLog({
+    id: `log-sale-roll-1`,
+    partyId: rolloverPartyId,
+    partyName: rolloverParty.name,
+    date: '2026-05-10',
+    type: 'SALE',
+    refNo: 'INV-ROLL-01',
+    totalAmount: 4000,
+    paidAmount: 1000,
+    balanceChange: 3000,
+    createdAt: '2026-05-10T10:00:00.000Z'
+  });
+
+  // Record Payment Receipt of ₹1,500 -> Net Outstanding = 4000 - 1500 = 2500
+  db.recordPartyPayment(rolloverPartyId, 1500, 'UPI', 'UPI-ROLL-1', 'Part payment', '2026-05-20');
+
+  const beforePartySummary = db.getPartyBalanceSummary(rolloverPartyId);
+  console.log('Party Summary before deletion:', beforePartySummary);
+  if (beforePartySummary.outstandingBalance !== 2500) {
+    throw new Error(`Expected party outstanding 2500 before deletion, got ${beforePartySummary.outstandingBalance}`);
+  }
+
+  // Create Supplier with Opening ₹2,000
+  const rolloverSupplierId = `supp-roll-${Date.now()}`;
+  const rolloverSupplier: Supplier = {
+    id: rolloverSupplierId,
+    name: 'ROLLOVER TEST VENDOR',
+    phone: '9911223344',
+    address: 'Industrial Area',
+    city: 'JAIPUR',
+    gstin: '08VEND1234F1Z9',
+    openingBalance: 2000,
+    openingBalanceDate: '2026-04-01',
+    isActive: true,
+    createdAt: '2026-04-01T09:00:00.000Z'
+  };
+  db.saveSupplier(rolloverSupplier);
+
+  // Record Purchase of ₹8,000 (Paid ₹2,000, Due ₹6,000) -> Net Payable = 2000 + 6000 = 8000
+  db.saveSupplierLog({
+    id: `log-pur-roll-1`,
+    supplierId: rolloverSupplierId,
+    supplierName: rolloverSupplier.name,
+    date: '2026-05-12',
+    type: 'PURCHASE',
+    refNo: 'PUR-ROLL-01',
+    totalAmount: 8000,
+    paidAmount: 2000,
+    balanceChange: 6000,
+    createdAt: '2026-05-12T10:00:00.000Z'
+  });
+
+  // Record Payment Voucher of ₹3,000 -> Net Payable = 8000 - 3000 = 5000
+  db.recordSupplierPayment(rolloverSupplierId, 3000, 'BANK_TRANSFER', 'TXN-ROLL-1', 'Vendor payment', '2026-05-22');
+
+  const beforeSupplierSummary = db.getSupplierBalanceSummary(rolloverSupplierId);
+  console.log('Supplier Summary before deletion:', beforeSupplierSummary);
+  if (beforeSupplierSummary.payableBalance !== 5000) {
+    throw new Error(`Expected supplier payable 5000 before deletion, got ${beforeSupplierSummary.payableBalance}`);
+  }
+
+  // Perform Transaction Deletion / Cleanup (modules: sales, purchases)
+  await db.deleteDataByFilter({
+    isAllTime: true,
+    modules: {
+      sales: true,
+      purchases: true,
+      orders: false,
+      selfUse: false,
+      adjustments: false,
+      openingStock: false,
+      items: false,
+      parties: false,
+      suppliers: false
+    }
+  });
+
+  // 1. Verify Party Opening Balance rolled over to ₹2,500
+  const afterParty = db.getPartyById(rolloverPartyId);
+  console.log('Party after transaction deletion:', afterParty);
+  if (!afterParty || afterParty.openingBalance !== 2500) {
+    throw new Error(`Expected party.openingBalance 2500, got ${afterParty?.openingBalance}`);
+  }
+
+  const afterPartySummary = db.getPartyBalanceSummary(rolloverPartyId);
+  console.log('Party Summary after transaction deletion:', afterPartySummary);
+  if (afterPartySummary.openingBalance !== 2500 || afterPartySummary.outstandingBalance !== 2500 || afterPartySummary.totalBilled !== 0 || afterPartySummary.totalPaid !== 0) {
+    throw new Error(`Party summary mismatch after rollover: ${JSON.stringify(afterPartySummary)}`);
+  }
+
+  const afterPartyLogs = db.getPartyLogsByPartyId(rolloverPartyId);
+  console.log('Party Logs after rollover:', afterPartyLogs);
+  if (afterPartyLogs.length !== 1 || afterPartyLogs[0].type !== 'OPENING_BALANCE' || afterPartyLogs[0].runningBalance !== 2500) {
+    throw new Error(`Expected 1 OPENING_BALANCE log with runningBalance 2500, got ${JSON.stringify(afterPartyLogs)}`);
+  }
+
+  // 2. Verify Supplier Opening Balance rolled over to ₹5,000
+  const afterSupplier = db.getSupplierById(rolloverSupplierId);
+  console.log('Supplier after transaction deletion:', afterSupplier);
+  if (!afterSupplier || afterSupplier.openingBalance !== 5000) {
+    throw new Error(`Expected supplier.openingBalance 5000, got ${afterSupplier?.openingBalance}`);
+  }
+
+  const afterSupplierSummary = db.getSupplierBalanceSummary(rolloverSupplierId);
+  console.log('Supplier Summary after transaction deletion:', afterSupplierSummary);
+  if (afterSupplierSummary.openingBalance !== 5000 || afterSupplierSummary.payableBalance !== 5000 || afterSupplierSummary.totalPurchased !== 0 || afterSupplierSummary.totalPaid !== 0) {
+    throw new Error(`Supplier summary mismatch after rollover: ${JSON.stringify(afterSupplierSummary)}`);
+  }
+
+  const afterSupplierLogs = db.getSupplierLogsBySupplierId(rolloverSupplierId);
+  console.log('Supplier Logs after rollover:', afterSupplierLogs);
+  if (afterSupplierLogs.length !== 1 || afterSupplierLogs[0].type !== 'OPENING_BALANCE' || afterSupplierLogs[0].runningBalance !== 5000) {
+    throw new Error(`Expected 1 OPENING_BALANCE log with runningBalance 5000, got ${JSON.stringify(afterSupplierLogs)}`);
+  }
+
+  console.log('✓ Customer outstanding dues ₹2,500 rolled forward into party.openingBalance and party.openingBalanceDate');
+  console.log('✓ Supplier net payables ₹5,000 rolled forward into supplier.openingBalance and supplier.openingBalanceDate');
+  console.log('✓ Clean single OPENING_BALANCE log presented in Party Ledger and Supplier Ledger respectively');
+  console.log('Step 68 PASS? true: Party & Supplier balance rollovers upon transaction deletion verified.');
+
   console.log('\n====================================================');
-  console.log('ALL 67 INVENTORY & ACCOUNTING SUITE STEPS PASSED!');
+  console.log('ALL 68 INVENTORY & ACCOUNTING SUITE STEPS PASSED!');
   console.log('====================================================\n');
 }
 

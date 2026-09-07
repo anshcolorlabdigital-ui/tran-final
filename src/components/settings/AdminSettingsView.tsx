@@ -46,6 +46,8 @@ interface SidebarModulesSelection {
   purchase: boolean;
   sale: boolean;
   selfUse: boolean;
+  collectPayment?: boolean;
+  paySupplier?: boolean;
   // MASTERS
   party: boolean;
   item: boolean;
@@ -56,6 +58,9 @@ interface SidebarModulesSelection {
   reportPurchases: boolean;
   reportSelfUse: boolean;
   reportItemStock: boolean;
+  reportPartyLedger?: boolean;
+  reportSupplierLedger?: boolean;
+  reportItemLedger?: boolean;
 }
 
 export const AdminSettingsView: React.FC = () => {
@@ -1421,6 +1426,25 @@ export const AdminSettingsView: React.FC = () => {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Intelligent Balance Rollover Information Banner */}
+          <div
+            style={{
+              background: '#F0FDF4',
+              border: '1.5px solid #86EFAC',
+              borderRadius: '10px',
+              padding: '12px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              marginBottom: '16px'
+            }}
+          >
+            <CheckCircle2 size={22} color="#16A34A" style={{ flexShrink: 0 }} />
+            <div style={{ fontSize: '0.84rem', color: '#166534', lineHeight: 1.45 }}>
+              <b>Intelligent Balance Rollover Active:</b> When transaction data (Sales, Purchases, Payments) is deleted, each item's closing stock rolls forward into <b>Item Opening Stock</b>, each customer's closing dues roll into <b>Party Opening Balance & Date</b>, and each vendor's closing payable rolls into <b>Supplier Opening Balance & Date</b>, preserving exact ledger continuity without losing past dues.
+            </div>
           </div>
 
           {/* Grouped Modules matching Left Nav Sidebar */}

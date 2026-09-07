@@ -1434,7 +1434,7 @@ class DatabaseService {
     // Check if transactions are being deleted
     const isDeletingTransactions = Boolean(mods.purchases || mods.sales || mods.selfUse || mods.adjustments);
 
-    // 0. Capture current on-hand closing stock before deleting transaction movements
+    // 0a. Capture current on-hand closing stock before deleting transaction movements
     const closingStocksByItem: { [itemId: string]: number } = {};
     if (isDeletingTransactions && !mods.items && !mods.openingStock) {
       const allMovements = this.getStockMovements();
@@ -1443,6 +1443,27 @@ class DatabaseService {
         const itemMovements = allMovements.filter(m => m.itemId === item.id);
         const total = itemMovements.reduce((acc, m) => acc + (Number(m.qtyChange) || 0), 0);
         closingStocksByItem[item.id] = Number(total.toFixed(3));
+      });
+    }
+
+    // 0b. Capture current customer outstanding balance before deleting sales/payments
+    const closingBalancesByParty: { [partyId: string]: number } = {};
+    if (isDeletingTransactions && !mods.parties) {
+      const allParties = this.getParties();
+      allParties.forEach(party => {
+        const summary = this.getPartyBalanceSummary(party.id);
+        closingBalancesByParty[party.id] = Number(summary.outstandingBalance.toFixed(2));
+      });
+    }
+
+    // 0c. Capture current supplier net payable balance before deleting purchases/payments
+    const closingPayablesBySupplier: { [supplierId: string]: number } = {};
+    if (isDeletingTransactions && !mods.suppliers) {
+      const allSuppliers = this.getSuppliers();
+      allSuppliers.forEach(supplier => {
+        const summary = this.getSupplierBalanceSummary(supplier.id);
+        const bal = summary.payableBalance ?? summary.outstandingPayable ?? 0;
+        closingPayablesBySupplier[supplier.id] = Number(bal.toFixed(2));
       });
     }
 
@@ -1478,6 +1499,15 @@ class DatabaseService {
           await this.batchDeleteDocs('stock_movements', movToDelete.map(m => m.id));
         }
       }
+
+      // Clean transactional supplier logs matching date
+      const allSupplierLogs = this.getSupplierLogs();
+      const supplierLogsToDelete = allSupplierLogs.filter(l => filterByDate(l.date));
+      const remainingSupplierLogs = allSupplierLogs.filter(l => !filterByDate(l.date));
+      this.set(STORAGE_KEYS.SUPPLIER_LOGS, remainingSupplierLogs);
+      if (supplierLogsToDelete.length > 0) {
+        await this.batchDeleteDocs('supplier_logs', supplierLogsToDelete.map(l => l.id));
+      }
     }
 
     // 3. Delete Sales
@@ -1499,11 +1529,15 @@ class DatabaseService {
         if (movToDelete.length > 0) {
           await this.batchDeleteDocs('stock_movements', movToDelete.map(m => m.id));
         }
+      }
 
-        const partyLogsToDelete = saleIds.map(id => `log-sale-${id}`);
-        await this.batchDeleteDocs('party_logs', partyLogsToDelete);
-        const remainingLogs = this.getPartyLogs().filter(l => !partyLogsToDelete.includes(l.id));
-        this.set(STORAGE_KEYS.PARTY_LOGS, remainingLogs);
+      // Clean transactional party logs matching date
+      const allPartyLogs = this.getPartyLogs();
+      const partyLogsToDelete = allPartyLogs.filter(l => filterByDate(l.date));
+      const remainingPartyLogs = allPartyLogs.filter(l => !filterByDate(l.date));
+      this.set(STORAGE_KEYS.PARTY_LOGS, remainingPartyLogs);
+      if (partyLogsToDelete.length > 0) {
+        await this.batchDeleteDocs('party_logs', partyLogsToDelete.map(l => l.id));
       }
     }
 
@@ -1551,7 +1585,9 @@ class DatabaseService {
       }
     }
 
-    // Rollover: If transactions were deleted, roll forward the captured closing stock as the new openingStock!
+    const effectiveRolloverDate = toDate || new Date().toISOString().split('T')[0];
+
+    // Rollover A: If transactions were deleted, roll forward the captured closing stock as the new openingStock!
     if (isDeletingTransactions && !mods.items && !mods.openingStock) {
       const allItems = this.getItems();
       const updatedItems = allItems.map(item => {
@@ -1574,7 +1610,7 @@ class DatabaseService {
         refType: 'OPENING',
         refId: item.id,
         refNo: 'OPENING',
-        date: toDate || new Date().toISOString().split('T')[0],
+        date: effectiveRolloverDate,
         notes: `Opening stock rolled over from closing balance on ${new Date().toLocaleDateString()}`,
         createdAt: new Date().toISOString()
       }));
@@ -1582,6 +1618,36 @@ class DatabaseService {
       const finalMovements = [...newOpeningMovements, ...remainingMovements];
       this.set(STORAGE_KEYS.STOCK_MOVEMENTS, finalMovements);
       await this.batchSetDocs('stock_movements', newOpeningMovements);
+    }
+
+    // Rollover B: Roll forward Customer Outstanding Balances into Party Opening Balance & Date!
+    if (isDeletingTransactions && !mods.parties) {
+      const allParties = this.getParties();
+      const updatedParties = allParties.map(party => {
+        const closingBal = closingBalancesByParty[party.id] !== undefined ? closingBalancesByParty[party.id] : (party.openingBalance || 0);
+        return {
+          ...party,
+          openingBalance: Number(closingBal.toFixed(2)),
+          openingBalanceDate: effectiveRolloverDate
+        };
+      });
+      this.set(STORAGE_KEYS.PARTIES, updatedParties);
+      await this.batchSetDocs('parties', updatedParties);
+    }
+
+    // Rollover C: Roll forward Supplier Net Payables into Supplier Opening Balance & Date!
+    if (isDeletingTransactions && !mods.suppliers) {
+      const allSuppliers = this.getSuppliers();
+      const updatedSuppliers = allSuppliers.map(supplier => {
+        const closingPayable = closingPayablesBySupplier[supplier.id] !== undefined ? closingPayablesBySupplier[supplier.id] : (supplier.openingBalance || 0);
+        return {
+          ...supplier,
+          openingBalance: Number(closingPayable.toFixed(2)),
+          openingBalanceDate: effectiveRolloverDate
+        };
+      });
+      this.set(STORAGE_KEYS.SUPPLIERS, updatedSuppliers);
+      await this.batchSetDocs('suppliers', updatedSuppliers);
     }
 
     // 6. Delete Opening Stock (Wipes ALL OPENING movements & resets openingStock = 0 on all items)
