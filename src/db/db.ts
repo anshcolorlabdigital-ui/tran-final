@@ -481,17 +481,39 @@ class DatabaseService {
   }
 
   public getPartyLogsByPartyId(partyId: string): PartyLog[] {
+    const party = this.getPartyById(partyId);
+    const openingBal = Number(party?.openingBalance) || 0;
     const logs = this.getPartyLogs().filter(l => l.partyId === partyId);
     logs.sort((a, b) => (a.date > b.date ? 1 : a.date < b.date ? -1 : (a.createdAt > b.createdAt ? 1 : -1)));
 
-    let running = 0;
-    return logs.map(log => {
+    const result: PartyLog[] = [];
+    if (openingBal !== 0) {
+      result.push({
+        id: `open-${partyId}`,
+        partyId,
+        partyName: party?.name || 'Customer',
+        date: party?.createdAt ? party.createdAt.split('T')[0] : '2026-04-01',
+        type: 'OPENING_BALANCE',
+        refNo: 'OPENING-BAL',
+        totalAmount: openingBal > 0 ? openingBal : 0,
+        paidAmount: openingBal < 0 ? Math.abs(openingBal) : 0,
+        balanceChange: openingBal,
+        runningBalance: openingBal,
+        notes: 'Initial Opening Balance / Previous Dues',
+        createdAt: party?.createdAt || new Date().toISOString()
+      });
+    }
+
+    let running = openingBal;
+    logs.forEach(log => {
       running += (Number(log.balanceChange) || 0);
-      return {
+      result.push({
         ...log,
         runningBalance: Number(running.toFixed(2))
-      };
+      });
     });
+
+    return result;
   }
 
   public savePartyLog(log: PartyLog): void {
@@ -546,12 +568,15 @@ class DatabaseService {
   public getPartyBalanceSummary(partyId: string): {
     totalBilled: number;
     totalPaid: number;
+    openingBalance: number;
     outstandingBalance: number;
   } {
+    const party = this.getPartyById(partyId);
+    const openingBal = Number(party?.openingBalance) || 0;
     const logs = this.getPartyLogsByPartyId(partyId);
     let totalBilled = 0;
     let totalPaid = 0;
-    let outstandingBalance = 0;
+    let outstandingBalance = openingBal;
 
     logs.forEach(l => {
       if (l.type === 'SALE') {
@@ -566,6 +591,7 @@ class DatabaseService {
     return {
       totalBilled: Number(totalBilled.toFixed(2)),
       totalPaid: Number(totalPaid.toFixed(2)),
+      openingBalance: Number(openingBal.toFixed(2)),
       outstandingBalance: Number(outstandingBalance.toFixed(2))
     };
   }
@@ -1242,6 +1268,21 @@ class DatabaseService {
       parties: 0
     };
 
+    // Check if transactions are being deleted
+    const isDeletingTransactions = Boolean(mods.purchases || mods.sales || mods.selfUse || mods.adjustments);
+
+    // 0. Capture current on-hand closing stock before deleting transaction movements
+    const closingStocksByItem: { [itemId: string]: number } = {};
+    if (isDeletingTransactions && !mods.items && !mods.openingStock) {
+      const allMovements = this.getStockMovements();
+      const allItems = this.getItems();
+      allItems.forEach(item => {
+        const itemMovements = allMovements.filter(m => m.itemId === item.id);
+        const total = itemMovements.reduce((acc, m) => acc + (Number(m.qtyChange) || 0), 0);
+        closingStocksByItem[item.id] = Number(total.toFixed(3));
+      });
+    }
+
     // 1. Delete Orders
     if (mods.orders) {
       const allOrders = this.getOrders();
@@ -1345,6 +1386,39 @@ class DatabaseService {
           await this.batchDeleteDocs('stock_movements', movToDelete.map(m => m.id));
         }
       }
+    }
+
+    // Rollover: If transactions were deleted, roll forward the captured closing stock as the new openingStock!
+    if (isDeletingTransactions && !mods.items && !mods.openingStock) {
+      const allItems = this.getItems();
+      const updatedItems = allItems.map(item => {
+        const closingStock = closingStocksByItem[item.id] !== undefined ? closingStocksByItem[item.id] : (item.openingStock || 0);
+        return {
+          ...item,
+          openingStock: closingStock
+        };
+      });
+      this.set(STORAGE_KEYS.ITEMS, updatedItems);
+      await this.batchSetDocs('items', updatedItems);
+
+      // Refresh remaining movements: replace/set OPENING movements with the rolled-over closing stock
+      const remainingMovements = this.getStockMovements().filter(m => m.type !== 'OPENING');
+      const newOpeningMovements: StockMovement[] = updatedItems.map(item => ({
+        id: `mov-init-${item.id}-${Date.now()}`,
+        itemId: item.id,
+        type: 'OPENING',
+        qtyChange: Number((item.openingStock || 0).toFixed(3)),
+        refType: 'OPENING',
+        refId: item.id,
+        refNo: 'OPENING',
+        date: toDate || new Date().toISOString().split('T')[0],
+        notes: `Opening stock rolled over from closing balance on ${new Date().toLocaleDateString()}`,
+        createdAt: new Date().toISOString()
+      }));
+
+      const finalMovements = [...newOpeningMovements, ...remainingMovements];
+      this.set(STORAGE_KEYS.STOCK_MOVEMENTS, finalMovements);
+      await this.batchSetDocs('stock_movements', newOpeningMovements);
     }
 
     // 6. Delete Opening Stock (Wipes ALL OPENING movements & resets openingStock = 0 on all items)

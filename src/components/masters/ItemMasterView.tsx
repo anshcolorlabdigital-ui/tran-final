@@ -837,23 +837,7 @@ export const ItemMasterView: React.FC = () => {
               </div>
 
               <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Prof % Am</label>
-                <input
-                  type="number"
-                  step="any"
-                  className="input-text-clean"
-                  value={unitAProfAm}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitAProfAm(e.target.value);
-                  }}
-                  style={{ textAlign: 'center', fontWeight: 700, borderColor: '#3B82F6' }}
-                />
-                <div className="subtext-calc-red">{unitABreakdown.profAmAmt}</div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Prof % deal</label>
+                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Prof% -S</label>
                 <input
                   type="number"
                   step="any"
@@ -885,6 +869,35 @@ export const ItemMasterView: React.FC = () => {
               </div>
 
               <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Sale Price</label>
+                <input
+                  type="number"
+                  step="any"
+                  className="input-text-clean"
+                  value={unitABreakdown.salePrice}
+                  readOnly
+                  style={{ textAlign: 'center', fontWeight: 900, color: '#6D28D9', fontSize: '0.92rem', background: '#F5F3FF', cursor: 'default' }}
+                />
+                <div className="subtext-calc-red">{unitABreakdown.salePrice}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Prof% -M</label>
+                <input
+                  type="number"
+                  step="any"
+                  className="input-text-clean"
+                  value={unitAProfAm}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setUnitAProfAm(e.target.value);
+                  }}
+                  style={{ textAlign: 'center', fontWeight: 700, borderColor: '#3B82F6' }}
+                />
+                <div className="subtext-calc-red">{unitABreakdown.profAmAmt}</div>
+              </div>
+
+              <div>
                 <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Round-M</label>
                 <input
                   type="number"
@@ -901,33 +914,14 @@ export const ItemMasterView: React.FC = () => {
               </div>
 
               <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Sale Price</label>
-                <input
-                  type="number"
-                  step="any"
-                  className="input-text-clean"
-                  value={unitASalePrice}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitASalePrice(e.target.value);
-                  }}
-                  style={{ textAlign: 'center', fontWeight: 900, color: '#6D28D9', fontSize: '0.92rem' }}
-                />
-                <div className="subtext-calc-red">{unitABreakdown.salePrice}</div>
-              </div>
-
-              <div>
                 <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>mrp</label>
                 <input
                   type="number"
                   step="any"
                   className="input-text-clean"
-                  value={unitAMrp}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitAMrp(e.target.value);
-                  }}
-                  style={{ textAlign: 'center', fontWeight: 900, color: '#1E40AF', fontSize: '0.92rem' }}
+                  value={unitABreakdown.mrp}
+                  readOnly
+                  style={{ textAlign: 'center', fontWeight: 900, color: '#1E40AF', fontSize: '0.92rem', background: '#EFF6FF', cursor: 'default' }}
                 />
                 <div className="subtext-calc-red">{unitABreakdown.mrp}</div>
               </div>
@@ -948,44 +942,41 @@ export const ItemMasterView: React.FC = () => {
                       setIsTouched(true);
                       setUnitBName(e.target.value);
                     }}
-                    style={{ width: '100px', color: '#EA3943', fontWeight: 900, textAlign: 'center', fontSize: '0.95rem' }}
+                    style={{ width: '90px', color: '#EA3943', fontWeight: 800, textAlign: 'center' }}
                     placeholder="e.g. Mt."
                   />
-                  <span style={{ fontWeight: 800, fontSize: '0.9rem' }}>1 {unitAName || 'Unit A'} =</span>
-                  <input
-                    type="number"
-                    step="any"
-                    className="input-text-clean"
-                    value={unitBConversion}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitBConversion(e.target.value);
-                    }}
-                    style={{ width: '80px', fontWeight: 800, textAlign: 'center' }}
-                    placeholder="40"
-                  />
-                  <span style={{ fontWeight: 800, fontSize: '0.9rem' }}>{unitBName || 'Unit B'}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontWeight: 800, fontSize: '0.9rem' }}>1 {unitAName || 'Unit A'} =</span>
+                    <input
+                      type="number"
+                      step="any"
+                      className="input-text-clean"
+                      value={unitBConversion}
+                      onChange={e => {
+                        setIsTouched(true);
+                        setUnitBConversion(e.target.value);
+                      }}
+                      style={{ width: '70px', textAlign: 'center', fontWeight: 800, color: '#047857' }}
+                    />
+                    <span style={{ fontWeight: 800, fontSize: '0.9rem' }}>{unitBName || 'Unit B'}</span>
+                  </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}>
                   <input
                     type="checkbox"
-                    id="unitBActiveCheck"
                     checked={unitBActive}
                     onChange={e => {
                       setIsTouched(true);
                       setUnitBActive(e.target.checked);
                     }}
-                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
                   />
-                  <label htmlFor="unitBActiveCheck" style={{ fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer' }}>
-                    Active
-                  </label>
-                </div>
+                  Active Unit B
+                </label>
               </div>
 
               {/* Pricing Grid for Unit B */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: '8px', textAlign: 'center' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: '6px', textAlign: 'center' }}>
                 <div>
                   <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Besic Price</label>
                   <input
@@ -1051,23 +1042,7 @@ export const ItemMasterView: React.FC = () => {
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Prof % Am</label>
-                  <input
-                    type="number"
-                    step="any"
-                    className="input-text-clean"
-                    value={unitBProfAm}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitBProfAm(e.target.value);
-                    }}
-                    style={{ textAlign: 'center', fontWeight: 700, borderColor: '#3B82F6' }}
-                  />
-                  <div className="subtext-calc-red">{unitBBreakdown.profAmAmt}</div>
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Prof % deal</label>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Prof% -S</label>
                   <input
                     type="number"
                     step="any"
@@ -1099,6 +1074,35 @@ export const ItemMasterView: React.FC = () => {
                 </div>
 
                 <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Sale Price</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitBBreakdown.salePrice}
+                    readOnly
+                    style={{ textAlign: 'center', fontWeight: 900, color: '#6D28D9', fontSize: '0.92rem', background: '#F5F3FF', cursor: 'default' }}
+                  />
+                  <div className="subtext-calc-red">{unitBBreakdown.salePrice}</div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Prof% -M</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitBProfAm}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitBProfAm(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', fontWeight: 700, borderColor: '#3B82F6' }}
+                  />
+                  <div className="subtext-calc-red">{unitBBreakdown.profAmAmt}</div>
+                </div>
+
+                <div>
                   <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Round-M</label>
                   <input
                     type="number"
@@ -1115,33 +1119,14 @@ export const ItemMasterView: React.FC = () => {
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Sale Price</label>
-                  <input
-                    type="number"
-                    step="any"
-                    className="input-text-clean"
-                    value={unitBSalePrice}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitBSalePrice(e.target.value);
-                    }}
-                    style={{ textAlign: 'center', fontWeight: 900, color: '#6D28D9', fontSize: '0.92rem' }}
-                  />
-                  <div className="subtext-calc-red">{unitBBreakdown.salePrice}</div>
-                </div>
-
-                <div>
                   <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>mrp</label>
                   <input
                     type="number"
                     step="any"
                     className="input-text-clean"
-                    value={unitBMrp}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitBMrp(e.target.value);
-                    }}
-                    style={{ textAlign: 'center', fontWeight: 900, color: '#1E40AF', fontSize: '0.92rem' }}
+                    value={unitBBreakdown.mrp}
+                    readOnly
+                    style={{ textAlign: 'center', fontWeight: 900, color: '#1E40AF', fontSize: '0.92rem', background: '#EFF6FF', cursor: 'default' }}
                   />
                   <div className="subtext-calc-red">{unitBBreakdown.mrp}</div>
                 </div>

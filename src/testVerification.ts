@@ -1792,12 +1792,46 @@ async function runVerificationSuite() {
   console.log(`✓ Item Ledger Stock Engine: Opening=50, Purchased=+100, Sold=-30, Self-Use=-5 => On-Hand Closing = ${finalStock} Roll`);
   console.log('Step 62 PASS? true: Item Ledger multi-document transaction aggregation verified.');
 
+  console.log('\n--- Step 63: Verify Stock Rollover on Selective Transaction Cleanup ---');
+  // At this point, ledgerItem has Opening 50 + Purchase 100 - Sale 30 - SelfUse 5 = Closing 115.
+  // Now run deleteDataByFilter with purchases=true, sales=true, selfUse=true, openingStock=false
+  await db.deleteDataByFilter({
+    isAllTime: true,
+    modules: {
+      orders: false,
+      purchases: true,
+      sales: true,
+      selfUse: true,
+      adjustments: false,
+      openingStock: false
+    }
+  });
+
+  const rolledOverItem = db.getItemById(ledgerItem.id);
+  const movementsAfterRollover = db.getStockMovements().filter(m => m.itemId === ledgerItem.id);
+  const currentStockAfterCleanup = StockEngine.getItemCurrentStock(ledgerItem.id);
+
+  if (!rolledOverItem) throw new Error('Rolled over item not found');
+  if (rolledOverItem.openingStock !== 115) {
+    throw new Error(`Expected item.openingStock to roll over to 115, but got ${rolledOverItem.openingStock}`);
+  }
+  if (movementsAfterRollover.length !== 1 || movementsAfterRollover[0].type !== 'OPENING' || movementsAfterRollover[0].qtyChange !== 115) {
+    throw new Error(`Expected 1 OPENING movement of 115, got: ${JSON.stringify(movementsAfterRollover)}`);
+  }
+  if (currentStockAfterCleanup !== 115) {
+    throw new Error(`Expected current stock after cleanup to be 115, got ${currentStockAfterCleanup}`);
+  }
+
+  console.log(`✓ Closing stock 115 rolled over into new item.openingStock = 115 with fresh OPENING movement`);
+  console.log('Step 63 PASS? true: Transaction cleanup closing-to-opening stock rollover verified.');
+
   console.log('\n====================================================');
-  console.log('ALL 62 CUSTOMER WORKFLOW STEPS & INVARIANTS PASSED!');
+  console.log('ALL 63 CUSTOMER WORKFLOW STEPS & INVARIANTS PASSED!');
   console.log('====================================================\n');
 }
 
 runVerificationSuite();
+
 
 
 

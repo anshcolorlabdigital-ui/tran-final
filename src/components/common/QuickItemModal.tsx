@@ -333,12 +333,7 @@ export const QuickItemModal: React.FC = () => {
               <div className="subtext-calc-red">{unitABreakdown.misAmt}</div>
             </div>
             <div>
-              <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#1E40AF' }}>Prof % Am</label>
-              <input type="number" className="input-text-clean" value={unitAProfAm} onChange={e => setUnitAProfAm(e.target.value)} style={{ textAlign: 'center', borderColor: '#3B82F6' }} />
-              <div className="subtext-calc-red">{unitABreakdown.profAmAmt}</div>
-            </div>
-            <div>
-              <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#6D28D9' }}>Prof % deal</label>
+              <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#6D28D9' }}>Prof% -S</label>
               <input type="number" className="input-text-clean" value={unitAProfDeal} onChange={e => setUnitAProfDeal(e.target.value)} style={{ textAlign: 'center', borderColor: '#8B5CF6' }} />
               <div className="subtext-calc-red">{unitABreakdown.profDealAmt}</div>
             </div>
@@ -348,18 +343,23 @@ export const QuickItemModal: React.FC = () => {
               <div className="subtext-calc-red">{unitABreakdown.roundUpSale}</div>
             </div>
             <div>
+              <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#6D28D9' }}>Sale Price</label>
+              <input type="number" step="any" className="input-text-clean" value={unitABreakdown.salePrice} readOnly style={{ textAlign: 'center', fontWeight: 900, color: '#6D28D9', background: '#F5F3FF', cursor: 'default' }} />
+              <div className="subtext-calc-red">{unitABreakdown.salePrice}</div>
+            </div>
+            <div>
+              <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#1E40AF' }}>Prof% -M</label>
+              <input type="number" className="input-text-clean" value={unitAProfAm} onChange={e => setUnitAProfAm(e.target.value)} style={{ textAlign: 'center', borderColor: '#3B82F6' }} />
+              <div className="subtext-calc-red">{unitABreakdown.profAmAmt}</div>
+            </div>
+            <div>
               <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#1E40AF' }}>Round-M</label>
               <input type="number" className="input-text-clean" value={unitARoundUpMrp} onChange={e => setUnitARoundUpMrp(e.target.value)} style={{ textAlign: 'center', borderColor: '#3B82F6' }} />
               <div className="subtext-calc-red">{unitABreakdown.roundUpMrp}</div>
             </div>
             <div>
-              <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#6D28D9' }}>Sale Price</label>
-              <input type="number" className="input-text-clean" value={unitASalePrice} onChange={e => setUnitASalePrice(e.target.value)} style={{ textAlign: 'center', fontWeight: 800, color: '#6D28D9' }} />
-              <div className="subtext-calc-red">{unitABreakdown.salePrice}</div>
-            </div>
-            <div>
               <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#1E40AF' }}>mrp</label>
-              <input type="number" className="input-text-clean" value={unitAMrp} onChange={e => setUnitAMrp(e.target.value)} style={{ textAlign: 'center', fontWeight: 800, color: '#1E40AF' }} />
+              <input type="number" step="any" className="input-text-clean" value={unitABreakdown.mrp} readOnly style={{ textAlign: 'center', fontWeight: 900, color: '#1E40AF', background: '#EFF6FF', cursor: 'default' }} />
               <div className="subtext-calc-red">{unitABreakdown.mrp}</div>
             </div>
           </div>
@@ -409,12 +409,7 @@ export const QuickItemModal: React.FC = () => {
               <div className="subtext-calc-red">{unitBBreakdown.misAmt}</div>
             </div>
             <div>
-              <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#1E40AF' }}>Prof % Am</label>
-              <input type="number" className="input-text-clean" value={unitBProfAm} onChange={e => setUnitBProfAm(e.target.value)} style={{ textAlign: 'center', borderColor: '#3B82F6' }} />
-              <div className="subtext-calc-red">{unitBBreakdown.profAmAmt}</div>
-            </div>
-            <div>
-              <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#6D28D9' }}>Prof % deal</label>
+              <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#6D28D9' }}>Prof% -S</label>
               <input type="number" className="input-text-clean" value={unitBProfDeal} onChange={e => setUnitBProfDeal(e.target.value)} style={{ textAlign: 'center', borderColor: '#8B5CF6' }} />
               <div className="subtext-calc-red">{unitBBreakdown.profDealAmt}</div>
             </div>
@@ -424,18 +419,23 @@ export const QuickItemModal: React.FC = () => {
               <div className="subtext-calc-red">{unitBBreakdown.roundUpSale}</div>
             </div>
             <div>
+              <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#6D28D9' }}>Sale Price</label>
+              <input type="number" step="any" className="input-text-clean" value={unitBBreakdown.salePrice} readOnly style={{ textAlign: 'center', fontWeight: 900, color: '#6D28D9', background: '#F5F3FF', cursor: 'default' }} />
+              <div className="subtext-calc-red">{unitBBreakdown.salePrice}</div>
+            </div>
+            <div>
+              <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#1E40AF' }}>Prof% -M</label>
+              <input type="number" className="input-text-clean" value={unitBProfAm} onChange={e => setUnitBProfAm(e.target.value)} style={{ textAlign: 'center', borderColor: '#3B82F6' }} />
+              <div className="subtext-calc-red">{unitBBreakdown.profAmAmt}</div>
+            </div>
+            <div>
               <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#1E40AF' }}>Round-M</label>
               <input type="number" className="input-text-clean" value={unitBRoundUpMrp} onChange={e => setUnitBRoundUpMrp(e.target.value)} style={{ textAlign: 'center', borderColor: '#3B82F6' }} />
               <div className="subtext-calc-red">{unitBBreakdown.roundUpMrp}</div>
             </div>
             <div>
-              <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#6D28D9' }}>Sale Price</label>
-              <input type="number" className="input-text-clean" value={unitBSalePrice} onChange={e => setUnitBSalePrice(e.target.value)} style={{ textAlign: 'center', fontWeight: 800, color: '#6D28D9' }} />
-              <div className="subtext-calc-red">{unitBBreakdown.salePrice}</div>
-            </div>
-            <div>
               <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#1E40AF' }}>mrp</label>
-              <input type="number" className="input-text-clean" value={unitBMrp} onChange={e => setUnitBMrp(e.target.value)} style={{ textAlign: 'center', fontWeight: 800, color: '#1E40AF' }} />
+              <input type="number" step="any" className="input-text-clean" value={unitBBreakdown.mrp} readOnly style={{ textAlign: 'center', fontWeight: 900, color: '#1E40AF', background: '#EFF6FF', cursor: 'default' }} />
               <div className="subtext-calc-red">{unitBBreakdown.mrp}</div>
             </div>
           </div>

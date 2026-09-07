@@ -17,9 +17,8 @@ export const QuickPartyModal: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [phone2, setPhone2] = useState('');
   const [email, setEmail] = useState('');
+  const [openingBalance, setOpeningBalance] = useState<string>('0');
   const [partyType, setPartyType] = useState<'DEALER' | 'AMATEUR'>('AMATEUR');
-  const [dealerProfitPercent, setDealerProfitPercent] = useState<string>('0');
-  const [amateurProfitPercent, setAmateurProfitPercent] = useState<string>('0');
 
   if (!quickModal.isOpen || quickModal.type !== 'PARTY') return null;
 
@@ -43,12 +42,12 @@ export const QuickPartyModal: React.FC = () => {
       phone: phone.trim(),
       phone2: phone2.trim(),
       email: email.trim(),
-      openingBalance: 0,
+      openingBalance: openingBalance !== '' ? Number(openingBalance) : 0,
       creditLimit: 0,
       isActive: true,
       partyType,
-      dealerProfitPercent: dealerProfitPercent !== '' ? Number(dealerProfitPercent) : 0,
-      amateurProfitPercent: amateurProfitPercent !== '' ? Number(amateurProfitPercent) : 0,
+      dealerProfitPercent: 0,
+      amateurProfitPercent: 0,
       createdAt: new Date().toISOString().split('T')[0]
     };
 
@@ -68,9 +67,8 @@ export const QuickPartyModal: React.FC = () => {
     setPhone('');
     setPhone2('');
     setEmail('');
+    setOpeningBalance('0');
     setPartyType('AMATEUR');
-    setDealerProfitPercent('0');
-    setAmateurProfitPercent('0');
     closeQuickModal();
   };
 
@@ -241,6 +239,21 @@ export const QuickPartyModal: React.FC = () => {
             value={email}
             onChange={e => setEmail(e.target.value)}
             placeholder="e.g. party@example.com"
+          />
+        </div>
+
+        <div>
+          <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '3px' }}>
+            Opening Balance / Previous Dues (₹)
+          </label>
+          <input
+            type="number"
+            step="any"
+            className="input-text-clean"
+            value={openingBalance}
+            onChange={e => setOpeningBalance(e.target.value)}
+            placeholder="0"
+            style={{ fontWeight: 800, color: '#002B99' }}
           />
         </div>
 

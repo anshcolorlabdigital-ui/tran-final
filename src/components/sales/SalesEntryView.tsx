@@ -109,16 +109,12 @@ export const SalesEntryView: React.FC = () => {
   const itemSearchRef = useRef<ItemSearchSelectHandle>(null);
 
   const unitABasicPriceInputRef = useRef<HTMLInputElement>(null);
-  const unitAGstPercentInputRef = useRef<HTMLInputElement>(null);
-  const unitAProfAmInputRef = useRef<HTMLInputElement>(null);
-  const unitAProfDealInputRef = useRef<HTMLInputElement>(null);
   const unitAQtyInputRef = useRef<HTMLInputElement>(null);
+  const unitAAddBtnRef = useRef<HTMLButtonElement>(null);
 
   const unitBBasicPriceInputRef = useRef<HTMLInputElement>(null);
-  const unitBGstPercentInputRef = useRef<HTMLInputElement>(null);
-  const unitBProfAmInputRef = useRef<HTMLInputElement>(null);
-  const unitBProfDealInputRef = useRef<HTMLInputElement>(null);
   const unitBQtyInputRef = useRef<HTMLInputElement>(null);
+  const unitBAddBtnRef = useRef<HTMLButtonElement>(null);
 
   const roundUpInputRef = useRef<HTMLInputElement>(null);
   const recdCashInputRef = useRef<HTMLInputElement>(null);
@@ -228,28 +224,92 @@ export const SalesEntryView: React.FC = () => {
     setPartyId(newPartyId);
   };
 
-  // Live computed values for Unit A and Unit B with Dual Margins & Party Type
+  const isDealer = selectedParty?.partyType === 'DEALER';
+
+  // Live computed values for Unit A and Unit B directly taking Item's configured MRP / Sale Price
   const calculatedUnitAPricing = useMemo(() => {
-    return calculateSalesItemPricing(
-      Number(unitABasicPrice),
-      Number(unitAGstPercent),
-      Number(unitAProfAm),
-      Number(unitAProfDeal),
-      Number(unitAQty),
-      selectedParty?.partyType === 'DEALER'
-    );
-  }, [unitABasicPrice, unitAGstPercent, unitAProfAm, unitAProfDeal, unitAQty, selectedParty]);
+    if (!selectedItemObj) {
+      return {
+        basicPrice: 0,
+        gstPercent: 0,
+        gstAmt: 0,
+        nettPrice: 0,
+        profPercentAm: 0,
+        profPercentDeal: 0,
+        salePrice: 0,
+        mrp: 0,
+        effectivePrice: 0,
+        qty: 0,
+        amount: 0
+      };
+    }
+    const uA = selectedItemObj.unitA;
+    const saleRate = uA?.salePrice ?? selectedItemObj.saleRate ?? 0;
+    const mrpRate = uA?.mrp ?? selectedItemObj.mrp ?? saleRate;
+    const effectiveRate = isDealer ? saleRate : (mrpRate || saleRate);
+    const qty = Number(unitAQty) || 0;
+    const amount = Number((effectiveRate * qty).toFixed(2));
+    const basic = uA?.basicPrice ?? selectedItemObj.purchaseRate ?? 0;
+    const gst = uA?.gstPercent ?? selectedItemObj.gstPercent ?? 18;
+    const gstAmt = Number((basic * (gst / 100)).toFixed(2));
+    const nett = Number((basic + gstAmt).toFixed(2));
+
+    return {
+      basicPrice: basic,
+      gstPercent: gst,
+      gstAmt,
+      nettPrice: nett,
+      profPercentAm: uA?.profPercentAm ?? selectedItemObj.profPercentAm ?? 0,
+      profPercentDeal: uA?.profPercentDeal ?? uA?.profPercent ?? selectedItemObj.profPercentDeal ?? 0,
+      salePrice: saleRate,
+      mrp: mrpRate,
+      effectivePrice: effectiveRate,
+      qty,
+      amount
+    };
+  }, [selectedItemObj, unitAQty, isDealer]);
 
   const calculatedUnitBPricing = useMemo(() => {
-    return calculateSalesItemPricing(
-      Number(unitBBasicPrice),
-      Number(unitBGstPercent),
-      Number(unitBProfAm),
-      Number(unitBProfDeal),
-      Number(unitBQty),
-      selectedParty?.partyType === 'DEALER'
-    );
-  }, [unitBBasicPrice, unitBGstPercent, unitBProfAm, unitBProfDeal, unitBQty, selectedParty]);
+    if (!selectedItemObj || !selectedItemObj.unitB) {
+      return {
+        basicPrice: 0,
+        gstPercent: 0,
+        gstAmt: 0,
+        nettPrice: 0,
+        profPercentAm: 0,
+        profPercentDeal: 0,
+        salePrice: 0,
+        mrp: 0,
+        effectivePrice: 0,
+        qty: 0,
+        amount: 0
+      };
+    }
+    const uB = selectedItemObj.unitB;
+    const saleRate = uB.salePrice ?? 0;
+    const mrpRate = uB.mrp ?? saleRate;
+    const effectiveRate = isDealer ? saleRate : (mrpRate || saleRate);
+    const qty = Number(unitBQty) || 0;
+    const amount = Number((effectiveRate * qty).toFixed(2));
+    const basic = uB.basicPrice ?? 0;
+    const gst = uB.gstPercent ?? selectedItemObj.gstPercent ?? 18;
+    const gstAmt = Number((basic * (gst / 100)).toFixed(2));
+    const nett = Number((basic + gstAmt).toFixed(2));
+
+    return {
+      basicPrice: basic,
+      gstPercent: gst,
+      gstAmt,
+      nettPrice: nett,
+      profPercentAm: uB.profPercentAm ?? 0,
+      profPercentDeal: uB.profPercentDeal ?? uB.profPercent ?? 0,
+      salePrice: saleRate,
+      mrp: mrpRate,
+      effectivePrice: effectiveRate,
+      qty,
+      amount
+    };
+  }, [selectedItemObj, unitBQty, isDealer]);
 
   // Current stock for the selected item
   const selectedItemCurrentStock = useMemo(() => {
@@ -798,8 +858,8 @@ export const SalesEntryView: React.FC = () => {
             selectedItemId={selectedItemId}
             onSelectItem={(item) => handleItemSelect(item ? item.id : '')}
             onEnterNext={() => {
-              unitABasicPriceInputRef.current?.focus();
-              unitABasicPriceInputRef.current?.select();
+              unitAQtyInputRef.current?.focus();
+              unitAQtyInputRef.current?.select();
             }}
             onQuickAdd={() => openQuickModal('ITEM', (newId) => handleItemSelect(newId))}
             placeholder="Type to search item name/code or use arrow keys..."
@@ -829,134 +889,54 @@ export const SalesEntryView: React.FC = () => {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: '1.1fr 70px 0.85fr 0.9fr 75px 75px 1fr 1fr 85px 1.05fr auto',
-                gap: '6px',
+                gridTemplateColumns: '1.2fr 100px 1.2fr auto',
+                gap: '10px',
                 alignItems: 'flex-end'
               }}
             >
-              <div>
-                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Besic Price</label>
-                <input
-                  ref={unitABasicPriceInputRef}
-                  type="number"
-                  step="0.01"
-                  className="input-text-clean"
-                  value={unitABasicPrice}
-                  onChange={e => { setIsTouched(true); setUnitABasicPrice(e.target.value); }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      unitAGstPercentInputRef.current?.focus();
-                      unitAGstPercentInputRef.current?.select();
-                    }
-                  }}
-                  style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }}
-                />
-              </div>
-              <div>
-                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>GST %</label>
-                <input
-                  ref={unitAGstPercentInputRef}
-                  type="number"
-                  className="input-text-clean"
-                  value={unitAGstPercent}
-                  onChange={e => { setIsTouched(true); setUnitAGstPercent(e.target.value); }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      unitAProfAmInputRef.current?.focus();
-                      unitAProfAmInputRef.current?.select();
-                    }
-                  }}
-                  style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }}
-                />
-              </div>
-              <div>
-                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>GST Amt.</label>
-                <input type="text" readOnly className="input-text-clean" value={calculatedUnitAPricing.gstAmt} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }} />
-              </div>
-              <div>
-                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Nett Price</label>
-                <input type="text" readOnly className="input-text-clean" value={calculatedUnitAPricing.nettPrice} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }} />
-              </div>
-              <div>
-                <label style={{ display: 'block', color: '#1E40AF', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Prof % Am</label>
-                <input
-                  ref={unitAProfAmInputRef}
-                  type="number"
-                  step="0.01"
-                  className="input-text-clean"
-                  value={unitAProfAm}
-                  onChange={e => { setIsTouched(true); setUnitAProfAm(e.target.value); }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      unitAProfDealInputRef.current?.focus();
-                      unitAProfDealInputRef.current?.select();
-                    }
-                  }}
-                  style={{ textAlign: 'center', padding: '4px', fontWeight: 700, borderColor: '#3B82F6' }}
-                />
-              </div>
-              <div>
-                <label style={{ display: 'block', color: '#5B21B6', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Prof % deal</label>
-                <input
-                  ref={unitAProfDealInputRef}
-                  type="number"
-                  step="0.01"
-                  className="input-text-clean"
-                  value={unitAProfDeal}
-                  onChange={e => { setIsTouched(true); setUnitAProfDeal(e.target.value); }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      unitAQtyInputRef.current?.focus();
-                      unitAQtyInputRef.current?.select();
-                    }
-                  }}
-                  style={{ textAlign: 'center', padding: '4px', fontWeight: 700, borderColor: '#8B5CF6' }}
-                />
-              </div>
-              <div>
-                <label style={{ display: 'block', color: '#5B21B6', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
-                  Sale Price {selectedParty?.partyType === 'DEALER' && '★'}
-                </label>
-                <input
-                  type="text"
-                  readOnly
-                  className="input-text-clean"
-                  value={calculatedUnitAPricing.salePrice}
-                  style={{
-                    textAlign: 'center',
-                    background: selectedParty?.partyType === 'DEALER' ? '#F5F3FF' : '#F9FAFB',
-                    borderColor: selectedParty?.partyType === 'DEALER' ? '#8B5CF6' : '#E5E7EB',
-                    color: selectedParty?.partyType === 'DEALER' ? '#6D28D9' : '#374151',
-                    padding: '4px',
-                    fontWeight: 800
-                  }}
-                  title={selectedParty?.partyType === 'DEALER' ? 'Dealer rate applied to bill' : 'Dealer price'}
-                />
-              </div>
-              <div>
-                <label style={{ display: 'block', color: '#1E40AF', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
-                  mrp {selectedParty?.partyType === 'AMATEUR' && '★'}
-                </label>
-                <input
-                  type="text"
-                  readOnly
-                  className="input-text-clean"
-                  value={calculatedUnitAPricing.mrp}
-                  style={{
-                    textAlign: 'center',
-                    background: selectedParty?.partyType === 'AMATEUR' ? '#EFF6FF' : '#F9FAFB',
-                    borderColor: selectedParty?.partyType === 'AMATEUR' ? '#3B82F6' : '#E5E7EB',
-                    color: selectedParty?.partyType === 'AMATEUR' ? '#1D4ED8' : '#374151',
-                    padding: '4px',
-                    fontWeight: 800
-                  }}
-                  title={selectedParty?.partyType === 'AMATEUR' ? 'Amateur (MRP) rate applied to bill' : 'Amateur (MRP) price'}
-                />
-              </div>
+              {selectedParty?.partyType === 'DEALER' ? (
+                <div>
+                  <label style={{ display: 'block', color: '#5B21B6', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
+                    Sale Price ★ (Dealer)
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    className="input-text-clean"
+                    value={calculatedUnitAPricing.salePrice}
+                    style={{
+                      textAlign: 'center',
+                      background: '#F5F3FF',
+                      borderColor: '#8B5CF6',
+                      color: '#6D28D9',
+                      padding: '4px',
+                      fontWeight: 800
+                    }}
+                    title="Dealer rate applied to bill"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label style={{ display: 'block', color: '#1E40AF', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
+                    MRP ★ {selectedParty?.partyType === 'AMATEUR' ? '(Amateur)' : ''}
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    className="input-text-clean"
+                    value={calculatedUnitAPricing.mrp}
+                    style={{
+                      textAlign: 'center',
+                      background: '#EFF6FF',
+                      borderColor: '#3B82F6',
+                      color: '#1D4ED8',
+                      padding: '4px',
+                      fontWeight: 800
+                    }}
+                    title="Amateur / Retail MRP applied to bill"
+                  />
+                </div>
+              )}
               <div>
                 <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Qty ({selectedItemObj?.unitA?.unitName || 'Unit A'})</label>
                 <input
@@ -969,7 +949,7 @@ export const SalesEntryView: React.FC = () => {
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
-                      handleAddUnitAItem();
+                      unitAAddBtnRef.current?.focus();
                     }
                   }}
                   style={{ textAlign: 'center', padding: '4px', fontWeight: 900, color: '#EA3943' }}
@@ -981,11 +961,35 @@ export const SalesEntryView: React.FC = () => {
               </div>
               <div style={{ paddingBottom: '2px' }}>
                 <button
+                  ref={unitAAddBtnRef}
                   type="button"
                   onClick={handleAddUnitAItem}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddUnitAItem();
+                    }
+                  }}
                   className="btn-customer-save"
-                  style={{ padding: '6px 14px', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
-                  title="Add item (or press Enter in Qty)"
+                  style={{
+                    padding: '7px 18px',
+                    fontSize: '0.85rem',
+                    fontWeight: 900,
+                    whiteSpace: 'nowrap',
+                    outline: 'none',
+                    transition: 'all 0.15s ease-in-out'
+                  }}
+                  onFocus={e => {
+                    e.currentTarget.style.boxShadow = '0 0 0 3.5px #1E40AF, 0 4px 14px rgba(30, 64, 175, 0.45)';
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                    e.currentTarget.style.borderColor = '#1E40AF';
+                  }}
+                  onBlur={e => {
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.transform = 'scale(1)';
+                    e.currentTarget.style.borderColor = '#000000';
+                  }}
+                  title="Add item (press Enter to add)"
                 >
                   + Add {selectedItemObj?.unitA?.unitName || 'Unit A'}
                 </button>
@@ -1020,134 +1024,54 @@ export const SalesEntryView: React.FC = () => {
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '1.1fr 70px 0.85fr 0.9fr 75px 75px 1fr 1fr 85px 1.05fr auto',
-                  gap: '6px',
+                  gridTemplateColumns: '1.2fr 100px 1.2fr auto',
+                  gap: '10px',
                   alignItems: 'flex-end'
                 }}
               >
-                <div>
-                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Besic Price</label>
-                  <input
-                    ref={unitBBasicPriceInputRef}
-                    type="number"
-                    step="0.01"
-                    className="input-text-clean"
-                    value={unitBBasicPrice}
-                    onChange={e => { setIsTouched(true); setUnitBBasicPrice(e.target.value); }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        unitBGstPercentInputRef.current?.focus();
-                        unitBGstPercentInputRef.current?.select();
-                      }
-                    }}
-                    style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>GST %</label>
-                  <input
-                    ref={unitBGstPercentInputRef}
-                    type="number"
-                    className="input-text-clean"
-                    value={unitBGstPercent}
-                    onChange={e => { setIsTouched(true); setUnitBGstPercent(e.target.value); }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        unitBProfAmInputRef.current?.focus();
-                        unitBProfAmInputRef.current?.select();
-                      }
-                    }}
-                    style={{ textAlign: 'center', padding: '4px', fontWeight: 700 }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>GST Amt.</label>
-                  <input type="text" readOnly className="input-text-clean" value={calculatedUnitBPricing.gstAmt} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }} />
-                </div>
-                <div>
-                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Nett Price</label>
-                  <input type="text" readOnly className="input-text-clean" value={calculatedUnitBPricing.nettPrice} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }} />
-                </div>
-                <div>
-                  <label style={{ display: 'block', color: '#1E40AF', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Prof % Am</label>
-                  <input
-                    ref={unitBProfAmInputRef}
-                    type="number"
-                    step="0.01"
-                    className="input-text-clean"
-                    value={unitBProfAm}
-                    onChange={e => { setIsTouched(true); setUnitBProfAm(e.target.value); }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        unitBProfDealInputRef.current?.focus();
-                        unitBProfDealInputRef.current?.select();
-                      }
-                    }}
-                    style={{ textAlign: 'center', padding: '4px', fontWeight: 700, borderColor: '#3B82F6' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', color: '#5B21B6', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Prof % deal</label>
-                  <input
-                    ref={unitBProfDealInputRef}
-                    type="number"
-                    step="0.01"
-                    className="input-text-clean"
-                    value={unitBProfDeal}
-                    onChange={e => { setIsTouched(true); setUnitBProfDeal(e.target.value); }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        unitBQtyInputRef.current?.focus();
-                        unitBQtyInputRef.current?.select();
-                      }
-                    }}
-                    style={{ textAlign: 'center', padding: '4px', fontWeight: 700, borderColor: '#8B5CF6' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', color: '#5B21B6', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
-                    Sale Price {selectedParty?.partyType === 'DEALER' && '★'}
-                  </label>
-                  <input
-                    type="text"
-                    readOnly
-                    className="input-text-clean"
-                    value={calculatedUnitBPricing.salePrice}
-                    style={{
-                      textAlign: 'center',
-                      background: selectedParty?.partyType === 'DEALER' ? '#F5F3FF' : '#F9FAFB',
-                      borderColor: selectedParty?.partyType === 'DEALER' ? '#8B5CF6' : '#E5E7EB',
-                      color: selectedParty?.partyType === 'DEALER' ? '#6D28D9' : '#374151',
-                      padding: '4px',
-                      fontWeight: 800
-                    }}
-                    title={selectedParty?.partyType === 'DEALER' ? 'Dealer rate applied to bill' : 'Dealer price'}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', color: '#1E40AF', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
-                    mrp {selectedParty?.partyType === 'AMATEUR' && '★'}
-                  </label>
-                  <input
-                    type="text"
-                    readOnly
-                    className="input-text-clean"
-                    value={calculatedUnitBPricing.mrp}
-                    style={{
-                      textAlign: 'center',
-                      background: selectedParty?.partyType === 'AMATEUR' ? '#EFF6FF' : '#F9FAFB',
-                      borderColor: selectedParty?.partyType === 'AMATEUR' ? '#3B82F6' : '#E5E7EB',
-                      color: selectedParty?.partyType === 'AMATEUR' ? '#1D4ED8' : '#374151',
-                      padding: '4px',
-                      fontWeight: 800
-                    }}
-                    title={selectedParty?.partyType === 'AMATEUR' ? 'Amateur (MRP) rate applied to bill' : 'Amateur (MRP) price'}
-                  />
-                </div>
+                {selectedParty?.partyType === 'DEALER' ? (
+                  <div>
+                    <label style={{ display: 'block', color: '#5B21B6', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
+                      Sale Price ★ (Dealer)
+                    </label>
+                    <input
+                      type="text"
+                      readOnly
+                      className="input-text-clean"
+                      value={calculatedUnitBPricing.salePrice}
+                      style={{
+                        textAlign: 'center',
+                        background: '#F5F3FF',
+                        borderColor: '#8B5CF6',
+                        color: '#6D28D9',
+                        padding: '4px',
+                        fontWeight: 800
+                      }}
+                      title="Dealer rate applied to bill"
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <label style={{ display: 'block', color: '#1E40AF', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
+                      MRP ★ {selectedParty?.partyType === 'AMATEUR' ? '(Amateur)' : ''}
+                    </label>
+                    <input
+                      type="text"
+                      readOnly
+                      className="input-text-clean"
+                      value={calculatedUnitBPricing.mrp}
+                      style={{
+                        textAlign: 'center',
+                        background: '#EFF6FF',
+                        borderColor: '#3B82F6',
+                        color: '#1D4ED8',
+                        padding: '4px',
+                        fontWeight: 800
+                      }}
+                      title="Amateur / Retail MRP applied to bill"
+                    />
+                  </div>
+                )}
                 <div>
                   <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Qty ({selectedItemObj?.unitB?.unitName || 'Unit B'})</label>
                   <input
@@ -1160,7 +1084,7 @@ export const SalesEntryView: React.FC = () => {
                     onKeyDown={e => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
-                        handleAddUnitBItem();
+                        unitBAddBtnRef.current?.focus();
                       }
                     }}
                     style={{ textAlign: 'center', padding: '4px', fontWeight: 900, color: '#EA3943' }}
@@ -1172,10 +1096,36 @@ export const SalesEntryView: React.FC = () => {
                 </div>
                 <div style={{ paddingBottom: '2px' }}>
                   <button
+                    ref={unitBAddBtnRef}
                     type="button"
                     onClick={handleAddUnitBItem}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddUnitBItem();
+                      }
+                    }}
                     className="btn-customer-save"
-                    style={{ padding: '6px 14px', fontSize: '0.82rem', whiteSpace: 'nowrap', background: '#A7F3D0' }}
+                    style={{
+                      padding: '7px 18px',
+                      fontSize: '0.85rem',
+                      fontWeight: 900,
+                      whiteSpace: 'nowrap',
+                      background: '#A7F3D0',
+                      outline: 'none',
+                      transition: 'all 0.15s ease-in-out'
+                    }}
+                    onFocus={e => {
+                      e.currentTarget.style.boxShadow = '0 0 0 3.5px #059669, 0 4px 14px rgba(5, 150, 105, 0.45)';
+                      e.currentTarget.style.transform = 'scale(1.05)';
+                      e.currentTarget.style.borderColor = '#059669';
+                    }}
+                    onBlur={e => {
+                      e.currentTarget.style.boxShadow = 'none';
+                      e.currentTarget.style.transform = 'scale(1)';
+                      e.currentTarget.style.borderColor = '#000000';
+                    }}
+                    title="Add secondary unit item (press Enter to add)"
                   >
                     + Add {selectedItemObj?.unitB?.unitName || 'Unit B'}
                   </button>
@@ -1191,21 +1141,18 @@ export const SalesEntryView: React.FC = () => {
             <thead>
               <tr style={{ background: '#D2BEF6', borderBottom: '2px solid #000000' }}>
                 <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 800, borderRight: '1px solid #000000' }}>Item</th>
-                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '85px', borderRight: '1px solid #000000' }}>Besic Price</th>
-                <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, width: '60px', borderRight: '1px solid #000000' }}>GST</th>
-                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '85px', borderRight: '1px solid #000000' }}>Net Price</th>
-                <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, width: '75px', borderRight: '1px solid #000000' }}>Prof % Am</th>
-                <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, width: '75px', borderRight: '1px solid #000000' }}>Prof % Deal</th>
-                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '85px', borderRight: '1px solid #000000' }}>Sale Price</th>
-                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '85px', borderRight: '1px solid #000000' }}>MRP</th>
-                <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, width: '60px', borderRight: '1px solid #000000' }}>Qty</th>
-                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '100px' }}>Amount</th>
+                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '120px', borderRight: '1px solid #000000' }}>
+                  {selectedParty?.partyType === 'DEALER' ? 'Sale Price' : 'MRP'}
+                </th>
+                <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, width: '90px', borderRight: '1px solid #000000' }}>Qty</th>
+                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '120px', borderRight: '1px solid #000000' }}>Amount</th>
+                <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, width: '70px' }}>Action</th>
               </tr>
             </thead>
             <tbody>
               {billItems.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ padding: '30px', textAlign: 'center', color: '#9CA3AF', fontWeight: 600 }}>
+                  <td colSpan={5} style={{ padding: '30px', textAlign: 'center', color: '#9CA3AF', fontWeight: 600 }}>
                     No items in current sales invoice. Select item above and press Enter on Qty or click "Add".
                   </td>
                 </tr>
@@ -1213,27 +1160,42 @@ export const SalesEntryView: React.FC = () => {
                 billItems.map((item, idx) => (
                   <tr key={idx} onClick={() => handleEditLineItem(idx)} style={{ borderBottom: '1px solid #E5E7EB', cursor: 'pointer', background: editingItemIndex === idx ? '#F3E8FF' : 'transparent' }} title="Click to edit item rates">
                     <td style={{ padding: '8px 12px', fontWeight: 800, borderRight: '1px solid #000000' }}>{item.itemName}</td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, borderRight: '1px solid #000000' }}>{item.basicPrice}</td>
-                    <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, borderRight: '1px solid #000000' }}>{item.gstPercent}%</td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, borderRight: '1px solid #000000' }}>{item.nettPrice}</td>
-                    <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, borderRight: '1px solid #000000', color: '#1E40AF' }}>{item.profPercentAm || 0}%</td>
-                    <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, borderRight: '1px solid #000000', color: '#5B21B6' }}>{item.profPercentDeal || 0}%</td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: selectedParty?.partyType === 'DEALER' ? 900 : 600, borderRight: '1px solid #000000', background: selectedParty?.partyType === 'DEALER' ? '#F5F3FF' : 'transparent', color: selectedParty?.partyType === 'DEALER' ? '#6D28D9' : 'inherit' }}>
-                      {item.salePrice}
+                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, borderRight: '1px solid #000000', color: selectedParty?.partyType === 'DEALER' ? '#6D28D9' : '#1D4ED8' }}>
+                      {selectedParty?.partyType === 'DEALER' ? item.salePrice : (item.mrp || item.salePrice)}
                     </td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: selectedParty?.partyType === 'AMATEUR' ? 900 : 600, borderRight: '1px solid #000000', background: selectedParty?.partyType === 'AMATEUR' ? '#EFF6FF' : 'transparent', color: selectedParty?.partyType === 'AMATEUR' ? '#1D4ED8' : 'inherit' }}>
-                      {item.mrp || item.salePrice}
+                    <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, color: '#16A34A', borderRight: '1px solid #000000' }}>{item.qty} {item.unit}</td>
+                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, borderRight: '1px solid #000000' }}>{item.amount}</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteLineItem(idx);
+                        }}
+                        style={{
+                          background: '#FEE2E2',
+                          border: '1px solid #EF4444',
+                          color: '#B91C1C',
+                          borderRadius: '4px',
+                          padding: '3px 8px',
+                          fontSize: '0.8rem',
+                          fontWeight: 800,
+                          cursor: 'pointer'
+                        }}
+                        title="Remove item from bill"
+                      >
+                        ✕
+                      </button>
                     </td>
-                    <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, color: '#16A34A', borderRight: '1px solid #000000' }}>{item.qty}</td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800 }}>{item.amount}</td>
                   </tr>
                 ))
               )}
             </tbody>
             <tfoot>
               <tr style={{ background: '#D2BEF6', borderTop: '2px solid #000000' }}>
-                <td colSpan={9} style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 900, borderRight: '1px solid #000000' }}>Total</td>
-                <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 900, color: '#002B99' }}>{billSummary.billTotal}</td>
+                <td colSpan={3} style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 900, borderRight: '1px solid #000000' }}>Total</td>
+                <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 900, color: '#002B99', borderRight: '1px solid #000000' }}>{billSummary.billTotal}</td>
+                <td style={{ background: '#D2BEF6' }}></td>
               </tr>
             </tfoot>
           </table>
@@ -1242,15 +1204,6 @@ export const SalesEntryView: React.FC = () => {
         {/* BOTTOM SECTION WITH EDITABLE ROUND UP */}
         <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: '30px', alignItems: 'center', marginTop: '10px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '340px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.95rem', fontWeight: 800 }}>
-              <span>Basic</span>
-              <span>{billSummary.basicTotal}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.95rem', fontWeight: 800 }}>
-              <span>Gst</span>
-              <span>{billSummary.gstTotal}</span>
-            </div>
-            
             {/* EDITABLE ROUND UP */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.95rem', fontWeight: 800 }}>
               <span>Round up</span>

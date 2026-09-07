@@ -33,11 +33,10 @@ export const PartyMasterView: React.FC = () => {
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [mailId, setMailId] = useState('');
+  const [openingBalance, setOpeningBalance] = useState<string>('0');
   const [isActive, setIsActive] = useState<boolean>(true);
   const [allowCredit, setAllowCredit] = useState<boolean>(false);
   const [partyType, setPartyType] = useState<'DEALER' | 'AMATEUR'>('AMATEUR');
-  const [dealerProfitPercent, setDealerProfitPercent] = useState<string>('0');
-  const [amateurProfitPercent, setAmateurProfitPercent] = useState<string>('0');
 
   const [search, setSearch] = useState('');
   const [deleteDialog, setDeleteDialog] = useState<{ isOpen: boolean; id: string; name: string }>({
@@ -84,11 +83,10 @@ export const PartyMasterView: React.FC = () => {
     setCity('');
     setState('');
     setMailId('');
+    setOpeningBalance('0');
     setIsActive(true);
     setAllowCredit(false);
     setPartyType('AMATEUR');
-    setDealerProfitPercent('0');
-    setAmateurProfitPercent('0');
   };
 
   const handleEditParty = (party: Party, viewOnly: boolean = false) => {
@@ -110,11 +108,10 @@ export const PartyMasterView: React.FC = () => {
     setCity(party.city || '');
     setState(party.state || '');
     setMailId(party.email || '');
+    setOpeningBalance(party.openingBalance !== undefined ? String(party.openingBalance) : '0');
     setIsActive(party.isActive !== false);
     setAllowCredit(Boolean(party.allowCredit));
     setPartyType(party.partyType || 'AMATEUR');
-    setDealerProfitPercent(party.dealerProfitPercent !== undefined ? String(party.dealerProfitPercent) : '0');
-    setAmateurProfitPercent(party.amateurProfitPercent !== undefined ? String(party.amateurProfitPercent) : '0');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -145,13 +142,13 @@ export const PartyMasterView: React.FC = () => {
       city: city.trim(),
       state: state.trim(),
       email: mailId.trim(),
-      openingBalance: 0,
+      openingBalance: openingBalance !== '' ? Number(openingBalance) : 0,
       creditLimit: 50000,
       isActive,
       allowCredit,
       partyType,
-      dealerProfitPercent: dealerProfitPercent !== '' ? Number(dealerProfitPercent) : 0,
-      amateurProfitPercent: amateurProfitPercent !== '' ? Number(amateurProfitPercent) : 0,
+      dealerProfitPercent: 0,
+      amateurProfitPercent: 0,
       createdAt: new Date().toISOString()
     };
 
@@ -212,8 +209,7 @@ export const PartyMasterView: React.FC = () => {
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedPartyId, firmName, gstin, propName, propPhone, mobile1, mobile2, contactPerson1, contactPerson2, address, block, distt, city, state, mailId, isActive, allowCredit, partyType, dealerProfitPercent, amateurProfitPercent, isViewOnly]);
+  }, [selectedPartyId, firmName, gstin, propName, propPhone, mobile1, mobile2, contactPerson1, contactPerson2, address, block, distt, city, state, mailId, openingBalance, isActive, allowCredit, partyType, isViewOnly]);
 
   // Payment Recording in Statement Modal
   const handleRecordPayment = (e: React.FormEvent) => {
@@ -635,6 +631,32 @@ export const PartyMasterView: React.FC = () => {
                   setMailId(e.target.value);
                 }}
                 placeholder="e.g. royalprinters@yahoo.com"
+              />
+            </div>
+          </div>
+
+          {/* Row 7: Opening Balance */}
+          <div style={{ background: '#F8FAFC', border: '1.5px solid #CBD5E1', borderRadius: '10px', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+            <div>
+              <label style={{ display: 'block', fontWeight: 900, fontSize: '0.9rem', color: '#1E293B', marginBottom: '2px' }}>
+                Opening Balance / Previous Dues (₹)
+              </label>
+              <span style={{ fontSize: '0.78rem', color: '#64748B', fontWeight: 600 }}>
+                Set existing balance / credit brought forward from past offline accounts
+              </span>
+            </div>
+            <div style={{ minWidth: '200px' }}>
+              <input
+                type="number"
+                step="any"
+                className="input-text-clean"
+                value={openingBalance}
+                onChange={e => {
+                  setIsTouched(true);
+                  setOpeningBalance(e.target.value);
+                }}
+                placeholder="0"
+                style={{ fontWeight: 900, fontSize: '1.05rem', color: '#002B99', textAlign: 'right' }}
               />
             </div>
           </div>
