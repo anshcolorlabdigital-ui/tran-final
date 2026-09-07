@@ -17,6 +17,8 @@ export const QuickSupplierModal: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [phone2, setPhone2] = useState('');
   const [email, setEmail] = useState('');
+  const [openingBalance, setOpeningBalance] = useState<string>('0');
+  const [openingBalanceDate, setOpeningBalanceDate] = useState<string>('2026-04-01');
 
   if (!quickModal.isOpen || quickModal.type !== 'SUPPLIER') return null;
 
@@ -40,7 +42,8 @@ export const QuickSupplierModal: React.FC = () => {
       phone: phone.trim(),
       phone2: phone2.trim(),
       email: email.trim(),
-      openingBalance: 0,
+      openingBalance: openingBalance !== '' ? Number(openingBalance) : 0,
+      openingBalanceDate: openingBalanceDate || '2026-04-01',
       isActive: true,
       createdAt: new Date().toISOString().split('T')[0]
     };
@@ -61,6 +64,8 @@ export const QuickSupplierModal: React.FC = () => {
     setPhone('');
     setPhone2('');
     setEmail('');
+    setOpeningBalance('0');
+    setOpeningBalanceDate('2026-04-01');
     closeQuickModal();
   };
 
@@ -232,6 +237,35 @@ export const QuickSupplierModal: React.FC = () => {
             onChange={e => setEmail(e.target.value)}
             placeholder="e.g. supplier@example.com"
           />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+          <div>
+            <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '4px' }}>
+              Opening Balance (₹)
+            </label>
+            <input
+              type="number"
+              step="any"
+              className="input-text-clean"
+              value={openingBalance}
+              onChange={e => setOpeningBalance(e.target.value)}
+              placeholder="0"
+              style={{ fontWeight: 800, color: '#002B99' }}
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '4px' }}>
+              As-On Date
+            </label>
+            <input
+              type="date"
+              className="input-text-clean"
+              value={openingBalanceDate}
+              onChange={e => setOpeningBalanceDate(e.target.value)}
+              style={{ fontWeight: 800 }}
+            />
+          </div>
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>

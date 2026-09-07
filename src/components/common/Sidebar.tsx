@@ -66,6 +66,8 @@ export const Sidebar: React.FC = () => {
         {navItem('PURCHASE', 'PURCHASE')}
         {navItem('SALE', 'SALE')}
         {navItem('SELF_USE', 'SELF USE')}
+        {navItem('COLLECT_PAYMENT', 'COLLECT PAYMENT')}
+        {navItem('PAY_SUPPLIER', 'PAY SUPPLIER')}
       </div>
 
       {/* SECTION 2: MASTERS */}
@@ -85,6 +87,7 @@ export const Sidebar: React.FC = () => {
         {navItem('REPORT_SELF_USE', 'SELF USE')}
         {navItem('REPORT_ITEM_STOCK', 'ITEM STOCK', lowStockItems.length > 0 ? lowStockItems.length : undefined)}
         {navItem('REPORT_PARTY_LEDGER', 'PARTY LEDGER')}
+        {navItem('REPORT_SUPPLIER_LEDGER', 'SUPPLIER LEDGER')}
         {navItem('REPORT_ITEM_LEDGER', 'ITEM LEDGER')}
       </div>
 

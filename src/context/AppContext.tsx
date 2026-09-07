@@ -45,6 +45,9 @@ interface AppContextType {
   selectedLedgerPartyId: string | null;
   setSelectedLedgerPartyId: (partyId: string | null) => void;
   openPartyLedger: (partyId: string) => void;
+  selectedLedgerSupplierId: string | null;
+  setSelectedLedgerSupplierId: (supplierId: string | null) => void;
+  openSupplierLedger: (supplierId: string) => void;
   selectedLedgerItemId: string | null;
   setSelectedLedgerItemId: (itemId: string | null) => void;
   openItemLedger: (itemId: string) => void;
@@ -60,6 +63,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [refreshKey, setRefreshKey] = useState<number>(0);
   const [pendingPurchasePrefill, setPendingPurchasePrefill] = useState<any | null>(null);
   const [selectedLedgerPartyId, setSelectedLedgerPartyId] = useState<string | null>(null);
+  const [selectedLedgerSupplierId, setSelectedLedgerSupplierId] = useState<string | null>(null);
   const [selectedLedgerItemId, setSelectedLedgerItemId] = useState<string | null>(null);
   const [alertModal, setAlertModal] = useState<AlertModalState>({
     isOpen: false,
@@ -79,6 +83,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const openPartyLedger = useCallback((partyId: string) => {
     setSelectedLedgerPartyId(partyId);
     setActiveTab('REPORT_PARTY_LEDGER');
+  }, []);
+
+  const openSupplierLedger = useCallback((supplierId: string) => {
+    setSelectedLedgerSupplierId(supplierId);
+    setActiveTab('REPORT_SUPPLIER_LEDGER');
   }, []);
 
   const openItemLedger = useCallback((itemId: string) => {
@@ -158,6 +167,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         selectedLedgerPartyId,
         setSelectedLedgerPartyId,
         openPartyLedger,
+        selectedLedgerSupplierId,
+        setSelectedLedgerSupplierId,
+        openSupplierLedger,
         selectedLedgerItemId,
         setSelectedLedgerItemId,
         openItemLedger

@@ -5,7 +5,7 @@ import { db } from '../../db/db';
 import { useApp } from '../../context/AppContext';
 import { StockEngine } from '../../db/stockEngine';
 import { getTodayDateString, formatDateToDisplay } from '../../utils/dateUtils';
-import { calculateItemPricing, calculateBillSummary } from '../../utils/calculations';
+import { calculateItemPricing, calculateBillSummary, updateItemPricingFromPurchase } from '../../utils/calculations';
 import { CheckCircle2, PackageCheck } from 'lucide-react';
 
 interface OrderReceiveModalProps {
@@ -105,6 +105,15 @@ export const OrderReceiveModal: React.FC<OrderReceiveModalProps> = ({
       notes: `Received from Order ${order.orderNumber}`,
       createdAt: new Date().toISOString()
     };
+
+    // Auto-update Item Master prices for newly received items
+    purchaseItems.forEach(pi => {
+      const itemToUpdate = itemsDb.find(i => i.id === pi.itemId);
+      if (itemToUpdate && Number(pi.basicPrice) > 0) {
+        const updatedItem = updateItemPricingFromPurchase(itemToUpdate, Number(pi.basicPrice), Number(pi.gstPercent));
+        db.saveItem(updatedItem);
+      }
+    });
 
     // Saving the purchase automatically increases physical stock through the stock ledger!
     db.savePurchase(newPurchase);

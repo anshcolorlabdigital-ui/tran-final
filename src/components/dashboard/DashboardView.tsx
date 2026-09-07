@@ -1,12 +1,14 @@
-import React, { useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { StockEngine } from '../../db/stockEngine';
 import { formatDateToDisplay } from '../../utils/dateUtils';
 import { formatCurrency } from '../../utils/calculations';
-import { AlertCircle, ShoppingCart, ArrowRight } from 'lucide-react';
+import { AlertCircle, ShoppingCart, ArrowRight, CreditCard, PlusCircle } from 'lucide-react';
+import { PaymentCollectModal } from '../common/PaymentCollectModal';
 
 export const DashboardView: React.FC = () => {
   const { selectedDate, refreshKey, setActiveTab } = useApp();
+  const [isCollectPaymentOpen, setIsCollectPaymentOpen] = useState(false);
 
   // Calculate live sales numbers for the selected date
   const salesMetrics = useMemo(() => {
@@ -20,12 +22,35 @@ export const DashboardView: React.FC = () => {
 
   return (
     <div className="content-panel-grey">
-      {/* Date Header Strip */}
-      <div className="date-selector-strip">
+      {/* Date Header Strip & Action Bar */}
+      <div className="date-selector-strip" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
         <div className="today-date-badge">
           <span className="label">TODAY</span>
           <span>{formatDateToDisplay(selectedDate)}</span>
         </div>
+
+        <button
+          type="button"
+          onClick={() => setIsCollectPaymentOpen(true)}
+          className="btn-classic"
+          style={{
+            background: '#16A34A',
+            color: '#FFFFFF',
+            border: '2px solid #000000',
+            fontWeight: 900,
+            fontSize: '0.95rem',
+            padding: '8px 18px',
+            borderRadius: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            cursor: 'pointer',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.15)'
+          }}
+        >
+          <PlusCircle size={18} />
+          <span>Collect Payment</span>
+        </button>
       </div>
 
       {/* SALES SUMMARY SECTION */}
@@ -332,6 +357,12 @@ export const DashboardView: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Reusable Collect Payment Modal */}
+      <PaymentCollectModal
+        isOpen={isCollectPaymentOpen}
+        onClose={() => setIsCollectPaymentOpen(false)}
+      />
     </div>
   );
 };

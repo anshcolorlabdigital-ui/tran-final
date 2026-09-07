@@ -34,6 +34,7 @@ export const PartyMasterView: React.FC = () => {
   const [state, setState] = useState('');
   const [mailId, setMailId] = useState('');
   const [openingBalance, setOpeningBalance] = useState<string>('0');
+  const [openingBalanceDate, setOpeningBalanceDate] = useState<string>('2026-04-01');
   const [isActive, setIsActive] = useState<boolean>(true);
   const [allowCredit, setAllowCredit] = useState<boolean>(false);
   const [partyType, setPartyType] = useState<'DEALER' | 'AMATEUR'>('AMATEUR');
@@ -84,6 +85,7 @@ export const PartyMasterView: React.FC = () => {
     setState('');
     setMailId('');
     setOpeningBalance('0');
+    setOpeningBalanceDate('2026-04-01');
     setIsActive(true);
     setAllowCredit(false);
     setPartyType('AMATEUR');
@@ -109,6 +111,7 @@ export const PartyMasterView: React.FC = () => {
     setState(party.state || '');
     setMailId(party.email || '');
     setOpeningBalance(party.openingBalance !== undefined ? String(party.openingBalance) : '0');
+    setOpeningBalanceDate(party.openingBalanceDate || (party.createdAt ? party.createdAt.split('T')[0] : '2026-04-01'));
     setIsActive(party.isActive !== false);
     setAllowCredit(Boolean(party.allowCredit));
     setPartyType(party.partyType || 'AMATEUR');
@@ -126,6 +129,7 @@ export const PartyMasterView: React.FC = () => {
       return;
     }
 
+    const existingParty = selectedPartyId ? db.getPartyById(selectedPartyId) : undefined;
     const partyRecord: Party = {
       id: selectedPartyId || `party-${Date.now()}`,
       name: firmName.trim(),
@@ -143,13 +147,14 @@ export const PartyMasterView: React.FC = () => {
       state: state.trim(),
       email: mailId.trim(),
       openingBalance: openingBalance !== '' ? Number(openingBalance) : 0,
+      openingBalanceDate: openingBalanceDate || '2026-04-01',
       creditLimit: 50000,
       isActive,
       allowCredit,
       partyType,
       dealerProfitPercent: 0,
       amateurProfitPercent: 0,
-      createdAt: new Date().toISOString()
+      createdAt: existingParty?.createdAt || new Date().toISOString()
     };
 
     db.saveParty(partyRecord);
@@ -635,17 +640,20 @@ export const PartyMasterView: React.FC = () => {
             </div>
           </div>
 
-          {/* Row 7: Opening Balance */}
-          <div style={{ background: '#F8FAFC', border: '1.5px solid #CBD5E1', borderRadius: '10px', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+          {/* Row 7: Opening Balance & Effective Date */}
+          <div style={{ background: '#F8FAFC', border: '1.5px solid #CBD5E1', borderRadius: '10px', padding: '14px 16px', display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '14px', alignItems: 'center' }}>
             <div>
               <label style={{ display: 'block', fontWeight: 900, fontSize: '0.9rem', color: '#1E293B', marginBottom: '2px' }}>
-                Opening Balance / Previous Dues (₹)
+                Opening Balance / Previous Dues
               </label>
               <span style={{ fontSize: '0.78rem', color: '#64748B', fontWeight: 600 }}>
-                Set existing balance / credit brought forward from past offline accounts
+                Initial balance brought forward from offline accounts
               </span>
             </div>
-            <div style={{ minWidth: '200px' }}>
+            <div>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.82rem', color: '#475569', marginBottom: '4px' }}>
+                Opening Balance (₹)
+              </label>
               <input
                 type="number"
                 step="any"
@@ -657,6 +665,21 @@ export const PartyMasterView: React.FC = () => {
                 }}
                 placeholder="0"
                 style={{ fontWeight: 900, fontSize: '1.05rem', color: '#002B99', textAlign: 'right' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.82rem', color: '#475569', marginBottom: '4px' }}>
+                As-On / Effective Date
+              </label>
+              <input
+                type="date"
+                className="input-text-clean"
+                value={openingBalanceDate}
+                onChange={e => {
+                  setIsTouched(true);
+                  setOpeningBalanceDate(e.target.value);
+                }}
+                style={{ fontWeight: 800, fontSize: '0.92rem' }}
               />
             </div>
           </div>

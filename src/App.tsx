@@ -8,6 +8,8 @@ import { OrderedView } from './components/orders/OrderedView';
 import { SalesEntryView } from './components/sales/SalesEntryView';
 import { PurchaseEntryView } from './components/purchase/PurchaseEntryView';
 import { SelfUseView } from './components/selfuse/SelfUseView';
+import { PaymentCollectionView } from './components/payments/PaymentCollectionView';
+import { SupplierPaymentView } from './components/payments/SupplierPaymentView';
 import { PartyMasterView } from './components/masters/PartyMasterView';
 import { ItemMasterView } from './components/masters/ItemMasterView';
 import { SupplierMasterView } from './components/masters/SupplierMasterView';
@@ -17,6 +19,7 @@ import { PurchaseReportView } from './components/reports/PurchaseReportView';
 import { SelfUseReportView } from './components/reports/SelfUseReportView';
 import { ItemStockReportView } from './components/reports/ItemStockReportView';
 import { PartyLedgerReportView } from './components/reports/PartyLedgerReportView';
+import { SupplierLedgerReportView } from './components/reports/SupplierLedgerReportView';
 import { ItemLedgerReportView } from './components/reports/ItemLedgerReportView';
 import { AdminSettingsView } from './components/settings/AdminSettingsView';
 import { UserPermissionsView } from './components/settings/UserPermissionsView';
@@ -43,6 +46,10 @@ export const App: React.FC = () => {
         return <SalesEntryView />;
       case 'SELF_USE':
         return <SelfUseView />;
+      case 'COLLECT_PAYMENT':
+        return <PaymentCollectionView />;
+      case 'PAY_SUPPLIER':
+        return <SupplierPaymentView />;
       case 'PARTY':
         return <PartyMasterView />;
       case 'ITEM':
@@ -61,6 +68,8 @@ export const App: React.FC = () => {
         return <ItemStockReportView />;
       case 'REPORT_PARTY_LEDGER':
         return <PartyLedgerReportView />;
+      case 'REPORT_SUPPLIER_LEDGER':
+        return <SupplierLedgerReportView />;
       case 'REPORT_ITEM_LEDGER':
         return <ItemLedgerReportView />;
       case 'ADMIN':

@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Item, ItemUnitPricing, Party, Sale, SaleItem } from '../../types';
 import { StockEngine } from '../../db/stockEngine';
 import { getTodayDateString } from '../../utils/dateUtils';
-import { calculateItemPricing, calculateBillSummary, calculateSalesItemPricing } from '../../utils/calculations';
+import { calculateBillSummary } from '../../utils/calculations';
 import { SalesPrintInvoice } from './SalesPrintInvoice';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { ItemSearchSelect, ItemSearchSelectHandle } from '../common/ItemSearchSelect';

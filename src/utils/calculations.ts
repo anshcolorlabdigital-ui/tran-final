@@ -65,7 +65,6 @@ export function calculateItemUnitBreakdown(
     mis = Number(basicPriceOrConfig.misPercent) || 0;
     rUpSale = Number(basicPriceOrConfig.roundUpSale !== undefined ? basicPriceOrConfig.roundUpSale : basicPriceOrConfig.roundUp) || 0;
     rUpMrp = Number(basicPriceOrConfig.roundUpMrp) || 0;
-    if (basicPriceOrConfig.nettPrice) manualNett = Number(basicPriceOrConfig.nettPrice);
   } else {
     basic = Number(basicPriceOrConfig) || 0;
     gst = Number(gstPercent) || 0;
@@ -146,6 +145,148 @@ export function calculateUnitBFromUnitA(
     roundUp: 0
   });
 }
+
+/**
+ * Normalizes an Item's Unit A and Unit B pricing breakdown, ensuring that
+ * salePrice, mrp, nettPrice, and all breakdown amounts match the configured formula
+ */
+export function normalizeItemPricing<T extends {
+  purchaseRate?: number;
+  saleRate?: number;
+  mrp?: number;
+  gstPercent?: number;
+  hasSecondaryUnit?: boolean;
+  unit?: string;
+  unitA?: any;
+  unitB?: any;
+}>(item: T): T {
+  if (!item) return item;
+
+  const basicPrice = Number(item.unitA?.basicPrice ?? item.purchaseRate ?? 0);
+  const gstPercent = Number(item.unitA?.gstPercent ?? item.gstPercent ?? 18);
+
+  if (item.unitA) {
+    const bdA = calculateItemUnitBreakdown({
+      ...item.unitA,
+      basicPrice,
+      gstPercent
+    });
+
+    const updatedUnitA = {
+      ...item.unitA,
+      ...bdA,
+      unitName: item.unitA.unitName || item.unit || 'Roll',
+      basicPrice,
+      gstPercent,
+      salePrice: bdA.salePrice,
+      mrp: bdA.mrp,
+      isActive: item.unitA.isActive !== false
+    };
+
+    let updatedUnitB = item.unitB;
+    if (item.hasSecondaryUnit && item.unitB) {
+      const conv = Number(item.unitB.conversionFactor) || 1;
+      const bdB = calculateUnitBFromUnitA(bdA, conv);
+      updatedUnitB = {
+        ...item.unitB,
+        ...bdB,
+        unitName: item.unitB.unitName || 'Mt.',
+        conversionFactor: conv,
+        salePrice: bdB.salePrice,
+        mrp: bdB.mrp,
+        isActive: item.unitB.isActive !== false
+      };
+    }
+
+    return {
+      ...item,
+      purchaseRate: basicPrice,
+      saleRate: bdA.salePrice,
+      mrp: bdA.mrp,
+      gstPercent,
+      unitA: updatedUnitA,
+      unitB: updatedUnitB
+    };
+  }
+
+  return item;
+}
+
+/**
+ * Updates an item's prices when a new purchase price is recorded
+ */
+export function updateItemPricingFromPurchase<T extends {
+  purchaseRate?: number;
+  saleRate?: number;
+  mrp?: number;
+  gstPercent?: number;
+  hasSecondaryUnit?: boolean;
+  unit?: string;
+  unitA?: any;
+  unitB?: any;
+}>(item: T, newBasicPrice: number, newGstPercent?: number): T {
+  const safeBasic = Number(newBasicPrice) || 0;
+  if (safeBasic <= 0) return item;
+
+  const safeGst = newGstPercent !== undefined ? Number(newGstPercent) : Number(item.unitA?.gstPercent ?? item.gstPercent ?? 18);
+
+  const baseUnitA = item.unitA || {
+    unitName: item.unit || 'Roll',
+    basicPrice: safeBasic,
+    gstPercent: safeGst,
+    tranPercent: 0,
+    profPercent: 0,
+    profPercentAm: 0,
+    profPercentDeal: 0,
+    misPercent: 0,
+    roundUpSale: 0,
+    roundUpMrp: 0,
+    isActive: true
+  };
+
+  const bdA = calculateItemUnitBreakdown({
+    ...baseUnitA,
+    basicPrice: safeBasic,
+    gstPercent: safeGst
+  });
+
+  const updatedUnitA = {
+    ...baseUnitA,
+    ...bdA,
+    unitName: baseUnitA.unitName || item.unit || 'Roll',
+    basicPrice: safeBasic,
+    gstPercent: safeGst,
+    salePrice: bdA.salePrice,
+    mrp: bdA.mrp,
+    isActive: baseUnitA.isActive !== false
+  };
+
+  let updatedUnitB = item.unitB;
+  if (item.hasSecondaryUnit && item.unitB) {
+    const conv = Number(item.unitB.conversionFactor) || 1;
+    const bdB = calculateUnitBFromUnitA(bdA, conv);
+    updatedUnitB = {
+      ...item.unitB,
+      ...bdB,
+      unitName: item.unitB.unitName || 'Mt.',
+      conversionFactor: conv,
+      salePrice: bdB.salePrice,
+      mrp: bdB.mrp,
+      isActive: item.unitB.isActive !== false
+    };
+  }
+
+  return {
+    ...item,
+    purchaseRate: safeBasic,
+    saleRate: bdA.salePrice,
+    mrp: bdA.mrp,
+    gstPercent: safeGst,
+    unitA: updatedUnitA,
+    unitB: updatedUnitB
+  };
+}
+
 
 /**
  * Calculates pricing strip values according to customer's business logic

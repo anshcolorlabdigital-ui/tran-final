@@ -7,7 +7,7 @@ import { Search, Plus, Printer, Keyboard } from 'lucide-react';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 
 export const SupplierMasterView: React.FC = () => {
-  const { refreshKey, showToast, showAlert } = useApp();
+  const { refreshKey, showToast, showAlert, openSupplierLedger } = useApp();
   const { hasPermission } = useAuth();
 
   const suppliers = useMemo(() => db.getSuppliers(), [refreshKey]);
@@ -30,6 +30,8 @@ export const SupplierMasterView: React.FC = () => {
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [mailId, setMailId] = useState('');
+  const [openingBalance, setOpeningBalance] = useState<string>('0');
+  const [openingBalanceDate, setOpeningBalanceDate] = useState<string>('2026-04-01');
 
   const [search, setSearch] = useState('');
   const [deleteDialog, setDeleteDialog] = useState<{ isOpen: boolean; id: string; name: string }>({
@@ -71,6 +73,8 @@ export const SupplierMasterView: React.FC = () => {
     setCity(supplier.city || '');
     setState(supplier.state || '');
     setMailId(supplier.email || '');
+    setOpeningBalance(supplier.openingBalance !== undefined ? String(supplier.openingBalance) : '0');
+    setOpeningBalanceDate(supplier.openingBalanceDate || (supplier.createdAt ? supplier.createdAt.split('T')[0] : '2026-04-01'));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -93,6 +97,8 @@ export const SupplierMasterView: React.FC = () => {
     setCity('');
     setState('');
     setMailId('');
+    setOpeningBalance('0');
+    setOpeningBalanceDate('2026-04-01');
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -102,6 +108,7 @@ export const SupplierMasterView: React.FC = () => {
       return;
     }
 
+    const existingSupplier = selectedSupplierId ? db.getSupplierById(selectedSupplierId) : undefined;
     const supplierRecord: Supplier = {
       id: selectedSupplierId || `sup-${Date.now()}`,
       name: firmName.trim().toUpperCase(),
@@ -118,9 +125,10 @@ export const SupplierMasterView: React.FC = () => {
       contactPerson1: contactPerson1.trim(),
       contactPerson2: contactPerson2.trim(),
       email: mailId.trim(),
-      openingBalance: 0,
+      openingBalance: openingBalance !== '' ? Number(openingBalance) : 0,
+      openingBalanceDate: openingBalanceDate || '2026-04-01',
       isActive: true,
-      createdAt: new Date().toISOString()
+      createdAt: existingSupplier?.createdAt || new Date().toISOString()
     };
 
     db.saveSupplier(supplierRecord);
@@ -565,6 +573,50 @@ export const SupplierMasterView: React.FC = () => {
             </div>
           </div>
 
+          {/* Row 7: Opening Balance & Effective Date */}
+          <div style={{ background: '#F8FAFC', border: '1.5px solid #CBD5E1', borderRadius: '10px', padding: '14px 16px', display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '14px', alignItems: 'center' }}>
+            <div>
+              <label style={{ display: 'block', fontWeight: 900, fontSize: '0.9rem', color: '#1E293B', marginBottom: '2px' }}>
+                Opening Balance / Previous Dues
+              </label>
+              <span style={{ fontSize: '0.78rem', color: '#64748B', fontWeight: 600 }}>
+                Initial payable balance brought forward from past accounts
+              </span>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.82rem', color: '#475569', marginBottom: '4px' }}>
+                Opening Balance (₹)
+              </label>
+              <input
+                type="number"
+                step="any"
+                className="input-text-clean"
+                value={openingBalance}
+                onChange={e => {
+                  setIsTouched(true);
+                  setOpeningBalance(e.target.value);
+                }}
+                placeholder="0"
+                style={{ fontWeight: 900, fontSize: '1.05rem', color: '#002B99', textAlign: 'right' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.82rem', color: '#475569', marginBottom: '4px' }}>
+                As-On / Effective Date
+              </label>
+              <input
+                type="date"
+                className="input-text-clean"
+                value={openingBalanceDate}
+                onChange={e => {
+                  setIsTouched(true);
+                  setOpeningBalanceDate(e.target.value);
+                }}
+                style={{ fontWeight: 800, fontSize: '0.92rem' }}
+              />
+            </div>
+          </div>
+
           {/* Customer Action Buttons: Del, Large Save, Print */}
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', flexWrap: 'wrap', marginTop: '24px' }}>
             <button
@@ -654,7 +706,27 @@ export const SupplierMasterView: React.FC = () => {
                     <td>{s.phone || '-'}</td>
                     <td>{[s.city, s.state].filter(Boolean).join(', ') || '-'}</td>
                     <td style={{ fontFamily: 'monospace' }}>{s.gstin || '-'}</td>
-                    <td style={{ textAlign: 'center' }}>
+                    <td style={{ textAlign: 'center', display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={e => {
+                          e.stopPropagation();
+                          openSupplierLedger(s.id);
+                        }}
+                        style={{
+                          background: '#EFF6FF',
+                          color: '#1D4ED8',
+                          border: '1px solid #BFDBFE',
+                          borderRadius: '12px',
+                          padding: '3px 10px',
+                          fontWeight: 800,
+                          fontSize: '0.8rem',
+                          cursor: 'pointer'
+                        }}
+                        title="View complete ledger statement"
+                      >
+                        Ledger
+                      </button>
                       <button
                         type="button"
                         onClick={e => {

@@ -46,6 +46,7 @@ export interface Party {
   state?: string;
   gstin: string; // Gst No.
   openingBalance: number;
+  openingBalanceDate?: string; // YYYY-MM-DD as-on date for opening balance
   creditLimit: number;
   allowCredit?: boolean; // When true, customer can make partial/credit purchases
   partyType?: 'DEALER' | 'AMATEUR'; // Dealer vs Amateur (Retailer/End Customer)
@@ -72,6 +73,7 @@ export interface Supplier {
   state?: string;
   gstin: string; // Gst No.
   openingBalance: number;
+  openingBalanceDate?: string; // YYYY-MM-DD as-on date for opening balance
   isActive: boolean;
   createdAt: string;
 }
@@ -211,8 +213,24 @@ export interface PartyLog {
   totalAmount: number; // Sale bill total or Payment receipt total
   paidAmount: number; // Received via cash + UPI
   balanceChange: number; // Positive = credit added to balance, Negative = payment reducing balance
-  runningBalance?: number; // Calculated balance after this transaction
-  paymentMode?: 'CASH' | 'UPI' | 'COMBINED';
+  runningBalance?: number; // Calculated running balance after this transaction
+  paymentMode?: 'CASH' | 'UPI' | 'CHEQUE' | 'BANK_TRANSFER' | 'COMBINED' | string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface SupplierLog {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  date: string; // YYYY-MM-DD
+  type: 'PURCHASE' | 'PAYMENT' | 'OPENING_BALANCE' | 'CREDIT_ADJUSTMENT';
+  refNo: string; // e.g. PUR-1002, PAY-001
+  totalAmount: number; // Purchase bill total or Payment voucher total
+  paidAmount: number; // Amount paid to supplier
+  balanceChange: number; // Positive = payable increased (Purchase dues), Negative = payable reduced (Payment made)
+  runningBalance?: number; // Calculated running payable balance after this transaction
+  paymentMode?: 'CASH' | 'UPI' | 'CHEQUE' | 'BANK_TRANSFER' | 'COMBINED' | string;
   notes?: string;
   createdAt: string;
 }
@@ -249,6 +267,8 @@ export interface PurchaseItem {
   toPercent?: number;
   roundup?: number;
   salePrice?: number;
+  purchasePrice?: number;
+  purchaseRate?: number;
   qty: number;
   amount: number;
   conversionFactor?: number;
@@ -271,6 +291,9 @@ export interface Purchase {
   billTotal: number;
   recdCash: number;
   recdUpi: number;
+  paidCash?: number;
+  paidUpi?: number;
+  balanceDue?: number;
   notes?: string;
   createdAt: string;
 }
@@ -366,6 +389,8 @@ export type ActiveNavTab =
   | 'PURCHASE'
   | 'SALE'
   | 'SELF_USE'
+  | 'COLLECT_PAYMENT'
+  | 'PAY_SUPPLIER'
   | 'PARTY'
   | 'ITEM'
   | 'SUPPLIER'
@@ -375,6 +400,7 @@ export type ActiveNavTab =
   | 'REPORT_SELF_USE'
   | 'REPORT_ITEM_STOCK'
   | 'REPORT_PARTY_LEDGER'
+  | 'REPORT_SUPPLIER_LEDGER'
   | 'REPORT_ITEM_LEDGER'
   | 'ADMIN'
   | 'USER';

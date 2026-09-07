@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Item, Supplier, Purchase, PurchaseItem } from '../../types';
 import { StockEngine } from '../../db/stockEngine';
 import { getTodayDateString } from '../../utils/dateUtils';
-import { calculateItemPricing, calculateBillSummary, calculateUnitBFromUnitA, calculateItemUnitBreakdown } from '../../utils/calculations';
+import { calculateItemPricing, calculateBillSummary, calculateUnitBFromUnitA, calculateItemUnitBreakdown, updateItemPricingFromPurchase } from '../../utils/calculations';
 import { PurchasePrintVoucher } from './PurchasePrintVoucher';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { ItemSearchSelect, ItemSearchSelectHandle } from '../common/ItemSearchSelect';
@@ -365,31 +365,7 @@ export const PurchaseEntryView: React.FC = () => {
         const newGst = Number(pi.gstPercent);
         
         if (newBasic > 0) {
-          const updatedItem = { ...itemToUpdate };
-          updatedItem.purchaseRate = newBasic;
-          updatedItem.gstPercent = newGst;
-
-          if (updatedItem.unitA) {
-            const updatedUnitA: any = {
-              ...updatedItem.unitA,
-              basicPrice: newBasic,
-              gstPercent: newGst
-            };
-            const breakdownA = calculateItemUnitBreakdown(updatedUnitA);
-            updatedUnitA.salePrice = breakdownA.salePrice;
-            updatedItem.unitA = updatedUnitA;
-            updatedItem.saleRate = breakdownA.salePrice;
-
-            if (updatedItem.hasSecondaryUnit && updatedItem.unitB) {
-              const conv = Number(updatedItem.unitB.conversionFactor) || 1;
-              updatedItem.unitB = {
-                ...calculateUnitBFromUnitA(updatedUnitA, conv),
-                unitName: updatedItem.unitB.unitName,
-                conversionFactor: conv,
-                isActive: updatedItem.unitB.isActive
-              };
-            }
-          }
+          const updatedItem = updateItemPricingFromPurchase(itemToUpdate, newBasic, newGst);
           db.saveItem(updatedItem);
         }
       }

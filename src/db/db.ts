@@ -10,7 +10,8 @@ import {
   StockAdjustment,
   User,
   CompanySettings,
-  PartyLog
+  PartyLog,
+  SupplierLog
 } from '../types';
 import {
   INITIAL_COMPANY_SETTINGS,
@@ -23,6 +24,7 @@ import {
   INITIAL_SALES
 } from './seedData';
 import { firestore } from '../services/firebase';
+import { normalizeItemPricing } from '../utils/calculations';
 import {
   doc,
   setDoc,
@@ -48,6 +50,7 @@ const STORAGE_KEYS = {
   STOCK_MOVEMENTS: 'rmms_stock_movements_v1',
   STOCK_ADJUSTMENTS: 'rmms_stock_adjustments_v1',
   PARTY_LOGS: 'rmms_party_logs_v1',
+  SUPPLIER_LOGS: 'rmms_supplier_logs_v1',
   INITIALIZED: 'rmms_initialized_v1'
 };
 
@@ -488,11 +491,12 @@ class DatabaseService {
 
     const result: PartyLog[] = [];
     if (openingBal !== 0) {
+      const openingDate = party?.openingBalanceDate || (party?.createdAt ? party.createdAt.split('T')[0] : '2026-04-01');
       result.push({
         id: `open-${partyId}`,
         partyId,
         partyName: party?.name || 'Customer',
-        date: party?.createdAt ? party.createdAt.split('T')[0] : '2026-04-01',
+        date: openingDate,
         type: 'OPENING_BALANCE',
         refNo: 'OPENING-BAL',
         totalAmount: openingBal > 0 ? openingBal : 0,
@@ -532,9 +536,10 @@ class DatabaseService {
   public recordPartyPayment(
     partyId: string,
     amount: number,
-    paymentMode: 'CASH' | 'UPI' | 'COMBINED' = 'CASH',
+    paymentMode: 'CASH' | 'UPI' | 'CHEQUE' | 'BANK_TRANSFER' | 'COMBINED' | string = 'CASH',
     refNo?: string,
-    notes?: string
+    notes?: string,
+    date?: string
   ): PartyLog {
     const party = this.getPartyById(partyId);
     const partyName = party?.name || 'Customer';
@@ -543,7 +548,7 @@ class DatabaseService {
       id: `rcpt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       partyId,
       partyName,
-      date: new Date().toISOString().split('T')[0],
+      date: date || new Date().toISOString().split('T')[0],
       type: 'PAYMENT',
       refNo: refNo?.trim() || `RCPT-${Date.now().toString().slice(-4)}`,
       totalAmount: numAmount,
@@ -573,20 +578,20 @@ class DatabaseService {
   } {
     const party = this.getPartyById(partyId);
     const openingBal = Number(party?.openingBalance) || 0;
-    const logs = this.getPartyLogsByPartyId(partyId);
+    const rawLogs = this.getPartyLogs().filter(l => l.partyId === partyId);
     let totalBilled = 0;
     let totalPaid = 0;
-    let outstandingBalance = openingBal;
 
-    logs.forEach(l => {
+    rawLogs.forEach(l => {
       if (l.type === 'SALE') {
         totalBilled += Number(l.totalAmount) || 0;
         totalPaid += Number(l.paidAmount) || 0;
       } else if (l.type === 'PAYMENT') {
         totalPaid += Number(l.paidAmount) || 0;
       }
-      outstandingBalance += Number(l.balanceChange) || 0;
     });
+
+    const outstandingBalance = openingBal + totalBilled - totalPaid;
 
     return {
       totalBilled: Number(totalBilled.toFixed(2)),
@@ -625,9 +630,135 @@ class DatabaseService {
     this.notify();
   }
 
+  // --- SUPPLIER LOGS (Supplier Ledger Statements) ---
+  public getSupplierLogs(): SupplierLog[] {
+    return this.get(STORAGE_KEYS.SUPPLIER_LOGS, []);
+  }
+
+  public getSupplierLogsBySupplierId(supplierId: string): SupplierLog[] {
+    const supplier = this.getSupplierById(supplierId);
+    const openingBal = Number(supplier?.openingBalance) || 0;
+    const logs = this.getSupplierLogs().filter(l => l.supplierId === supplierId);
+    logs.sort((a, b) => (a.date > b.date ? 1 : a.date < b.date ? -1 : (a.createdAt > b.createdAt ? 1 : -1)));
+
+    const result: SupplierLog[] = [];
+    if (openingBal !== 0) {
+      const openingDate = supplier?.openingBalanceDate || (supplier?.createdAt ? supplier.createdAt.split('T')[0] : '2026-04-01');
+      result.push({
+        id: `open-${supplierId}`,
+        supplierId,
+        supplierName: supplier?.name || 'Supplier',
+        date: openingDate,
+        type: 'OPENING_BALANCE',
+        refNo: 'OPENING-BAL',
+        totalAmount: openingBal > 0 ? openingBal : 0,
+        paidAmount: openingBal < 0 ? Math.abs(openingBal) : 0,
+        balanceChange: openingBal,
+        runningBalance: openingBal,
+        notes: 'Initial Opening Balance / Previous Dues',
+        createdAt: supplier?.createdAt || new Date().toISOString()
+      });
+    }
+
+    let running = openingBal;
+    logs.forEach(log => {
+      running += (Number(log.balanceChange) || 0);
+      result.push({
+        ...log,
+        runningBalance: Number(running.toFixed(2))
+      });
+    });
+
+    return result;
+  }
+
+  public saveSupplierLog(log: SupplierLog): void {
+    const logs = this.getSupplierLogs();
+    const index = logs.findIndex(l => l.id === log.id);
+    if (index >= 0) {
+      logs[index] = log;
+    } else {
+      logs.push(log);
+    }
+    this.set(STORAGE_KEYS.SUPPLIER_LOGS, logs);
+    this.pushDocToFirestore('supplier_logs', log.id, log);
+    this.notify();
+  }
+
+  public recordSupplierPayment(
+    supplierId: string,
+    amount: number,
+    paymentMode: 'CASH' | 'UPI' | 'CHEQUE' | 'BANK_TRANSFER' | 'COMBINED' | string = 'BANK_TRANSFER',
+    refNo?: string,
+    notes?: string,
+    date?: string
+  ): SupplierLog {
+    const supplier = this.getSupplierById(supplierId);
+    const supplierName = supplier?.name || 'Supplier';
+    const numAmount = Number(amount) || 0;
+    const paymentRecord: SupplierLog = {
+      id: `pay-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      supplierId,
+      supplierName,
+      date: date || new Date().toISOString().split('T')[0],
+      type: 'PAYMENT',
+      refNo: refNo?.trim() || `PAY-${Date.now().toString().slice(-4)}`,
+      totalAmount: numAmount,
+      paidAmount: numAmount,
+      balanceChange: -numAmount,
+      paymentMode,
+      notes: notes?.trim() || `Payment made via ${paymentMode}`,
+      createdAt: new Date().toISOString()
+    };
+
+    this.saveSupplierLog(paymentRecord);
+    return paymentRecord;
+  }
+
+  public deleteSupplierLog(id: string): void {
+    const logs = this.getSupplierLogs().filter(l => l.id !== id);
+    this.set(STORAGE_KEYS.SUPPLIER_LOGS, logs);
+    this.deleteDocFromFirestore('supplier_logs', id);
+    this.notify();
+  }
+
+  public getSupplierBalanceSummary(supplierId: string): {
+    totalPurchased: number;
+    totalPaid: number;
+    openingBalance: number;
+    outstandingPayable: number;
+    payableBalance: number;
+  } {
+    const supplier = this.getSupplierById(supplierId);
+    const openingBal = Number(supplier?.openingBalance) || 0;
+    const rawLogs = this.getSupplierLogs().filter(l => l.supplierId === supplierId);
+    let totalPurchased = 0;
+    let totalPaid = 0;
+
+    rawLogs.forEach(l => {
+      if (l.type === 'PURCHASE') {
+        totalPurchased += Number(l.totalAmount) || 0;
+        totalPaid += Number(l.paidAmount) || 0;
+      } else if (l.type === 'PAYMENT') {
+        totalPaid += Number(l.paidAmount) || 0;
+      }
+    });
+
+    const outstandingPayable = openingBal + totalPurchased - totalPaid;
+
+    return {
+      totalPurchased: Number(totalPurchased.toFixed(2)),
+      totalPaid: Number(totalPaid.toFixed(2)),
+      openingBalance: Number(openingBal.toFixed(2)),
+      outstandingPayable: Number(outstandingPayable.toFixed(2)),
+      payableBalance: Number(outstandingPayable.toFixed(2))
+    };
+  }
+
   // --- ITEMS ---
   public getItems(): Item[] {
-    return this.get(STORAGE_KEYS.ITEMS, []);
+    const rawItems = this.get(STORAGE_KEYS.ITEMS, []);
+    return rawItems.map(item => normalizeItemPricing(item));
   }
 
   public getItemById(id: string): Item | undefined {
@@ -649,35 +780,36 @@ class DatabaseService {
   }
 
   public saveItem(item: Item): void {
+    const normalizedItem = normalizeItemPricing(item);
     const items = this.getItems();
-    const index = items.findIndex(i => i.id === item.id);
+    const index = items.findIndex(i => i.id === normalizedItem.id);
     const isNew = index < 0;
 
     if (isNew) {
-      items.push(item);
+      items.push(normalizedItem);
       // Create initial opening stock movement if openingStock > 0 or 0
       this.addStockMovementInternal({
-        id: `mov-init-${item.id}-${Date.now()}`,
-        itemId: item.id,
+        id: `mov-init-${normalizedItem.id}-${Date.now()}`,
+        itemId: normalizedItem.id,
         type: 'OPENING',
-        qtyChange: Number(item.openingStock) || 0,
+        qtyChange: Number(normalizedItem.openingStock) || 0,
         refType: 'OPENING',
-        refId: item.id,
+        refId: normalizedItem.id,
         refNo: 'OPENING',
-        date: item.createdAt || new Date().toISOString().split('T')[0],
+        date: normalizedItem.createdAt || new Date().toISOString().split('T')[0],
         notes: 'Opening stock',
         createdAt: new Date().toISOString()
       });
     } else {
       const oldItem = items[index];
-      items[index] = item;
+      items[index] = normalizedItem;
       // If opening stock changed, adjust opening movement
-      if (oldItem.openingStock !== item.openingStock) {
-        this.updateOpeningStockMovement(item.id, item.openingStock);
+      if (oldItem.openingStock !== normalizedItem.openingStock) {
+        this.updateOpeningStockMovement(normalizedItem.id, normalizedItem.openingStock);
       }
     }
     this.set(STORAGE_KEYS.ITEMS, items);
-    this.pushDocToFirestore('items', item.id, item);
+    this.pushDocToFirestore('items', normalizedItem.id, normalizedItem);
     this.notify();
   }
 
@@ -1034,14 +1166,45 @@ class DatabaseService {
       }
     }
 
+    // Maintain supplier statement ledger if purchase is associated with a supplier
+    if (purchase.supplierId) {
+      const totalPaid = (Number(purchase.paidCash) || Number(purchase.recdCash) || 0) + (Number(purchase.paidUpi) || Number(purchase.recdUpi) || 0);
+      const payableDue = Number((purchase.billTotal - totalPaid).toFixed(2));
+      const logs = this.getSupplierLogs().filter(l => !(l.type === 'PURCHASE' && l.refNo === purchase.billNo));
+      const logRecord: SupplierLog = {
+        id: `log-pur-${purchase.id}`,
+        supplierId: purchase.supplierId,
+        supplierName: purchase.supplierName,
+        date: purchase.recdDate || purchase.billDate,
+        type: 'PURCHASE',
+        refNo: purchase.billNo,
+        totalAmount: purchase.billTotal,
+        paidAmount: totalPaid,
+        balanceChange: payableDue,
+        notes: payableDue > 0 ? `Credit Purchase (Due: ₹${payableDue})` : 'Full Payment Paid on Purchase',
+        createdAt: purchase.createdAt || new Date().toISOString()
+      };
+      logs.push(logRecord);
+      this.set(STORAGE_KEYS.SUPPLIER_LOGS, logs);
+      this.pushDocToFirestore('supplier_logs', logRecord.id, logRecord);
+    }
+
     this.notify();
   }
 
   public deletePurchase(id: string): void {
+    const purchase = this.getPurchaseById(id);
     const purchases = this.getPurchases().filter(p => p.id !== id);
     this.set(STORAGE_KEYS.PURCHASES, purchases);
     this.deleteDocFromFirestore('purchases', id);
     this.deleteStockMovementsByRef('PURCHASE', id);
+
+    if (purchase) {
+      const logs = this.getSupplierLogs().filter(l => !(l.type === 'PURCHASE' && l.refNo === purchase.billNo));
+      this.set(STORAGE_KEYS.SUPPLIER_LOGS, logs);
+      this.deleteDocFromFirestore('supplier_logs', `log-pur-${purchase.id}`);
+    }
+
     this.notify();
   }
 

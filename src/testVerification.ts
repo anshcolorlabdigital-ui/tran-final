@@ -2,10 +2,10 @@
  * Comprehensive Automated Verification of All 30 Customer Workflow & Business Invariant Steps
  */
 
-import { calculateItemPricing, calculateBillSummary, calculateItemUnitBreakdown, calculateUnitBFromUnitA, calculateSalesItemPricing } from './utils/calculations';
+import { calculateItemPricing, calculateBillSummary, calculateItemUnitBreakdown, calculateUnitBFromUnitA, calculateSalesItemPricing, updateItemPricingFromPurchase } from './utils/calculations';
 import { formatReceiptText, ReceiptData } from './utils/shareUtils';
 import { formatDateToDisplay, getTodayDateString } from './utils/dateUtils';
-import { Item, ItemUnitPricing, Party, SupplierOrder } from './types';
+import { Item, ItemUnitPricing, Party, Supplier, Purchase, SupplierOrder } from './types';
 import { buildExportDataset } from './utils/exportUtils';
 import { db } from './db/db';
 import { StockEngine } from './db/stockEngine';
@@ -1825,8 +1825,332 @@ async function runVerificationSuite() {
   console.log(`✓ Closing stock 115 rolled over into new item.openingStock = 115 with fresh OPENING movement`);
   console.log('Step 63 PASS? true: Transaction cleanup closing-to-opening stock rollover verified.');
 
+  console.log('\n--- Step 64: Verify Purchase Rate Update Synchronizes Sale Price and MRP for Sales Entry ---');
+  const sparkleItem: Item = {
+    id: `item-sparkle-${Date.now()}`,
+    sno: 'SPK-201',
+    name: 'SPARKLE 201 4X6',
+    category: 'PAPER',
+    unit: 'Roll',
+    minStock: 10,
+    openingStock: 20,
+    purchaseRate: 6,
+    saleRate: 7.08,
+    mrp: 7.08,
+    gstPercent: 0,
+    profPercentAm: 15,
+    profPercentDeal: 15,
+    unitA: {
+      unitName: 'Roll',
+      basicPrice: 6,
+      gstPercent: 0,
+      tranPercent: 1,
+      profPercent: 15,
+      profPercentAm: 15,
+      profPercentDeal: 15,
+      misPercent: 2,
+      roundUpSale: 0,
+      roundUpMrp: 0,
+      salePrice: 7.08,
+      mrp: 7.08,
+      isActive: true
+    },
+    isActive: true,
+    createdAt: new Date().toISOString()
+  };
+
+  db.saveItem(sparkleItem);
+
+  const initialSparkle = db.getItemById(sparkleItem.id)!;
+  console.log(`Initial Sparkle Item: Basic=₹${initialSparkle.unitA?.basicPrice}, Sale=₹${initialSparkle.unitA?.salePrice}, MRP=₹${initialSparkle.unitA?.mrp}`);
+
+  // Simulate Purchase with price increased from 6 to 10
+  const updatedSparkle = updateItemPricingFromPurchase(initialSparkle, 10, 0);
+  db.saveItem(updatedSparkle);
+
+  const reloadedSparkle = db.getItemById(sparkleItem.id)!;
+  console.log(`Updated Sparkle Item after Purchase: Basic=₹${reloadedSparkle.unitA?.basicPrice}, Sale=₹${reloadedSparkle.unitA?.salePrice}, MRP=₹${reloadedSparkle.unitA?.mrp}`);
+
+  // Basic = 10, Tran = 1% (0.1), Mis = 2% (0.2), Prof = 15% (1.5) => 10 + 0.1 + 0.2 + 1.5 = 11.8
+  if (reloadedSparkle.unitA?.basicPrice !== 10) {
+    throw new Error(`Expected basicPrice 10, got ${reloadedSparkle.unitA?.basicPrice}`);
+  }
+  if (reloadedSparkle.unitA?.salePrice !== 11.8) {
+    throw new Error(`Expected salePrice 11.8, got ${reloadedSparkle.unitA?.salePrice}`);
+  }
+  if (reloadedSparkle.unitA?.mrp !== 11.8) {
+    throw new Error(`Expected mrp 11.8, got ${reloadedSparkle.unitA?.mrp}`);
+  }
+  if (reloadedSparkle.saleRate !== 11.8 || reloadedSparkle.mrp !== 11.8) {
+    throw new Error(`Expected item root saleRate and mrp to be 11.8, got saleRate=${reloadedSparkle.saleRate}, mrp=${reloadedSparkle.mrp}`);
+  }
+
+  // Verify Sales pricing calculation directly uses item rates without old 7.68 or separate calculations
+  const dealerRate = reloadedSparkle.unitA.salePrice;
+  const amateurRate = reloadedSparkle.unitA.mrp || reloadedSparkle.unitA.salePrice;
+  if (dealerRate !== 11.8 || amateurRate !== 11.8) {
+    throw new Error(`Sales price resolution failed: dealerRate=${dealerRate}, amateurRate=${amateurRate}`);
+  }
+
+  console.log(`✓ Both Sale Price (₹${dealerRate}) and MRP (₹${amateurRate}) updated from purchase price and ready for sales`);
+  console.log('Step 64 PASS? true: Purchase-to-Sale dual pricing synchronization verified.');
+
+  console.log('\n--- Step 65: Verify Party Opening Balance Calculation (No Double Counting) and Payment Receipt Collection ---');
+  const testPartyId = `party-test-ob-${Date.now()}`;
+  const testParty65: Party = {
+    id: testPartyId,
+    name: 'TEST CUSTOMER VERIFICATION',
+    phone: '9876543210',
+    address: 'Main Bazar',
+    gstin: '',
+    creditLimit: 50000,
+    partyType: 'DEALER',
+    openingBalance: 23,
+    isActive: true,
+    createdAt: new Date().toISOString()
+  };
+
+  db.saveParty(testParty65);
+
+  const initialBalanceSummary = db.getPartyBalanceSummary(testPartyId);
+  console.log('Initial Party Balance Summary:', initialBalanceSummary);
+
+  if (initialBalanceSummary.openingBalance !== 23) {
+    throw new Error(`Expected opening balance 23, got ${initialBalanceSummary.openingBalance}`);
+  }
+  if (initialBalanceSummary.outstandingBalance !== 23) {
+    throw new Error(`Expected outstanding balance 23, got ${initialBalanceSummary.outstandingBalance} (Double counting bug detected!)`);
+  }
+  if (initialBalanceSummary.totalBilled !== 0) {
+    throw new Error(`Expected totalBilled 0, got ${initialBalanceSummary.totalBilled}`);
+  }
+  if (initialBalanceSummary.totalPaid !== 0) {
+    throw new Error(`Expected totalPaid 0, got ${initialBalanceSummary.totalPaid}`);
+  }
+
+  // Check party logs
+  const partyLogs65 = db.getPartyLogsByPartyId(testPartyId);
+  console.log(`Party logs count: ${partyLogs65.length}`);
+  if (partyLogs65.length !== 1) {
+    throw new Error(`Expected 1 synthetic OPENING_BALANCE log, got ${partyLogs65.length}`);
+  }
+  if (partyLogs65[0].type !== 'OPENING_BALANCE' || partyLogs65[0].runningBalance !== 23) {
+    throw new Error(`Expected OPENING_BALANCE log with runningBalance 23, got ${JSON.stringify(partyLogs65[0])}`);
+  }
+
+  // Record a payment of ₹23
+  console.log('Recording payment receipt of ₹23...');
+  db.recordPartyPayment(testPartyId, 23, 'UPI', 'UPI-TEST-1234', 'Settled opening balance');
+
+  const afterPaymentSummary = db.getPartyBalanceSummary(testPartyId);
+  console.log('After Payment Balance Summary:', afterPaymentSummary);
+
+  if (afterPaymentSummary.totalPaid !== 23) {
+    throw new Error(`Expected totalPaid 23, got ${afterPaymentSummary.totalPaid}`);
+  }
+  if (afterPaymentSummary.outstandingBalance !== 0) {
+    throw new Error(`Expected outstanding balance 0 after full payment, got ${afterPaymentSummary.outstandingBalance}`);
+  }
+
+  const afterPaymentLogs = db.getPartyLogsByPartyId(testPartyId);
+  if (afterPaymentLogs.length !== 2) {
+    throw new Error(`Expected 2 logs after payment, got ${afterPaymentLogs.length}`);
+  }
+  if (afterPaymentLogs[1].type !== 'PAYMENT' || afterPaymentLogs[1].paidAmount !== 23 || afterPaymentLogs[1].runningBalance !== 0) {
+    throw new Error(`Expected PAYMENT log with paidAmount 23 and runningBalance 0, got ${JSON.stringify(afterPaymentLogs[1])}`);
+  }
+
+  console.log('✓ Party opening balance ₹23 accurately recorded without double-counting to ₹46');
+  console.log('✓ Payment receipt of ₹23 recorded, accurately zeroing the outstanding balance');
+  console.log('Step 65 PASS? true: Party opening balance calculation and payment receipt collection verified.');
+
+  console.log('\n--- Step 66: Verify Amateur Customer Opening Balance Date (₹230) & Date-Aware Ledger Tracking ---');
+  const amateurPartyId = `party-amateur-${Date.now()}`;
+  const amateurParty66: Party = {
+    id: amateurPartyId,
+    name: 'AMATEUR CASE CUSTOMER',
+    phone: '9811223344',
+    address: 'Sector 62',
+    gstin: '',
+    creditLimit: 20000,
+    partyType: 'AMATEUR',
+    openingBalance: 230,
+    openingBalanceDate: '2026-04-01',
+    isActive: true,
+    createdAt: '2026-04-01T10:00:00.000Z'
+  };
+
+  db.saveParty(amateurParty66);
+
+  // 1. Verify Balance Summary
+  const amateurSummary66 = db.getPartyBalanceSummary(amateurPartyId);
+  console.log('Amateur Customer Summary:', amateurSummary66);
+  if (amateurSummary66.openingBalance !== 230 || amateurSummary66.outstandingBalance !== 230) {
+    throw new Error(`Expected openingBalance 230 and outstandingBalance 230, got opening=${amateurSummary66.openingBalance}, out=${amateurSummary66.outstandingBalance}`);
+  }
+
+  // 2. Verify Ledger Logs includes Opening Balance on 2026-04-01
+  const amateurLogs66 = db.getPartyLogsByPartyId(amateurPartyId);
+  console.log(`Amateur Party Logs:`, amateurLogs66);
+  if (amateurLogs66.length !== 1) {
+    throw new Error(`Expected 1 log, got ${amateurLogs66.length}`);
+  }
+  if (amateurLogs66[0].type !== 'OPENING_BALANCE' || amateurLogs66[0].date !== '2026-04-01' || amateurLogs66[0].runningBalance !== 230) {
+    throw new Error(`Amateur opening balance log mismatch: ${JSON.stringify(amateurLogs66[0])}`);
+  }
+
+  // 3. Record a payment receipt of ₹100 on 2026-09-07
+  const paymentLog66 = db.recordPartyPayment(
+    amateurPartyId,
+    100,
+    'UPI',
+    'UPI-AMATEUR-01',
+    'Part settlement of opening balance',
+    '2026-09-07'
+  );
+
+  const updatedAmateurSummary66 = db.getPartyBalanceSummary(amateurPartyId);
+  console.log('Updated Amateur Summary after ₹100 payment:', updatedAmateurSummary66);
+  if (updatedAmateurSummary66.totalPaid !== 100 || updatedAmateurSummary66.outstandingBalance !== 130) {
+    throw new Error(`Expected totalPaid 100 and outstanding 130, got paid=${updatedAmateurSummary66.totalPaid}, out=${updatedAmateurSummary66.outstandingBalance}`);
+  }
+
+  const updatedLogs66 = db.getPartyLogsByPartyId(amateurPartyId);
+  if (updatedLogs66.length !== 2) {
+    throw new Error(`Expected 2 logs after payment, got ${updatedLogs66.length}`);
+  }
+  if (updatedLogs66[1].runningBalance !== 130 || updatedLogs66[1].date !== '2026-09-07') {
+    throw new Error(`Expected 2nd log runningBalance 130 and date 2026-09-07, got ${JSON.stringify(updatedLogs66[1])}`);
+  }
+
+  console.log('✓ Amateur party opening balance ₹230 accurately tracked with opening date 2026-04-01');
+  console.log('✓ Part payment of ₹100 accurately updates running balance to ₹130');
+  console.log('Step 66 PASS? true: Amateur party opening balance date and ledger tracking verified.');
+
+  console.log('\n--- Step 67: Verify Supplier Opening Balance, Date, Purchases, Payments & Supplier Ledger ---');
+  const supplierId67 = `supp-test-${Date.now()}`;
+  const testSupplier67: Supplier = {
+    id: supplierId67,
+    name: 'SHREE GANESH RAW MATERIALS',
+    propName: 'Ramesh Sharma',
+    phone: '9822334455',
+    address: 'Industrial Area Phase 1',
+    city: 'JAIPUR',
+    state: 'Rajasthan',
+    gstin: '08ABCDE1234F1Z5',
+    openingBalance: 5000,
+    openingBalanceDate: '2026-04-01',
+    isActive: true,
+    createdAt: '2026-04-01T09:00:00.000Z'
+  };
+
+  db.saveSupplier(testSupplier67);
+
+  // 1. Verify Initial Supplier Summary
+  const suppSummary1 = db.getSupplierBalanceSummary(supplierId67);
+  console.log('Initial Supplier Balance Summary:', suppSummary1);
+  if (suppSummary1.openingBalance !== 5000 || suppSummary1.payableBalance !== 5000) {
+    throw new Error(`Expected opening 5000 & payable 5000, got opening=${suppSummary1.openingBalance}, payable=${suppSummary1.payableBalance}`);
+  }
+
+  // 2. Verify Initial Supplier Log contains Opening Balance
+  const suppLogs1 = db.getSupplierLogsBySupplierId(supplierId67);
+  console.log('Initial Supplier Logs:', suppLogs1);
+  if (suppLogs1.length !== 1 || suppLogs1[0].type !== 'OPENING_BALANCE' || suppLogs1[0].runningBalance !== 5000) {
+    throw new Error(`Expected 1 OPENING_BALANCE log with runningBalance 5000, got ${JSON.stringify(suppLogs1)}`);
+  }
+
+  // 3. Record a Purchase of ₹15,000 (Paid ₹5,000 cash, ₹10,000 balance due)
+  const purchase67: Purchase = {
+    id: `purch-67-${Date.now()}`,
+    billNo: 'PB-2026-6701',
+    billDate: '2026-05-15',
+    recdDate: '2026-05-15',
+    supplierId: supplierId67,
+    supplierName: testSupplier67.name,
+    basicTotal: 12711.86,
+    gstTotal: 2288.14,
+    roundUp: 0,
+    billTotal: 15000,
+    recdCash: 5000,
+    recdUpi: 0,
+    paidCash: 5000,
+    paidUpi: 0,
+    balanceDue: 10000,
+    items: [
+      {
+        id: 'pi-1',
+        sno: '101',
+        itemId: 'item-1',
+        itemName: '4x6 Glossy Paper',
+        qty: 100,
+        basicPrice: 127.12,
+        gstPercent: 18,
+        gstAmt: 22.88,
+        nettPrice: 150,
+        purchasePrice: 150,
+        amount: 15000
+      }
+    ],
+    notes: 'Bulk sheet purchase',
+    createdAt: '2026-05-15T11:00:00.000Z'
+  };
+
+  db.savePurchase(purchase67);
+
+  // 4. Verify Supplier Summary after Purchase
+  const suppSummary2 = db.getSupplierBalanceSummary(supplierId67);
+  console.log('Supplier Summary after Purchase:', suppSummary2);
+  // Opening: 5000, Total Purchased: 15000, Total Paid: 5000 -> Payable Balance: 15000 (5000 + 10000 unpaid)
+  if (suppSummary2.totalPurchased !== 15000 || suppSummary2.totalPaid !== 5000 || suppSummary2.payableBalance !== 15000) {
+    throw new Error(`Expected purchased: 15000, paid: 5000, payable: 15000, got ${JSON.stringify(suppSummary2)}`);
+  }
+
+  // 5. Verify Supplier Logs after Purchase
+  const suppLogs2 = db.getSupplierLogsBySupplierId(supplierId67);
+  console.log('Supplier Logs after Purchase:', suppLogs2);
+  if (suppLogs2.length !== 2) {
+    throw new Error(`Expected 2 logs after purchase, got ${suppLogs2.length}`);
+  }
+  if (suppLogs2[1].type !== 'PURCHASE' || suppLogs2[1].runningBalance !== 15000) {
+    throw new Error(`Expected 2nd log PURCHASE with runningBalance 15000, got ${JSON.stringify(suppLogs2[1])}`);
+  }
+
+  // 6. Record Supplier Outgoing Payment Voucher of ₹6,000
+  const paymentVoucher67 = db.recordSupplierPayment(
+    supplierId67,
+    6000,
+    'BANK_TRANSFER',
+    'TXN-NEFT-998811',
+    'NEFT transfer towards PB-2026-6701 and opening dues',
+    '2026-06-01'
+  );
+
+  // 7. Verify Supplier Summary after Payment
+  const suppSummary3 = db.getSupplierBalanceSummary(supplierId67);
+  console.log('Supplier Summary after Payment:', suppSummary3);
+  // Total Paid = 5000 (at bill) + 6000 (voucher) = 11000. Payable Balance = 5000 + 15000 - 11000 = 9000.
+  if (suppSummary3.totalPaid !== 11000 || suppSummary3.payableBalance !== 9000) {
+    throw new Error(`Expected totalPaid: 11000, payable: 9000, got ${JSON.stringify(suppSummary3)}`);
+  }
+
+  // 8. Verify Supplier Logs after Payment
+  const suppLogs3 = db.getSupplierLogsBySupplierId(supplierId67);
+  console.log('Supplier Logs after Payment:', suppLogs3);
+  if (suppLogs3.length !== 3) {
+    throw new Error(`Expected 3 logs after payment, got ${suppLogs3.length}`);
+  }
+  if (suppLogs3[2].type !== 'PAYMENT' || suppLogs3[2].paidAmount !== 6000 || suppLogs3[2].runningBalance !== 9000) {
+    throw new Error(`Expected 3rd log PAYMENT with paidAmount 6000 and runningBalance 9000, got ${JSON.stringify(suppLogs3[2])}`);
+  }
+
+  console.log('✓ Supplier opening balance ₹5,000 accurately recorded with opening date 2026-04-01');
+  console.log('✓ Purchase of ₹15,000 (paid ₹5,000) logged to supplier ledger (running balance = ₹15,000)');
+  console.log('✓ Outgoing supplier payment of ₹6,000 accurately reduces payable balance to ₹9,000');
+  console.log('Step 67 PASS? true: Supplier opening balance, date, purchases, payments, and supplier ledger verified.');
+
   console.log('\n====================================================');
-  console.log('ALL 63 CUSTOMER WORKFLOW STEPS & INVARIANTS PASSED!');
+  console.log('ALL 67 INVENTORY & ACCOUNTING SUITE STEPS PASSED!');
   console.log('====================================================\n');
 }
 

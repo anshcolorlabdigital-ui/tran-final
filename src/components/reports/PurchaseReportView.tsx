@@ -6,7 +6,7 @@ import { formatCurrency } from '../../utils/calculations';
 import { Download, Printer } from 'lucide-react';
 
 export const PurchaseReportView: React.FC = () => {
-  const { refreshKey } = useApp();
+  const { refreshKey, openSupplierLedger } = useApp();
 
   const purchases = useMemo(() => db.getPurchases(), [refreshKey]);
   const suppliers = useMemo(() => db.getSuppliers(), [refreshKey]);
@@ -214,7 +214,25 @@ export const PurchaseReportView: React.FC = () => {
                     <td style={{ fontWeight: 800, fontFamily: 'monospace' }}>{p.billNo}</td>
                     <td>{formatDateToDisplay(p.billDate)}</td>
                     <td>{formatDateToDisplay(p.recdDate || p.billDate)}</td>
-                    <td style={{ fontWeight: 800 }}>{p.supplierName}</td>
+                    <td style={{ fontWeight: 800 }}>
+                      <button
+                        type="button"
+                        onClick={() => openSupplierLedger(p.supplierId)}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#002B99',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          textDecoration: 'underline',
+                          padding: 0,
+                          textAlign: 'left'
+                        }}
+                        title="Click to view supplier ledger"
+                      >
+                        {p.supplierName}
+                      </button>
+                    </td>
                     <td style={{ fontSize: '0.85rem' }}>
                       {p.items.map((i, idx) => (
                         <div key={idx}>
