@@ -87,11 +87,9 @@ export const DashboardView: React.FC = () => {
 
         {/* 3 Circle Metric Cards */}
         <div
+          className="sales-metric-row"
           style={{
             padding: '24px 20px',
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: '20px',
             background: '#D9D9D9'
           }}
         >
@@ -134,12 +132,12 @@ export const DashboardView: React.FC = () => {
           style={{
             backgroundColor: 'var(--color-lime)',
             padding: '10px 16px',
-            textAlign: 'center',
             borderBottom: '2px solid #000000',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            position: 'relative'
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '8px'
           }}
         >
           <h2
@@ -158,8 +156,6 @@ export const DashboardView: React.FC = () => {
           <button
             onClick={() => setActiveTab('ORDER')}
             style={{
-              position: 'absolute',
-              right: '16px',
               background: '#FFFFFF',
               border: '1px solid #000000',
               borderRadius: '20px',
@@ -179,10 +175,11 @@ export const DashboardView: React.FC = () => {
         </div>
 
         {/* Stock Table */}
-        <div style={{ padding: '16px', backgroundColor: '#D9D9D9' }}>
+        <div style={{ padding: '16px', backgroundColor: '#D9D9D9' }} className="table-responsive-wrapper">
           <table
             style={{
               width: '100%',
+              minWidth: '500px',
               borderCollapse: 'separate',
               borderSpacing: '0 8px'
             }}

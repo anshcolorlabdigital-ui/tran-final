@@ -857,8 +857,8 @@ export const ItemLedgerReportView: React.FC = () => {
           </div>
         </div>
 
-        <div style={{ overflowX: 'auto', maxHeight: '550px' }}>
-          <table className="custom-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="table-responsive-wrapper" style={{ maxHeight: '550px' }}>
+          <table className="custom-table" style={{ width: '100%', minWidth: '780px', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#ECECEC', borderBottom: '2px solid #000000', fontSize: '0.82rem' }}>
                 <th style={{ padding: '8px 10px', textAlign: 'center', width: '40px' }}>#</th>
@@ -1056,7 +1056,7 @@ export const ItemLedgerReportView: React.FC = () => {
             </div>
 
             <div style={{ padding: '20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+              <div className="stat-grid-auto" style={{ gap: '10px' }}>
                 <div style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '8px', padding: '10px 12px' }}>
                   <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748B' }}>Basic Total</div>
                   <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#002B99' }}>₹{selectedSaleDetail.basicTotal}</div>
@@ -1083,7 +1083,8 @@ export const ItemLedgerReportView: React.FC = () => {
               </div>
 
               <div style={{ border: '1.5px solid #000000', borderRadius: '8px', overflow: 'hidden' }}>
-                <table className="table-clean" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <div className="table-responsive-wrapper">
+                  <table className="table-clean" style={{ width: '100%', minWidth: '680px', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #CBD5E1', fontSize: '0.82rem' }}>
                       <th style={{ padding: '8px 10px', textAlign: 'center', width: '40px' }}>#</th>
@@ -1119,6 +1120,7 @@ export const ItemLedgerReportView: React.FC = () => {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           </div>
@@ -1187,7 +1189,7 @@ export const ItemLedgerReportView: React.FC = () => {
             </div>
 
             <div style={{ padding: '20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+              <div className="stat-grid-auto" style={{ gap: '10px' }}>
                 <div style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '8px', padding: '10px 12px' }}>
                   <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748B' }}>Basic Total</div>
                   <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#002B99' }}>₹{selectedPurchaseDetail.basicTotal}</div>
@@ -1203,7 +1205,8 @@ export const ItemLedgerReportView: React.FC = () => {
               </div>
 
               <div style={{ border: '1.5px solid #000000', borderRadius: '8px', overflow: 'hidden' }}>
-                <table className="table-clean" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <div className="table-responsive-wrapper">
+                  <table className="table-clean" style={{ width: '100%', minWidth: '680px', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #CBD5E1', fontSize: '0.82rem' }}>
                       <th style={{ padding: '8px 10px', textAlign: 'center', width: '40px' }}>#</th>
@@ -1233,6 +1236,7 @@ export const ItemLedgerReportView: React.FC = () => {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           </div>

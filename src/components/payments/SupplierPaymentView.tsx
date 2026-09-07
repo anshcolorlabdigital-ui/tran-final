@@ -325,10 +325,8 @@ export const SupplierPaymentView: React.FC = () => {
 
       {/* 2. MAIN SPLIT SECTION: PAY SUPPLIER FORM (LEFT) & REGISTER (RIGHT) */}
       <div
+        className="sales-bottom-grid"
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(360px, 480px) 1fr',
-          gap: '18px',
           alignItems: 'start'
         }}
       >
@@ -667,7 +665,7 @@ export const SupplierPaymentView: React.FC = () => {
               borderRadius: '8px',
               padding: '10px 12px',
               display: 'grid',
-              gridTemplateColumns: '1.5fr 1fr 1fr auto',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
               gap: '10px',
               alignItems: 'center'
             }}
@@ -738,8 +736,8 @@ export const SupplierPaymentView: React.FC = () => {
           </div>
 
           {/* Table */}
-          <div style={{ overflowX: 'auto', border: '1.5px solid #000000', borderRadius: '8px' }}>
-            <table className="table-clean" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div className="table-responsive-wrapper" style={{ border: '1.5px solid #000000', borderRadius: '8px' }}>
+            <table className="table-clean" style={{ width: '100%', minWidth: '720px', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#002B99', color: '#FFFFFF', fontSize: '0.82rem' }}>
                   <th style={{ padding: '10px 12px', textAlign: 'center', width: '45px' }}>#</th>

@@ -115,7 +115,7 @@ export const QuickPartyModal: React.FC = () => {
           />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+        <div className="form-grid-2col">
           <div>
             <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '3px' }}>
               Gst No.
@@ -155,7 +155,7 @@ export const QuickPartyModal: React.FC = () => {
           />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+        <div className="form-grid-2col">
           <div>
             <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '3px' }}>
               Block
@@ -180,7 +180,7 @@ export const QuickPartyModal: React.FC = () => {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+        <div className="form-grid-2col">
           <div>
             <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '3px' }}>
               CITY
@@ -205,7 +205,7 @@ export const QuickPartyModal: React.FC = () => {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+        <div className="form-grid-2col">
           <div>
             <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '3px' }}>
               Mobile
@@ -245,7 +245,7 @@ export const QuickPartyModal: React.FC = () => {
           />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+        <div className="form-grid-2col">
           <div>
             <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '4px' }}>
               Opening Balance (₹)
@@ -279,7 +279,7 @@ export const QuickPartyModal: React.FC = () => {
           <label style={{ display: 'block', fontWeight: 900, fontSize: '0.84rem', color: '#1E293B' }}>
             Party Classification (Select Amateur vs Dealer)
           </label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+          <div className="form-grid-2col">
             {/* Amateur Option */}
             <button
               type="button"

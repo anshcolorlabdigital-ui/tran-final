@@ -645,7 +645,7 @@ export const ItemMasterView: React.FC = () => {
         >
           
           {/* Row 1: Item Name, HSN Code */}
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '14px' }}>
+          <div className="form-grid-2col">
             <div>
               <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 Item Name *
@@ -683,7 +683,7 @@ export const ItemMasterView: React.FC = () => {
           </div>
 
           {/* Row 2: Description, Category, Supplier */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.8fr 1fr', gap: '14px' }}>
+          <div className="form-grid-3col">
             <div>
               <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 Description
@@ -771,159 +771,161 @@ export const ItemMasterView: React.FC = () => {
             </div>
 
             {/* Pricing Grid with Red Calculation Subtexts */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: '8px', textAlign: 'center' }}>
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Besic Price</label>
-                <input
-                  type="number"
-                  step="any"
-                  className="input-text-clean"
-                  value={unitABasicPrice}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitABasicPrice(e.target.value);
-                  }}
-                  style={{ textAlign: 'center', fontWeight: 700 }}
-                />
-                <div className="subtext-calc-red">{unitABreakdown.basicPrice}</div>
-              </div>
+            <div className="pricing-calc-scroll-wrapper">
+              <div className="pricing-calc-grid-10">
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Besic Price</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitABasicPrice}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitABasicPrice(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', fontWeight: 700 }}
+                  />
+                  <div className="subtext-calc-red">{unitABreakdown.basicPrice}</div>
+                </div>
 
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>GST %</label>
-                <input
-                  type="number"
-                  step="any"
-                  className="input-text-clean"
-                  value={unitAGstPercent}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitAGstPercent(e.target.value);
-                  }}
-                  style={{ textAlign: 'center', fontWeight: 700 }}
-                />
-                <div className="subtext-calc-red">{unitABreakdown.gstAmt}</div>
-              </div>
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>GST %</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitAGstPercent}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitAGstPercent(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', fontWeight: 700 }}
+                  />
+                  <div className="subtext-calc-red">{unitABreakdown.gstAmt}</div>
+                </div>
 
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>tran%</label>
-                <input
-                  type="number"
-                  step="any"
-                  className="input-text-clean"
-                  value={unitATranPercent}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitATranPercent(e.target.value);
-                  }}
-                  style={{ textAlign: 'center', fontWeight: 700 }}
-                />
-                <div className="subtext-calc-red">{unitABreakdown.tranAmt}</div>
-              </div>
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>tran%</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitATranPercent}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitATranPercent(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', fontWeight: 700 }}
+                  />
+                  <div className="subtext-calc-red">{unitABreakdown.tranAmt}</div>
+                </div>
 
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>mis%</label>
-                <input
-                  type="number"
-                  step="any"
-                  className="input-text-clean"
-                  value={unitAMisPercent}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitAMisPercent(e.target.value);
-                  }}
-                  style={{ textAlign: 'center', fontWeight: 700 }}
-                />
-                <div className="subtext-calc-red">{unitABreakdown.misAmt}</div>
-              </div>
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>mis%</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitAMisPercent}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitAMisPercent(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', fontWeight: 700 }}
+                  />
+                  <div className="subtext-calc-red">{unitABreakdown.misAmt}</div>
+                </div>
 
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Prof% -S</label>
-                <input
-                  type="number"
-                  step="any"
-                  className="input-text-clean"
-                  value={unitAProfDeal}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitAProfDeal(e.target.value);
-                  }}
-                  style={{ textAlign: 'center', fontWeight: 700, borderColor: '#8B5CF6' }}
-                />
-                <div className="subtext-calc-red">{unitABreakdown.profDealAmt}</div>
-              </div>
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Prof% -S</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitAProfDeal}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitAProfDeal(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', fontWeight: 700, borderColor: '#8B5CF6' }}
+                  />
+                  <div className="subtext-calc-red">{unitABreakdown.profDealAmt}</div>
+                </div>
 
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Round-S</label>
-                <input
-                  type="number"
-                  step="any"
-                  className="input-text-clean"
-                  value={unitARoundUpSale}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitARoundUpSale(e.target.value);
-                  }}
-                  style={{ textAlign: 'center', fontWeight: 700, borderColor: '#8B5CF6' }}
-                />
-                <div className="subtext-calc-red">{unitABreakdown.roundUpSale}</div>
-              </div>
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Round-S</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitARoundUpSale}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitARoundUpSale(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', fontWeight: 700, borderColor: '#8B5CF6' }}
+                  />
+                  <div className="subtext-calc-red">{unitABreakdown.roundUpSale}</div>
+                </div>
 
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Sale Price</label>
-                <input
-                  type="number"
-                  step="any"
-                  className="input-text-clean"
-                  value={unitABreakdown.salePrice}
-                  readOnly
-                  style={{ textAlign: 'center', fontWeight: 900, color: '#6D28D9', fontSize: '0.92rem', background: '#F5F3FF', cursor: 'default' }}
-                />
-                <div className="subtext-calc-red">{unitABreakdown.salePrice}</div>
-              </div>
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Sale Price</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitABreakdown.salePrice}
+                    readOnly
+                    style={{ textAlign: 'center', fontWeight: 900, color: '#6D28D9', fontSize: '0.92rem', background: '#F5F3FF', cursor: 'default' }}
+                  />
+                  <div className="subtext-calc-red">{unitABreakdown.salePrice}</div>
+                </div>
 
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Prof% -M</label>
-                <input
-                  type="number"
-                  step="any"
-                  className="input-text-clean"
-                  value={unitAProfAm}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitAProfAm(e.target.value);
-                  }}
-                  style={{ textAlign: 'center', fontWeight: 700, borderColor: '#3B82F6' }}
-                />
-                <div className="subtext-calc-red">{unitABreakdown.profAmAmt}</div>
-              </div>
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Prof% -M</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitAProfAm}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitAProfAm(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', fontWeight: 700, borderColor: '#3B82F6' }}
+                  />
+                  <div className="subtext-calc-red">{unitABreakdown.profAmAmt}</div>
+                </div>
 
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Round-M</label>
-                <input
-                  type="number"
-                  step="any"
-                  className="input-text-clean"
-                  value={unitARoundUpMrp}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitARoundUpMrp(e.target.value);
-                  }}
-                  style={{ textAlign: 'center', fontWeight: 700, borderColor: '#3B82F6' }}
-                />
-                <div className="subtext-calc-red">{unitABreakdown.roundUpMrp}</div>
-              </div>
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Round-M</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitARoundUpMrp}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setUnitARoundUpMrp(e.target.value);
+                    }}
+                    style={{ textAlign: 'center', fontWeight: 700, borderColor: '#3B82F6' }}
+                  />
+                  <div className="subtext-calc-red">{unitABreakdown.roundUpMrp}</div>
+                </div>
 
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>mrp</label>
-                <input
-                  type="number"
-                  step="any"
-                  className="input-text-clean"
-                  value={unitABreakdown.mrp}
-                  readOnly
-                  style={{ textAlign: 'center', fontWeight: 900, color: '#1E40AF', fontSize: '0.92rem', background: '#EFF6FF', cursor: 'default' }}
-                />
-                <div className="subtext-calc-red">{unitABreakdown.mrp}</div>
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>mrp</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitABreakdown.mrp}
+                    readOnly
+                    style={{ textAlign: 'center', fontWeight: 900, color: '#1E40AF', fontSize: '0.92rem', background: '#EFF6FF', cursor: 'default' }}
+                  />
+                  <div className="subtext-calc-red">{unitABreakdown.mrp}</div>
+                </div>
               </div>
             </div>
           </div>
@@ -976,166 +978,168 @@ export const ItemMasterView: React.FC = () => {
               </div>
 
               {/* Pricing Grid for Unit B */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: '6px', textAlign: 'center' }}>
-                <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Besic Price</label>
-                  <input
-                    type="number"
-                    step="any"
-                    className="input-text-clean"
-                    value={unitBBasicPrice}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitBBasicPrice(e.target.value);
-                    }}
-                    style={{ textAlign: 'center', fontWeight: 700 }}
-                  />
-                  <div className="subtext-calc-red">{unitBBreakdown.basicPrice}</div>
-                </div>
+              <div className="pricing-calc-scroll-wrapper">
+                <div className="pricing-calc-grid-10">
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Besic Price</label>
+                    <input
+                      type="number"
+                      step="any"
+                      className="input-text-clean"
+                      value={unitBBasicPrice}
+                      onChange={e => {
+                        setIsTouched(true);
+                        setUnitBBasicPrice(e.target.value);
+                      }}
+                      style={{ textAlign: 'center', fontWeight: 700 }}
+                    />
+                    <div className="subtext-calc-red">{unitBBreakdown.basicPrice}</div>
+                  </div>
 
-                <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>GST %</label>
-                  <input
-                    type="number"
-                    step="any"
-                    className="input-text-clean"
-                    value={unitBGstPercent}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitBGstPercent(e.target.value);
-                    }}
-                    style={{ textAlign: 'center', fontWeight: 700 }}
-                  />
-                  <div className="subtext-calc-red">{unitBBreakdown.gstAmt}</div>
-                </div>
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>GST %</label>
+                    <input
+                      type="number"
+                      step="any"
+                      className="input-text-clean"
+                      value={unitBGstPercent}
+                      onChange={e => {
+                        setIsTouched(true);
+                        setUnitBGstPercent(e.target.value);
+                      }}
+                      style={{ textAlign: 'center', fontWeight: 700 }}
+                    />
+                    <div className="subtext-calc-red">{unitBBreakdown.gstAmt}</div>
+                  </div>
 
-                <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>tran%</label>
-                  <input
-                    type="number"
-                    step="any"
-                    className="input-text-clean"
-                    value={unitBTranPercent}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitBTranPercent(e.target.value);
-                    }}
-                    style={{ textAlign: 'center', fontWeight: 700 }}
-                  />
-                  <div className="subtext-calc-red">{unitBBreakdown.tranAmt}</div>
-                </div>
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>tran%</label>
+                    <input
+                      type="number"
+                      step="any"
+                      className="input-text-clean"
+                      value={unitBTranPercent}
+                      onChange={e => {
+                        setIsTouched(true);
+                        setUnitBTranPercent(e.target.value);
+                      }}
+                      style={{ textAlign: 'center', fontWeight: 700 }}
+                    />
+                    <div className="subtext-calc-red">{unitBBreakdown.tranAmt}</div>
+                  </div>
 
-                <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>mis%</label>
-                  <input
-                    type="number"
-                    step="any"
-                    className="input-text-clean"
-                    value={unitBMisPercent}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitBMisPercent(e.target.value);
-                    }}
-                    style={{ textAlign: 'center', fontWeight: 700 }}
-                  />
-                  <div className="subtext-calc-red">{unitBBreakdown.misAmt}</div>
-                </div>
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>mis%</label>
+                    <input
+                      type="number"
+                      step="any"
+                      className="input-text-clean"
+                      value={unitBMisPercent}
+                      onChange={e => {
+                        setIsTouched(true);
+                        setUnitBMisPercent(e.target.value);
+                      }}
+                      style={{ textAlign: 'center', fontWeight: 700 }}
+                    />
+                    <div className="subtext-calc-red">{unitBBreakdown.misAmt}</div>
+                  </div>
 
-                <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Prof% -S</label>
-                  <input
-                    type="number"
-                    step="any"
-                    className="input-text-clean"
-                    value={unitBProfDeal}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitBProfDeal(e.target.value);
-                    }}
-                    style={{ textAlign: 'center', fontWeight: 700, borderColor: '#8B5CF6' }}
-                  />
-                  <div className="subtext-calc-red">{unitBBreakdown.profDealAmt}</div>
-                </div>
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Prof% -S</label>
+                    <input
+                      type="number"
+                      step="any"
+                      className="input-text-clean"
+                      value={unitBProfDeal}
+                      onChange={e => {
+                        setIsTouched(true);
+                        setUnitBProfDeal(e.target.value);
+                      }}
+                      style={{ textAlign: 'center', fontWeight: 700, borderColor: '#8B5CF6' }}
+                    />
+                    <div className="subtext-calc-red">{unitBBreakdown.profDealAmt}</div>
+                  </div>
 
-                <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Round-S</label>
-                  <input
-                    type="number"
-                    step="any"
-                    className="input-text-clean"
-                    value={unitBRoundUpSale}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitBRoundUpSale(e.target.value);
-                    }}
-                    style={{ textAlign: 'center', fontWeight: 700, borderColor: '#8B5CF6' }}
-                  />
-                  <div className="subtext-calc-red">{unitBBreakdown.roundUpSale}</div>
-                </div>
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Round-S</label>
+                    <input
+                      type="number"
+                      step="any"
+                      className="input-text-clean"
+                      value={unitBRoundUpSale}
+                      onChange={e => {
+                        setIsTouched(true);
+                        setUnitBRoundUpSale(e.target.value);
+                      }}
+                      style={{ textAlign: 'center', fontWeight: 700, borderColor: '#8B5CF6' }}
+                    />
+                    <div className="subtext-calc-red">{unitBBreakdown.roundUpSale}</div>
+                  </div>
 
-                <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Sale Price</label>
-                  <input
-                    type="number"
-                    step="any"
-                    className="input-text-clean"
-                    value={unitBBreakdown.salePrice}
-                    readOnly
-                    style={{ textAlign: 'center', fontWeight: 900, color: '#6D28D9', fontSize: '0.92rem', background: '#F5F3FF', cursor: 'default' }}
-                  />
-                  <div className="subtext-calc-red">{unitBBreakdown.salePrice}</div>
-                </div>
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Sale Price</label>
+                    <input
+                      type="number"
+                      step="any"
+                      className="input-text-clean"
+                      value={unitBBreakdown.salePrice}
+                      readOnly
+                      style={{ textAlign: 'center', fontWeight: 900, color: '#6D28D9', fontSize: '0.92rem', background: '#F5F3FF', cursor: 'default' }}
+                    />
+                    <div className="subtext-calc-red">{unitBBreakdown.salePrice}</div>
+                  </div>
 
-                <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Prof% -M</label>
-                  <input
-                    type="number"
-                    step="any"
-                    className="input-text-clean"
-                    value={unitBProfAm}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitBProfAm(e.target.value);
-                    }}
-                    style={{ textAlign: 'center', fontWeight: 700, borderColor: '#3B82F6' }}
-                  />
-                  <div className="subtext-calc-red">{unitBBreakdown.profAmAmt}</div>
-                </div>
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Prof% -M</label>
+                    <input
+                      type="number"
+                      step="any"
+                      className="input-text-clean"
+                      value={unitBProfAm}
+                      onChange={e => {
+                        setIsTouched(true);
+                        setUnitBProfAm(e.target.value);
+                      }}
+                      style={{ textAlign: 'center', fontWeight: 700, borderColor: '#3B82F6' }}
+                    />
+                    <div className="subtext-calc-red">{unitBBreakdown.profAmAmt}</div>
+                  </div>
 
-                <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Round-M</label>
-                  <input
-                    type="number"
-                    step="any"
-                    className="input-text-clean"
-                    value={unitBRoundUpMrp}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitBRoundUpMrp(e.target.value);
-                    }}
-                    style={{ textAlign: 'center', fontWeight: 700, borderColor: '#3B82F6' }}
-                  />
-                  <div className="subtext-calc-red">{unitBBreakdown.roundUpMrp}</div>
-                </div>
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Round-M</label>
+                    <input
+                      type="number"
+                      step="any"
+                      className="input-text-clean"
+                      value={unitBRoundUpMrp}
+                      onChange={e => {
+                        setIsTouched(true);
+                        setUnitBRoundUpMrp(e.target.value);
+                      }}
+                      style={{ textAlign: 'center', fontWeight: 700, borderColor: '#3B82F6' }}
+                    />
+                    <div className="subtext-calc-red">{unitBBreakdown.roundUpMrp}</div>
+                  </div>
 
-                <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>mrp</label>
-                  <input
-                    type="number"
-                    step="any"
-                    className="input-text-clean"
-                    value={unitBBreakdown.mrp}
-                    readOnly
-                    style={{ textAlign: 'center', fontWeight: 900, color: '#1E40AF', fontSize: '0.92rem', background: '#EFF6FF', cursor: 'default' }}
-                  />
-                  <div className="subtext-calc-red">{unitBBreakdown.mrp}</div>
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>mrp</label>
+                    <input
+                      type="number"
+                      step="any"
+                      className="input-text-clean"
+                      value={unitBBreakdown.mrp}
+                      readOnly
+                      style={{ textAlign: 'center', fontWeight: 900, color: '#1E40AF', fontSize: '0.92rem', background: '#EFF6FF', cursor: 'default' }}
+                    />
+                    <div className="subtext-calc-red">{unitBBreakdown.mrp}</div>
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
           {/* Stock Thresholds */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '4px' }}>
+          <div className="form-grid-2col" style={{ marginTop: '4px' }}>
             <div>
               <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 Min Stock (Reorder Alert Threshold)

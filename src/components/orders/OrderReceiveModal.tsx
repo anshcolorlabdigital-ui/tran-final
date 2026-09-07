@@ -126,7 +126,7 @@ export const OrderReceiveModal: React.FC<OrderReceiveModalProps> = ({
     <Modal isOpen={isOpen} onClose={onClose} title={`Receive Goods - Order ${order.orderNumber}`} maxWidth="750px">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {/* Order Details Header */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', background: '#F3F4F6', padding: '12px', borderRadius: '8px' }}>
+        <div className="form-grid-3col" style={{ background: '#F3F4F6', padding: '12px', borderRadius: '8px' }}>
           <div>
             <span style={{ fontSize: '0.75rem', color: '#6B7280', fontWeight: 700 }}>SUPPLIER</span>
             <div style={{ fontWeight: 800, fontSize: '1rem' }}>{order.supplierName}</div>
@@ -155,7 +155,7 @@ export const OrderReceiveModal: React.FC<OrderReceiveModalProps> = ({
         </div>
 
         {/* Receiving Parameters */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+        <div className="form-grid-2col">
           <div>
             <label style={{ display: 'block', fontWeight: 700, fontSize: '0.85rem', marginBottom: '4px' }}>
               Received Date *
@@ -184,49 +184,51 @@ export const OrderReceiveModal: React.FC<OrderReceiveModalProps> = ({
         </div>
 
         {/* Receiving items table */}
-        <div className="custom-table-container">
-          <table className="custom-table">
-            <thead>
-              <tr>
-                <th>Item Name</th>
-                <th style={{ width: '90px', textAlign: 'center' }}>Ordered</th>
-                <th style={{ width: '90px', textAlign: 'center' }}>Prev Recd</th>
-                <th style={{ width: '120px', textAlign: 'center', color: '#15803D' }}>Receive Now</th>
-              </tr>
-            </thead>
-            <tbody>
-              {order.items.map(item => {
-                const prevRecd = item.receivedQty || 0;
-                const remaining = Math.max(0, item.orderedQty - prevRecd);
-                const recdNow = receivingQuantities[item.itemId] ?? remaining;
+        <div className="table-responsive-wrapper">
+          <div className="custom-table-container" style={{ minWidth: '460px' }}>
+            <table className="custom-table">
+              <thead>
+                <tr>
+                  <th>Item Name</th>
+                  <th style={{ width: '90px', textAlign: 'center' }}>Ordered</th>
+                  <th style={{ width: '90px', textAlign: 'center' }}>Prev Recd</th>
+                  <th style={{ width: '120px', textAlign: 'center', color: '#15803D' }}>Receive Now</th>
+                </tr>
+              </thead>
+              <tbody>
+                {order.items.map(item => {
+                  const prevRecd = item.receivedQty || 0;
+                  const remaining = Math.max(0, item.orderedQty - prevRecd);
+                  const recdNow = receivingQuantities[item.itemId] ?? remaining;
 
-                return (
-                  <tr key={item.id}>
-                    <td style={{ fontWeight: 700 }}>{item.itemName}</td>
-                    <td style={{ textAlign: 'center', fontWeight: 700 }}>{item.orderedQty}</td>
-                    <td style={{ textAlign: 'center', color: '#6B7280' }}>{prevRecd}</td>
-                    <td style={{ textAlign: 'center' }}>
-                      <input
-                        type="number"
-                        min="0"
-                        max={remaining}
-                        className="input-text-clean"
-                        value={recdNow}
-                        onChange={e => handleQtyChange(item.itemId, e.target.value)}
-                        style={{
-                          width: '90px',
-                          textAlign: 'center',
-                          fontWeight: 800,
-                          color: '#15803D',
-                          border: '2px solid #16A34A'
-                        }}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                  return (
+                    <tr key={item.id}>
+                      <td style={{ fontWeight: 700 }}>{item.itemName}</td>
+                      <td style={{ textAlign: 'center', fontWeight: 700 }}>{item.orderedQty}</td>
+                      <td style={{ textAlign: 'center', color: '#6B7280' }}>{prevRecd}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <input
+                          type="number"
+                          min="0"
+                          max={remaining}
+                          className="input-text-clean"
+                          value={recdNow}
+                          onChange={e => handleQtyChange(item.itemId, e.target.value)}
+                          style={{
+                            width: '90px',
+                            textAlign: 'center',
+                            fontWeight: 800,
+                            color: '#15803D',
+                            border: '2px solid #16A34A'
+                          }}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <div style={{ background: '#FEF3C7', padding: '10px 14px', borderRadius: '6px', border: '1px solid #FDE68A', fontSize: '0.85rem', color: '#92400E' }}>

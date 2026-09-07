@@ -336,7 +336,7 @@ export const SupplierMasterView: React.FC = () => {
         >
           
           {/* Row 1: Firm Name (wider) & Gst No. */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '14px' }}>
+          <div className="form-grid-2col">
             <div>
               <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 Firm Name *
@@ -374,7 +374,7 @@ export const SupplierMasterView: React.FC = () => {
           </div>
 
           {/* Row 2: Prop. Name & Prop. Phone */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '14px' }}>
+          <div className="form-grid-2col">
             <div>
               <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 Prop. Name
@@ -408,7 +408,7 @@ export const SupplierMasterView: React.FC = () => {
           </div>
 
           {/* Row 3: Contact Person 1 & Mobile 1 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '14px' }}>
+          <div className="form-grid-2col">
             <div>
               <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 Contact 1 (Person / Ref)
@@ -442,7 +442,7 @@ export const SupplierMasterView: React.FC = () => {
           </div>
 
           {/* Row 4: Contact Person 2 & Mobile 2 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '14px' }}>
+          <div className="form-grid-2col">
             <div>
               <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 Contact 2 (Person / Ref)
@@ -476,7 +476,7 @@ export const SupplierMasterView: React.FC = () => {
           </div>
 
           {/* Row 5: Address, Block, Distt */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.8fr 0.8fr', gap: '14px' }}>
+          <div className="form-grid-3col">
             <div>
               <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 Address
@@ -525,7 +525,7 @@ export const SupplierMasterView: React.FC = () => {
           </div>
 
           {/* Row 6: CITY, State, Mail ID */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: '14px' }}>
+          <div className="form-grid-3col">
             <div>
               <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 CITY
@@ -574,7 +574,7 @@ export const SupplierMasterView: React.FC = () => {
           </div>
 
           {/* Row 7: Opening Balance & Effective Date */}
-          <div style={{ background: '#F8FAFC', border: '1.5px solid #CBD5E1', borderRadius: '10px', padding: '14px 16px', display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '14px', alignItems: 'center' }}>
+          <div className="form-grid-3col" style={{ background: '#F8FAFC', border: '1.5px solid #CBD5E1', borderRadius: '10px', padding: '14px 16px', alignItems: 'center' }}>
             <div>
               <label style={{ display: 'block', fontWeight: 900, fontSize: '0.9rem', color: '#1E293B', marginBottom: '2px' }}>
                 Opening Balance / Previous Dues
@@ -670,7 +670,7 @@ export const SupplierMasterView: React.FC = () => {
           </div>
         </div>
 
-        <div className="custom-table-container">
+        <div className="custom-table-container table-responsive-wrapper">
           <table className="custom-table">
             <thead>
               <tr>

@@ -639,14 +639,7 @@ export const SelfUseView: React.FC = () => {
               </span>
             </div>
 
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1.2fr 1fr 1.2fr auto',
-                gap: '12px',
-                alignItems: 'flex-end'
-              }}
-            >
+            <div className="sales-pricing-input-grid">
               <div>
                 <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.75rem', textAlign: 'center', marginBottom: '2px' }}>
                   Rate (₹)
@@ -709,7 +702,7 @@ export const SelfUseView: React.FC = () => {
                 />
               </div>
 
-              <div>
+              <div className="add-btn-col">
                 <button
                   type="button"
                   onClick={handleAddUnitAItem}
@@ -746,14 +739,7 @@ export const SelfUseView: React.FC = () => {
                 </span>
               </div>
 
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1.2fr 1fr 1.2fr auto',
-                  gap: '12px',
-                  alignItems: 'flex-end'
-                }}
-              >
+              <div className="sales-pricing-input-grid">
                 <div>
                   <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.75rem', textAlign: 'center', marginBottom: '2px' }}>
                     Rate (₹)
@@ -816,7 +802,7 @@ export const SelfUseView: React.FC = () => {
                   />
                 </div>
 
-                <div>
+                <div className="add-btn-col">
                   <button
                     type="button"
                     onClick={handleAddUnitBItem}
@@ -832,7 +818,7 @@ export const SelfUseView: React.FC = () => {
         </div>
 
         {/* ITEMS TABLE matching self use new.jpg */}
-        <div style={{ border: '2px solid #000000', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
+        <div className="table-responsive-wrapper" style={{ border: '2px solid #000000', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#D2BEF6', borderBottom: '2px solid #000000' }}>
@@ -954,7 +940,7 @@ export const SelfUseView: React.FC = () => {
           </div>
         </div>
 
-        <div className="custom-table-container">
+        <div className="custom-table-container table-responsive-wrapper">
           <table className="custom-table">
             <thead>
               <tr>

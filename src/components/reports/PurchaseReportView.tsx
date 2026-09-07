@@ -167,7 +167,7 @@ export const PurchaseReportView: React.FC = () => {
       </div>
 
       {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginBottom: '20px' }}>
+      <div className="stat-grid-auto" style={{ marginBottom: '20px' }}>
         <div style={{ background: '#FFFFFF', border: '1px solid #000000', borderRadius: '8px', padding: '12px 16px' }}>
           <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#6B7280' }}>PURCHASE BILLS</div>
           <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#111827' }}>{totals.count}</div>
@@ -186,7 +186,7 @@ export const PurchaseReportView: React.FC = () => {
 
       {/* Report Table */}
       <div style={{ background: '#FFFFFF', border: '2px solid #000000', borderRadius: '10px', padding: '16px' }}>
-        <div className="custom-table-container">
+        <div className="custom-table-container table-responsive-wrapper">
           <table className="custom-table">
             <thead>
               <tr>

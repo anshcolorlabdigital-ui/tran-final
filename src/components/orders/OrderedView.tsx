@@ -294,8 +294,8 @@ export const OrderedView: React.FC = () => {
                 </div>
 
                 {/* Items Table */}
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+                <div className="table-responsive-wrapper">
+                  <table style={{ width: '100%', minWidth: '500px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
                     <thead>
                       <tr style={{ backgroundColor: '#F9FAFB', borderBottom: '1.5px solid #D1D5DB' }}>
                         <th style={{ padding: '8px 12px', fontWeight: 800, width: '100px' }}>S.No.</th>

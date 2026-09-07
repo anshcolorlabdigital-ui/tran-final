@@ -150,7 +150,7 @@ export const ItemStockReportView: React.FC = () => {
       </div>
 
       {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px', marginBottom: '20px' }}>
+      <div className="stat-grid-auto" style={{ marginBottom: '20px' }}>
         <div style={{ background: '#FFFFFF', border: '1px solid #000000', borderRadius: '8px', padding: '10px 14px' }}>
           <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#6B7280' }}>TOTAL ITEMS</div>
           <div style={{ fontSize: '1.3rem', fontWeight: 900 }}>{totals.count}</div>
@@ -179,7 +179,7 @@ export const ItemStockReportView: React.FC = () => {
 
       {/* Stock Matrix Table */}
       <div style={{ background: '#FFFFFF', border: '2px solid #000000', borderRadius: '10px', padding: '16px' }}>
-        <div className="custom-table-container">
+        <div className="custom-table-container table-responsive-wrapper">
           <table className="custom-table">
             <thead>
               <tr>

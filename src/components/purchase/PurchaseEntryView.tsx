@@ -744,14 +744,7 @@ export const PurchaseEntryView: React.FC = () => {
               </span>
             </div>
 
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1.2fr 80px 1fr 1fr 90px 1.1fr auto',
-                gap: '8px',
-                alignItems: 'flex-end'
-              }}
-            >
+            <div className="purchase-pricing-input-grid">
               <div>
                 <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
                   Besic Price
@@ -864,7 +857,7 @@ export const PurchaseEntryView: React.FC = () => {
                 />
               </div>
 
-              <div style={{ paddingBottom: '2px' }}>
+              <div className="add-btn-col" style={{ paddingBottom: '2px' }}>
                 <button
                   type="button"
                   onClick={handleAddUnitAItem}
@@ -880,8 +873,8 @@ export const PurchaseEntryView: React.FC = () => {
         </div>
 
         {/* ITEMS TABLE */}
-        <div style={{ border: '2px solid #000000', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="table-responsive-wrapper" style={{ border: '2px solid #000000', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
+          <table style={{ width: '100%', minWidth: '540px', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#D2BEF6', borderBottom: '2px solid #000000' }}>
                 <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 800, borderRight: '1px solid #000000' }}>
@@ -949,7 +942,7 @@ export const PurchaseEntryView: React.FC = () => {
         </div>
 
         {/* BOTTOM FINANCIAL SUMMARY & CUSTOMER ACTION BUTTONS */}
-        <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '30px', alignItems: 'center', marginTop: '10px' }}>
+        <div className="purchase-bottom-grid">
           
           {/* Financial Summary with EDITABLE ROUND UP */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '300px' }}>

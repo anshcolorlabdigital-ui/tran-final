@@ -138,7 +138,7 @@ export const UserPermissionsView: React.FC = () => {
           </h3>
 
           <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+            <div className="form-grid-3col">
               <div>
                 <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '4px' }}>
                   Full Name *
@@ -247,7 +247,8 @@ export const UserPermissionsView: React.FC = () => {
       ) : (
         /* List View */
         <div style={{ background: '#FFFFFF', border: '2px solid #000000', borderRadius: '12px', padding: '20px' }}>
-          <div className="custom-table-container">
+          <div className="table-responsive-wrapper">
+            <div className="custom-table-container" style={{ minWidth: '600px' }}>
             <table className="custom-table">
               <thead>
                 <tr>
@@ -327,6 +328,7 @@ export const UserPermissionsView: React.FC = () => {
             </table>
           </div>
         </div>
+      </div>
       )}
 
       <ConfirmDialog

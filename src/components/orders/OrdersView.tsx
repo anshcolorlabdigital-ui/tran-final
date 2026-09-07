@@ -282,82 +282,83 @@ export const OrdersView: React.FC = () => {
                 </span>
               </div>
 
-              {/* Table Column Header */}
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '110px 1fr 100px 140px 90px',
-                  gap: '8px',
-                  padding: '6px 12px',
-                  background: 'var(--color-lime)',
-                  border: '1px solid #000000',
-                  borderRadius: '4px',
-                  fontFamily: 'Outfit, sans-serif',
-                  fontWeight: 800,
-                  fontSize: '0.85rem',
-                  textTransform: 'uppercase',
-                  color: '#000000',
-                  marginBottom: '8px'
-                }}
-              >
-                <div>DATE</div>
-                <div>ITEM & DESCRIPTION</div>
-                <div style={{ textAlign: 'center', color: '#EA3943' }}>QTY</div>
-                <div>SUPPLIER</div>
-                <div style={{ textAlign: 'center' }}>REMOVE</div>
-              </div>
-
-              {/* Item Rows with Description in Smaller Light Grey Font */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {group.items.map(item => (
+              {/* Table Column Header & Item Rows */}
+              <div className="table-responsive-wrapper">
+                <div style={{ minWidth: '580px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <div
-                    key={item.id}
                     style={{
                       display: 'grid',
                       gridTemplateColumns: '110px 1fr 100px 140px 90px',
                       gap: '8px',
-                      alignItems: 'center'
+                      padding: '6px 12px',
+                      background: 'var(--color-lime)',
+                      border: '1px solid #000000',
+                      borderRadius: '4px',
+                      fontFamily: 'Outfit, sans-serif',
+                      fontWeight: 800,
+                      fontSize: '0.85rem',
+                      textTransform: 'uppercase',
+                      color: '#000000',
+                      marginBottom: '2px'
                     }}
                   >
-                    <div style={{ background: '#ECECEC', border: '1px solid #000000', borderRadius: '4px', padding: '6px 8px', fontWeight: 700, textAlign: 'center', fontSize: '0.85rem' }}>
-                      {formatDateToDisplay(item.orderDate)}
-                    </div>
-                    <div style={{ background: '#ECECEC', border: '1px solid #000000', borderRadius: '4px', padding: '6px 12px' }}>
-                      <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#000000' }}>
-                        {item.itemName}
-                      </div>
-                      {item.description && item.description.trim() && (
-                        <div style={{ fontSize: '0.78rem', color: '#6B7280', fontWeight: 500, marginTop: '2px' }}>
-                          {item.description.trim()}
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ background: '#ECECEC', border: '1px solid #000000', borderRadius: '4px', padding: '6px 8px', fontWeight: 900, fontSize: '1rem', textAlign: 'center', color: '#EA3943' }}>
-                      {item.orderedQty}
-                    </div>
-                    <div style={{ background: '#FFFFFF', border: '1px solid #000000', borderRadius: '4px', padding: '6px 8px', fontWeight: 800, fontSize: '0.88rem', textAlign: 'center', color: '#000000', textTransform: 'uppercase' }}>
-                      {group.supplier.name}
-                    </div>
-                    <div style={{ textAlign: 'center' }}>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveDraftItem(group.supplier.id, item.id)}
-                        style={{
-                          background: '#FFFFFF',
-                          border: '1px solid #000000',
-                          borderRadius: '4px',
-                          padding: '5px 12px',
-                          fontWeight: 800,
-                          fontSize: '0.85rem',
-                          color: '#000000',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        DEL
-                      </button>
-                    </div>
+                    <div>DATE</div>
+                    <div>ITEM & DESCRIPTION</div>
+                    <div style={{ textAlign: 'center', color: '#EA3943' }}>QTY</div>
+                    <div>SUPPLIER</div>
+                    <div style={{ textAlign: 'center' }}>REMOVE</div>
                   </div>
-                ))}
+
+                  {group.items.map(item => (
+                    <div
+                      key={item.id}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '110px 1fr 100px 140px 90px',
+                        gap: '8px',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <div style={{ background: '#ECECEC', border: '1px solid #000000', borderRadius: '4px', padding: '6px 8px', fontWeight: 700, textAlign: 'center', fontSize: '0.85rem' }}>
+                        {formatDateToDisplay(item.orderDate)}
+                      </div>
+                      <div style={{ background: '#ECECEC', border: '1px solid #000000', borderRadius: '4px', padding: '6px 12px' }}>
+                        <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#000000' }}>
+                          {item.itemName}
+                        </div>
+                        {item.description && item.description.trim() && (
+                          <div style={{ fontSize: '0.78rem', color: '#6B7280', fontWeight: 500, marginTop: '2px' }}>
+                            {item.description.trim()}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ background: '#ECECEC', border: '1px solid #000000', borderRadius: '4px', padding: '6px 8px', fontWeight: 900, fontSize: '1rem', textAlign: 'center', color: '#EA3943' }}>
+                        {item.orderedQty}
+                      </div>
+                      <div style={{ background: '#FFFFFF', border: '1px solid #000000', borderRadius: '4px', padding: '6px 8px', fontWeight: 800, fontSize: '0.88rem', textAlign: 'center', color: '#000000', textTransform: 'uppercase' }}>
+                        {group.supplier.name}
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveDraftItem(group.supplier.id, item.id)}
+                          style={{
+                            background: '#FFFFFF',
+                            border: '1px solid #000000',
+                            borderRadius: '4px',
+                            padding: '5px 12px',
+                            fontWeight: 800,
+                            fontSize: '0.85rem',
+                            color: '#000000',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          DEL
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* Remark / Note Input before ORDER PLACE */}
@@ -452,122 +453,126 @@ export const OrdersView: React.FC = () => {
               ✓ No pending low-stock items. All items are either well-stocked or assigned to order draft.
             </div>
           ) : (
-            pendingLowStockItems.map(summary => {
-              const currentQty =
-                pendingOverrides[summary.item.id] !== undefined ? pendingOverrides[summary.item.id] : 0;
+            <div className="table-responsive-wrapper">
+              <div style={{ minWidth: '580px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {pendingLowStockItems.map(summary => {
+                  const currentQty =
+                    pendingOverrides[summary.item.id] !== undefined ? pendingOverrides[summary.item.id] : 0;
 
-              return (
-                <div
-                  key={summary.item.id}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '110px 1fr 100px 140px 90px',
-                    gap: '8px',
-                    alignItems: 'center'
-                  }}
-                >
-                  {/* Date */}
-                  <div
-                    style={{
-                      background: '#ECECEC',
-                      border: '1px solid #000000',
-                      borderRadius: '4px',
-                      padding: '6px 8px',
-                      fontWeight: 700,
-                      textAlign: 'center',
-                      fontSize: '0.85rem'
-                    }}
-                  >
-                    {formatDateToDisplay(selectedDate)}
-                  </div>
-
-                  {/* Item Name & Description in Smaller Light Grey Font */}
-                  <div
-                    style={{
-                      background: '#ECECEC',
-                      border: '1px solid #000000',
-                      borderRadius: '4px',
-                      padding: '6px 12px'
-                    }}
-                  >
-                    <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#000000' }}>
-                      {summary.item.name}
-                    </div>
-                    {summary.item.description && summary.item.description.trim() && (
-                      <div style={{ fontSize: '0.78rem', color: '#6B7280', fontWeight: 500, marginTop: '2px' }}>
-                        {summary.item.description.trim()}
+                  return (
+                    <div
+                      key={summary.item.id}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '110px 1fr 100px 140px 90px',
+                        gap: '8px',
+                        alignItems: 'center'
+                      }}
+                    >
+                      {/* Date */}
+                      <div
+                        style={{
+                          background: '#ECECEC',
+                          border: '1px solid #000000',
+                          borderRadius: '4px',
+                          padding: '6px 8px',
+                          fontWeight: 700,
+                          textAlign: 'center',
+                          fontSize: '0.85rem'
+                        }}
+                      >
+                        {formatDateToDisplay(selectedDate)}
                       </div>
-                    )}
-                  </div>
 
-                  {/* QTY Input (Red Text, Editable) */}
-                  <div>
-                    <input
-                      type="number"
-                      min="0"
-                      className="input-text-clean"
-                      value={currentQty}
-                      onChange={e => {
-                        const val = e.target.value === '' ? 0 : Number(e.target.value);
-                        setPendingOverrides(prev => ({
-                          ...prev,
-                          [summary.item.id]: val
-                        }));
-                      }}
-                      style={{
-                        background: '#ECECEC',
-                        fontWeight: 900,
-                        fontSize: '1rem',
-                        textAlign: 'center',
-                        color: '#EA3943',
-                        padding: '5px 6px'
-                      }}
-                    />
-                  </div>
+                      {/* Item Name & Description in Smaller Light Grey Font */}
+                      <div
+                        style={{
+                          background: '#ECECEC',
+                          border: '1px solid #000000',
+                          borderRadius: '4px',
+                          padding: '6px 12px'
+                        }}
+                      >
+                        <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#000000' }}>
+                          {summary.item.name}
+                        </div>
+                        {summary.item.description && summary.item.description.trim() && (
+                          <div style={{ fontSize: '0.78rem', color: '#6B7280', fontWeight: 500, marginTop: '2px' }}>
+                            {summary.item.description.trim()}
+                          </div>
+                        )}
+                      </div>
 
-                  {/* Supplier Select Dropdown */}
-                  <div>
-                    <select
-                      className="input-text-clean"
-                      defaultValue=""
-                      onChange={e => handleAssignSupplierToPending(summary, e.target.value)}
-                      style={{
-                        padding: '6px 8px',
-                        fontWeight: 700,
-                        fontSize: '0.85rem'
-                      }}
-                    >
-                      <option value="">[Select Supplier]</option>
-                      {suppliers.map(s => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                      {/* QTY Input (Red Text, Editable) */}
+                      <div>
+                        <input
+                          type="number"
+                          min="0"
+                          className="input-text-clean"
+                          value={currentQty}
+                          onChange={e => {
+                            const val = e.target.value === '' ? 0 : Number(e.target.value);
+                            setPendingOverrides(prev => ({
+                              ...prev,
+                              [summary.item.id]: val
+                            }));
+                          }}
+                          style={{
+                            background: '#ECECEC',
+                            fontWeight: 900,
+                            fontSize: '1rem',
+                            textAlign: 'center',
+                            color: '#EA3943',
+                            padding: '5px 6px'
+                          }}
+                        />
+                      </div>
 
-                  {/* DEL button */}
-                  <div style={{ textAlign: 'center' }}>
-                    <button
-                      type="button"
-                      onClick={() => showToast('Low stock item remains in inventory master.', 'info')}
-                      style={{
-                        background: '#FFFFFF',
-                        border: '1px solid #000000',
-                        borderRadius: '4px',
-                        padding: '5px 12px',
-                        fontWeight: 800,
-                        fontSize: '0.85rem',
-                        color: '#000000',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      DEL
-                    </button>
-                  </div>
-                </div>
-              );
-            })
+                      {/* Supplier Select Dropdown */}
+                      <div>
+                        <select
+                          className="input-text-clean"
+                          defaultValue=""
+                          onChange={e => handleAssignSupplierToPending(summary, e.target.value)}
+                          style={{
+                            padding: '6px 8px',
+                            fontWeight: 700,
+                            fontSize: '0.85rem'
+                          }}
+                        >
+                          <option value="">[Select Supplier]</option>
+                          {suppliers.map(s => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* DEL button */}
+                      <div style={{ textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => showToast('Low stock item remains in inventory master.', 'info')}
+                          style={{
+                            background: '#FFFFFF',
+                            border: '1px solid #000000',
+                            borderRadius: '4px',
+                            padding: '5px 12px',
+                            fontWeight: 800,
+                            fontSize: '0.85rem',
+                            color: '#000000',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          DEL
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </div>
       </div>

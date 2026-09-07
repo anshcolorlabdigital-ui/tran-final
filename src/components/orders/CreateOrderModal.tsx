@@ -167,7 +167,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
     <Modal isOpen={isOpen} onClose={onClose} title="Create New Supplier Order" maxWidth="700px">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {/* Top order info */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '12px' }}>
+        <div className="form-grid-2col">
           <div>
             <label style={{ display: 'block', fontWeight: 700, fontSize: '0.85rem', marginBottom: '4px' }}>
               Order Date
@@ -223,7 +223,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
             gap: '8px'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
             <div style={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', color: '#374151' }}>
               Add Item to Order
             </div>
@@ -233,7 +233,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px auto', gap: '8px', alignItems: 'flex-end' }}>
+          <div className="order-row-grid">
             {/* Item Autocomplete Search */}
             <div>
               <label style={{ display: 'block', fontWeight: 700, fontSize: '0.75rem', marginBottom: '2px' }}>
@@ -278,54 +278,58 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
             </div>
 
             {/* Add Button */}
-            <button
-              type="button"
-              onClick={handleAddItemToDraft}
-              className="btn-lime-action"
-              style={{ padding: '7px 14px', height: '38px' }}
-            >
-              <Plus size={16} />
-              Add
-            </button>
+            <div className="add-btn-col">
+              <button
+                type="button"
+                onClick={handleAddItemToDraft}
+                className="btn-lime-action"
+                style={{ width: '100%', height: '38px', padding: '7px 14px' }}
+              >
+                <Plus size={16} />
+                Add
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Draft Items Table */}
-        <div className="custom-table-container">
-          <table className="custom-table">
-            <thead>
-              <tr>
-                <th>Item Name</th>
-                <th style={{ width: '100px', textAlign: 'right' }}>Qty</th>
-                <th style={{ width: '60px', textAlign: 'center' }}>Del</th>
-              </tr>
-            </thead>
-            <tbody>
-              {draftItems.length === 0 ? (
+        <div className="table-responsive-wrapper">
+          <div className="custom-table-container" style={{ minWidth: '400px' }}>
+            <table className="custom-table">
+              <thead>
                 <tr>
-                  <td colSpan={3} style={{ textAlign: 'center', color: '#9CA3AF', padding: '16px' }}>
-                    No items added yet. Select an item above.
-                  </td>
+                  <th>Item Name</th>
+                  <th style={{ width: '100px', textAlign: 'right' }}>Qty</th>
+                  <th style={{ width: '60px', textAlign: 'center' }}>Del</th>
                 </tr>
-              ) : (
-                draftItems.map((d) => (
-                  <tr key={d.id}>
-                    <td>{d.itemName}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 800, color: '#EA3943' }}>{d.qty}</td>
-                    <td style={{ textAlign: 'center' }}>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveDraftItem(d.id)}
-                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#EA3943' }}
-                      >
-                        <Trash2 size={16} />
-                      </button>
+              </thead>
+              <tbody>
+                {draftItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} style={{ textAlign: 'center', color: '#9CA3AF', padding: '16px' }}>
+                      No items added yet. Select an item above.
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  draftItems.map((d) => (
+                    <tr key={d.id}>
+                      <td>{d.itemName}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 800, color: '#EA3943' }}>{d.qty}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveDraftItem(d.id)}
+                          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#EA3943' }}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {/* Action buttons */}

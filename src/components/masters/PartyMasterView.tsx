@@ -403,7 +403,7 @@ export const PartyMasterView: React.FC = () => {
         >
           
           {/* Row 1: Firm Name & Gst No. */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '14px' }}>
+          <div className="form-grid-2col">
             <div>
               <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 Firm Name *
@@ -441,7 +441,7 @@ export const PartyMasterView: React.FC = () => {
           </div>
 
           {/* Row 2: Prop. Name & Prop. Phone */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '14px' }}>
+          <div className="form-grid-2col">
             <div>
               <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 Prop. Name
@@ -475,7 +475,7 @@ export const PartyMasterView: React.FC = () => {
           </div>
 
           {/* Row 3: Contact Person 1 & Mobile 1 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '14px' }}>
+          <div className="form-grid-2col">
             <div>
               <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 Contact 1 (Person / Ref)
@@ -509,7 +509,7 @@ export const PartyMasterView: React.FC = () => {
           </div>
 
           {/* Row 4: Contact Person 2 & Mobile 2 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '14px' }}>
+          <div className="form-grid-2col">
             <div>
               <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 Contact 2 (Person / Ref)
@@ -543,7 +543,7 @@ export const PartyMasterView: React.FC = () => {
           </div>
 
           {/* Row 5: Address, Block, Distt */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.8fr 0.8fr', gap: '14px' }}>
+          <div className="form-grid-3col">
             <div>
               <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 Address
@@ -592,7 +592,7 @@ export const PartyMasterView: React.FC = () => {
           </div>
 
           {/* Row 6: CITY, State, Mail ID */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: '14px' }}>
+          <div className="form-grid-3col">
             <div>
               <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
                 CITY
@@ -641,7 +641,7 @@ export const PartyMasterView: React.FC = () => {
           </div>
 
           {/* Row 7: Opening Balance & Effective Date */}
-          <div style={{ background: '#F8FAFC', border: '1.5px solid #CBD5E1', borderRadius: '10px', padding: '14px 16px', display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '14px', alignItems: 'center' }}>
+          <div className="form-grid-3col" style={{ background: '#F8FAFC', border: '1.5px solid #CBD5E1', borderRadius: '10px', padding: '14px 16px', alignItems: 'center' }}>
             <div>
               <label style={{ display: 'block', fontWeight: 900, fontSize: '0.9rem', color: '#1E293B', marginBottom: '2px' }}>
                 Opening Balance / Previous Dues
@@ -1155,7 +1155,7 @@ export const PartyMasterView: React.FC = () => {
             {/* Modal Body */}
             <div style={{ padding: '20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '18px' }}>
               {/* Summary Cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
+              <div className="stat-grid-auto">
                 <div style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '10px', padding: '12px 16px' }}>
                   <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#64748B' }}>Total Sales Billed</div>
                   <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#002B99' }}>₹{statementSummary.totalBilled}</div>
@@ -1208,26 +1208,27 @@ export const PartyMasterView: React.FC = () => {
                 </div>
 
                 {showPaymentForm && (
-                  <form onSubmit={handleRecordPayment} style={{ display: 'grid', gridTemplateColumns: '120px 140px 150px 1fr auto', gap: '10px', alignItems: 'flex-end', paddingTop: '8px', borderTop: '1px dashed #E2E8F0' }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>Amount (₹) *</label>
-                      <input
-                        type="number"
-                        step="any"
-                        required
-                        className="input-text-clean"
-                        value={paymentAmount}
-                        onChange={e => setPaymentAmount(e.target.value)}
-                        placeholder="e.g. 500"
-                        style={{ fontWeight: 800, padding: '6px 8px' }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>Payment Mode</label>
-                      <select
-                        className="input-text-clean"
-                        value={paymentMode}
-                        onChange={e => setPaymentMode(e.target.value as any)}
+                  <div className="pricing-calc-scroll-wrapper">
+                    <form onSubmit={handleRecordPayment} style={{ display: 'grid', gridTemplateColumns: '120px 140px 150px 1fr auto', gap: '10px', alignItems: 'flex-end', paddingTop: '8px', borderTop: '1px dashed #E2E8F0', minWidth: '600px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>Amount (₹) *</label>
+                        <input
+                          type="number"
+                          step="any"
+                          required
+                          className="input-text-clean"
+                          value={paymentAmount}
+                          onChange={e => setPaymentAmount(e.target.value)}
+                          placeholder="e.g. 500"
+                          style={{ fontWeight: 800, padding: '6px 8px' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', marginBottom: '3px' }}>Payment Mode</label>
+                        <select
+                          className="input-text-clean"
+                          value={paymentMode}
+                          onChange={e => setPaymentMode(e.target.value as any)}
                         style={{ fontWeight: 700, padding: '6px 8px', height: '35px' }}
                       >
                         <option value="CASH">Cash</option>
@@ -1274,8 +1275,9 @@ export const PartyMasterView: React.FC = () => {
                       Save Receipt
                     </button>
                   </form>
-                )}
-              </div>
+                </div>
+              )}
+            </div>
 
               {/* Chronological Statement Table */}
               <div>
@@ -1426,7 +1428,7 @@ export const PartyMasterView: React.FC = () => {
         </div>
       )}
 
-      {/* DETAILED BILL LOG POPUP MODAL */}
+      {/* DETAILED SALE INVOICE INSPECT POPUP MODAL */}
       {selectedSaleDetail && (
         <div
           style={{
@@ -1435,51 +1437,47 @@ export const PartyMasterView: React.FC = () => {
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            backgroundColor: 'rgba(0, 0, 0, 0.65)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 10005,
+            zIndex: 10000,
             padding: '20px'
           }}
+          onClick={() => setSelectedSaleDetail(null)}
         >
           <div
             style={{
               background: '#FFFFFF',
               border: '2px solid #000000',
-              borderRadius: '16px',
+              borderRadius: '12px',
               width: '100%',
-              maxWidth: '900px',
+              maxWidth: '780px',
               maxHeight: '90vh',
               display: 'flex',
               flexDirection: 'column',
-              boxShadow: '0 25px 30px -5px rgba(0, 0, 0, 0.4)',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
               overflow: 'hidden'
             }}
+            onClick={e => e.stopPropagation()}
           >
             {/* Modal Header */}
             <div
               style={{
-                background: '#D2BEF6',
-                padding: '16px 22px',
+                background: '#E2D2F8',
+                padding: '14px 20px',
                 borderBottom: '2px solid #000000',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <Receipt size={24} color="#002B99" />
-                <div>
-                  <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.25rem', color: '#002B99' }}>
-                    Sale Invoice Detail Log: {selectedSaleDetail.billNo}
-                  </h3>
-                  <div style={{ fontSize: '0.82rem', color: '#4B5563', fontWeight: 700 }}>
-                    Date: {formatDateToDisplay(selectedSaleDetail.billDate)} | Customer: {selectedSaleDetail.partyName}
-                  </div>
-                </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Receipt size={22} color="#002B99" />
+                <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.15rem', color: '#002B99' }}>
+                  INVOICE DETAILS — #{selectedSaleDetail.billNo || selectedSaleDetail.id}
+                </h3>
               </div>
-
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <button
                   type="button"
@@ -1488,8 +1486,11 @@ export const PartyMasterView: React.FC = () => {
                     background: 'transparent',
                     border: 'none',
                     cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     padding: '4px',
-                    borderRadius: '50%'
+                    color: '#1E293B'
                   }}
                 >
                   <X size={22} />
@@ -1500,7 +1501,7 @@ export const PartyMasterView: React.FC = () => {
             {/* Modal Body */}
             <div style={{ padding: '20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {/* Key Invoice Summary Cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+              <div className="stat-grid-auto">
                 <div style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '8px', padding: '10px 12px' }}>
                   <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748B' }}>Basic Total</div>
                   <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#002B99' }}>₹{selectedSaleDetail.basicTotal}</div>
@@ -1527,11 +1528,12 @@ export const PartyMasterView: React.FC = () => {
               </div>
 
               {/* Items Breakdown Table */}
-              <div style={{ border: '1.5px solid #000000', borderRadius: '8px', overflow: 'hidden' }}>
-                <div style={{ background: '#ECECEC', padding: '8px 12px', fontWeight: 800, fontSize: '0.88rem', borderBottom: '1px solid #000000' }}>
-                  Billed Items & Rate Breakdown
-                </div>
-                <table className="table-clean" style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <div className="table-responsive-wrapper">
+                <div style={{ border: '1.5px solid #000000', borderRadius: '8px', overflow: 'hidden', minWidth: '600px' }}>
+                  <div style={{ background: '#ECECEC', padding: '8px 12px', fontWeight: 800, fontSize: '0.88rem', borderBottom: '1px solid #000000' }}>
+                    Billed Items & Rate Breakdown
+                  </div>
+                  <table className="table-clean" style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #CBD5E1', fontSize: '0.82rem' }}>
                       <th style={{ padding: '8px 10px', textAlign: 'center', width: '40px' }}>#</th>
@@ -1568,6 +1570,7 @@ export const PartyMasterView: React.FC = () => {
                   </tbody>
                 </table>
               </div>
+            </div>
 
               {/* Payment Details Footer */}
               <div style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '8px', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>

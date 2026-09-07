@@ -1730,7 +1730,7 @@ service cloud.firestore {
                   />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-grid-2col">
                   <div>
                     <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '4px' }}>
                       Phone
@@ -1781,7 +1781,7 @@ service cloud.firestore {
                       Preview: {(formData.invoicePrefix ?? 'INV-') + (formData.invoicePadDigits && formData.invoicePadDigits > 0 ? String(formData.invoiceNextNumber ?? 1002).padStart(formData.invoicePadDigits, '0') : String(formData.invoiceNextNumber ?? 1002))}
                     </span>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '12px' }}>
+                  <div className="form-grid-3col">
                     <div>
                       <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', marginBottom: '2px' }}>Prefix</label>
                       <input
@@ -1826,7 +1826,7 @@ service cloud.firestore {
                       Preview: {(formData.selfUsePrefix ?? 'SU-') + (formData.selfUsePadDigits && formData.selfUsePadDigits > 0 ? String(formData.selfUseNextNumber ?? 101).padStart(formData.selfUsePadDigits, '0') : String(formData.selfUseNextNumber ?? 101))}
                     </span>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '12px' }}>
+                  <div className="form-grid-3col">
                     <div>
                       <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', marginBottom: '2px' }}>Prefix</label>
                       <input
@@ -1871,7 +1871,7 @@ service cloud.firestore {
                       Preview: {(formData.orderPrefix ?? 'ORD-') + (formData.orderPadDigits && formData.orderPadDigits > 0 ? String(formData.orderNextNumber ?? 103).padStart(formData.orderPadDigits, '0') : String(formData.orderNextNumber ?? 103))}
                     </span>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '12px' }}>
+                  <div className="form-grid-3col">
                     <div>
                       <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', marginBottom: '2px' }}>Prefix</label>
                       <input
@@ -1953,7 +1953,7 @@ service cloud.firestore {
             </div>
 
             {adjItemId && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', background: '#F3F4F6', padding: '12px', borderRadius: '8px', border: '1px solid #D1D5DB' }}>
+              <div className="form-grid-2col" style={{ background: '#F3F4F6', padding: '12px', borderRadius: '8px', border: '1px solid #D1D5DB' }}>
                 <div>
                   <span style={{ fontSize: '0.75rem', color: '#6B7280', fontWeight: 700 }}>System Recorded Stock:</span>
                   <div style={{ fontWeight: 900, fontSize: '1.2rem' }}>{selectedItemCurrentStock}</div>

@@ -145,7 +145,7 @@ export const SupplierPaymentModal: React.FC<SupplierPaymentModalProps> = ({
         </div>
 
         {/* MODAL BODY */}
-        <form onSubmit={handleSubmit} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <form onSubmit={handleSubmit} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: 'calc(90vh - 70px)', overflowY: 'auto' }}>
           {/* Supplier Selector */}
           <div>
             <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '4px' }}>
@@ -241,7 +241,7 @@ export const SupplierPaymentModal: React.FC<SupplierPaymentModalProps> = ({
           </div>
 
           {/* Payment Date & Mode */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+          <div className="form-grid-2col">
             <div>
               <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '4px' }}>
                 Payment Date *

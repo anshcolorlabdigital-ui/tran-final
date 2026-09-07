@@ -886,14 +886,7 @@ export const SalesEntryView: React.FC = () => {
               </span>
             </div>
 
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1.2fr 100px 1.2fr auto',
-                gap: '10px',
-                alignItems: 'flex-end'
-              }}
-            >
+            <div className="sales-pricing-input-grid">
               {selectedParty?.partyType === 'DEALER' ? (
                 <div>
                   <label style={{ display: 'block', color: '#5B21B6', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
@@ -959,7 +952,7 @@ export const SalesEntryView: React.FC = () => {
                 <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Amount</label>
                 <input type="text" readOnly className="input-text-clean" value={calculatedUnitAPricing.amount} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 800 }} />
               </div>
-              <div style={{ paddingBottom: '2px' }}>
+              <div className="add-btn-col" style={{ paddingBottom: '2px' }}>
                 <button
                   ref={unitAAddBtnRef}
                   type="button"
@@ -1021,14 +1014,7 @@ export const SalesEntryView: React.FC = () => {
                 </span>
               </div>
 
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1.2fr 100px 1.2fr auto',
-                  gap: '10px',
-                  alignItems: 'flex-end'
-                }}
-              >
+              <div className="sales-pricing-input-grid">
                 {selectedParty?.partyType === 'DEALER' ? (
                   <div>
                     <label style={{ display: 'block', color: '#5B21B6', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
@@ -1094,7 +1080,7 @@ export const SalesEntryView: React.FC = () => {
                   <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Amount</label>
                   <input type="text" readOnly className="input-text-clean" value={calculatedUnitBPricing.amount} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 800 }} />
                 </div>
-                <div style={{ paddingBottom: '2px' }}>
+                <div className="add-btn-col" style={{ paddingBottom: '2px' }}>
                   <button
                     ref={unitBAddBtnRef}
                     type="button"
@@ -1136,8 +1122,8 @@ export const SalesEntryView: React.FC = () => {
         </div>
 
         {/* ITEMS TABLE matching sales layout */}
-        <div style={{ border: '2px solid #000000', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="table-responsive-wrapper" style={{ border: '2px solid #000000', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
+          <table style={{ width: '100%', minWidth: '540px', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#D2BEF6', borderBottom: '2px solid #000000' }}>
                 <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 800, borderRight: '1px solid #000000' }}>Item</th>
@@ -1202,7 +1188,7 @@ export const SalesEntryView: React.FC = () => {
         </div>
 
         {/* BOTTOM SECTION WITH EDITABLE ROUND UP */}
-        <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: '30px', alignItems: 'center', marginTop: '10px' }}>
+        <div className="sales-bottom-grid">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '340px' }}>
             {/* EDITABLE ROUND UP */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.95rem', fontWeight: 800 }}>

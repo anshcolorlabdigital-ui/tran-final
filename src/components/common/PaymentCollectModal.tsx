@@ -144,7 +144,7 @@ export const PaymentCollectModal: React.FC<PaymentCollectModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <form onSubmit={handleSubmit} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: 'calc(90vh - 70px)', overflowY: 'auto' }}>
           {/* Party Selector */}
           <div>
             <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', color: '#374151', marginBottom: '4px' }}>
@@ -213,7 +213,7 @@ export const PaymentCollectModal: React.FC<PaymentCollectModalProps> = ({
           )}
 
           {/* Amount & Date in 2 columns */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '12px' }}>
+          <div className="form-grid-2col">
             <div>
               <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', color: '#166534', marginBottom: '4px' }}>
                 Payment Amount (₹) *
@@ -253,7 +253,7 @@ export const PaymentCollectModal: React.FC<PaymentCollectModalProps> = ({
           </div>
 
           {/* Mode & Ref No */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div className="form-grid-2col">
             <div>
               <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', color: '#374151', marginBottom: '4px' }}>
                 Payment Method *

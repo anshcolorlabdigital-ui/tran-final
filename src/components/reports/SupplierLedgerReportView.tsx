@@ -353,7 +353,7 @@ export const SupplierLedgerReportView: React.FC = () => {
             borderRadius: '10px',
             padding: '12px 14px',
             display: 'grid',
-            gridTemplateColumns: '1.5fr 1fr 1fr auto',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
             gap: '12px',
             alignItems: 'center'
           }}
@@ -418,7 +418,7 @@ export const SupplierLedgerReportView: React.FC = () => {
           </div>
 
           {/* Quick Preset Buttons */}
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-end', paddingTop: '16px' }}>
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-end', paddingTop: '16px', flexWrap: 'wrap' }}>
             <button
               type="button"
               onClick={() => setQuickFilter('ALL')}
@@ -466,13 +466,7 @@ export const SupplierLedgerReportView: React.FC = () => {
 
       {/* SUPPLIER PROFILE & KPI SUMMARY RIBBON */}
       {activeSupplier && (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1.2fr repeat(3, 1fr)',
-            gap: '14px'
-          }}
-        >
+        <div className="stat-grid-auto" style={{ gap: '14px' }}>
           {/* Supplier Metadata Card */}
           <div
             style={{
@@ -646,8 +640,8 @@ export const SupplierLedgerReportView: React.FC = () => {
           </div>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
-          <table className="table-clean" style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="table-responsive-wrapper">
+          <table className="table-clean" style={{ width: '100%', minWidth: '780px', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#ECECEC', borderBottom: '2px solid #000000' }}>
                 <th style={{ padding: '10px 12px', textAlign: 'center', width: '50px' }}>#</th>
@@ -851,7 +845,7 @@ export const SupplierLedgerReportView: React.FC = () => {
             {/* Modal Body */}
             <div style={{ padding: '20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {/* Key Purchase Summary Cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+              <div className="stat-grid-auto" style={{ gap: '10px' }}>
                 <div style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '8px', padding: '10px 12px' }}>
                   <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748B' }}>Basic Total</div>
                   <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#002B99' }}>₹{selectedPurchaseDetail.basicTotal}</div>
@@ -882,7 +876,8 @@ export const SupplierLedgerReportView: React.FC = () => {
                 <div style={{ background: '#ECECEC', padding: '8px 12px', fontWeight: 800, fontSize: '0.88rem', borderBottom: '1px solid #000000' }}>
                   Purchased Items & Rate Breakdown
                 </div>
-                <table className="table-clean" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <div className="table-responsive-wrapper">
+                  <table className="table-clean" style={{ width: '100%', minWidth: '680px', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #CBD5E1', fontSize: '0.82rem' }}>
                       <th style={{ padding: '8px 10px', textAlign: 'center', width: '40px' }}>#</th>
@@ -918,6 +913,7 @@ export const SupplierLedgerReportView: React.FC = () => {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
 
               {/* Payment Details Footer */}
