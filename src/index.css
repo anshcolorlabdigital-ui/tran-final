@@ -876,9 +876,33 @@ button, input, select, textarea {
 
 .table-responsive-wrapper {
   width: 100%;
-  overflow-x: auto;
+  max-width: 100%;
+  overflow-x: auto !important;
   -webkit-overflow-scrolling: touch;
+  border: 2px solid #000000;
+  border-radius: 4px;
+  background-color: #FFFFFF;
   margin-bottom: 14px;
+}
+
+.party-status-toggle-container {
+  background: #F8FAFC;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 2px;
+}
+
+.status-btn-group {
+  display: flex;
+  gap: 8px;
+}
+
+.status-btn-group button {
+  flex: 1;
 }
 
 .pricing-calc-scroll-wrapper {
@@ -1172,6 +1196,25 @@ button, input, select, textarea {
   .purchase-bottom-grid > div {
     max-width: 100% !important;
     width: 100% !important;
+  }
+
+  .party-status-toggle-container {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    padding: 12px 10px !important;
+  }
+
+  .status-btn-group {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+
+  .status-btn-group button {
+    width: 100% !important;
+    flex: none !important;
+    padding: 10px 14px !important;
+    font-size: 0.88rem !important;
+    justify-content: center !important;
   }
 
   .form-grid-2col,

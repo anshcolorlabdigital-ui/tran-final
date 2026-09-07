@@ -1122,35 +1122,35 @@ export const SalesEntryView: React.FC = () => {
         </div>
 
         {/* ITEMS TABLE matching sales layout */}
-        <div className="table-responsive-wrapper" style={{ border: '2px solid #000000', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
-          <table style={{ width: '100%', minWidth: '540px', borderCollapse: 'collapse' }}>
+        <div className="table-responsive-wrapper">
+          <table style={{ width: '100%', minWidth: '480px', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#D2BEF6', borderBottom: '2px solid #000000' }}>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 800, borderRight: '1px solid #000000' }}>Item</th>
-                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '120px', borderRight: '1px solid #000000' }}>
+                <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800, borderRight: '1px solid #000000' }}>Item</th>
+                <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, width: '100px', borderRight: '1px solid #000000' }}>
                   {selectedParty?.partyType === 'DEALER' ? 'Sale Price' : 'MRP'}
                 </th>
-                <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, width: '90px', borderRight: '1px solid #000000' }}>Qty</th>
-                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '120px', borderRight: '1px solid #000000' }}>Amount</th>
-                <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, width: '70px' }}>Action</th>
+                <th style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 800, width: '80px', borderRight: '1px solid #000000' }}>Qty</th>
+                <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, width: '100px', borderRight: '1px solid #000000' }}>Amount</th>
+                <th style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 800, width: '60px' }}>Action</th>
               </tr>
             </thead>
             <tbody>
               {billItems.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ padding: '30px', textAlign: 'center', color: '#9CA3AF', fontWeight: 600 }}>
+                  <td colSpan={5} style={{ padding: '24px 12px', textAlign: 'center', color: '#9CA3AF', fontWeight: 600, fontSize: '0.88rem', whiteSpace: 'normal', lineHeight: 1.5 }}>
                     No items in current sales invoice. Select item above and press Enter on Qty or click "Add".
                   </td>
                 </tr>
               ) : (
                 billItems.map((item, idx) => (
                   <tr key={idx} onClick={() => handleEditLineItem(idx)} style={{ borderBottom: '1px solid #E5E7EB', cursor: 'pointer', background: editingItemIndex === idx ? '#F3E8FF' : 'transparent' }} title="Click to edit item rates">
-                    <td style={{ padding: '8px 12px', fontWeight: 800, borderRight: '1px solid #000000' }}>{item.itemName}</td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, borderRight: '1px solid #000000', color: selectedParty?.partyType === 'DEALER' ? '#6D28D9' : '#1D4ED8' }}>
+                    <td style={{ padding: '8px 10px', fontWeight: 800, borderRight: '1px solid #000000' }}>{item.itemName}</td>
+                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, borderRight: '1px solid #000000', color: selectedParty?.partyType === 'DEALER' ? '#6D28D9' : '#1D4ED8' }}>
                       {selectedParty?.partyType === 'DEALER' ? item.salePrice : (item.mrp || item.salePrice)}
                     </td>
-                    <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, color: '#16A34A', borderRight: '1px solid #000000' }}>{item.qty} {item.unit}</td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, borderRight: '1px solid #000000' }}>{item.amount}</td>
+                    <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 800, color: '#16A34A', borderRight: '1px solid #000000' }}>{item.qty} {item.unit}</td>
+                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, borderRight: '1px solid #000000' }}>{item.amount}</td>
                     <td style={{ padding: '6px 8px', textAlign: 'center' }}>
                       <button
                         type="button"
@@ -1179,8 +1179,8 @@ export const SalesEntryView: React.FC = () => {
             </tbody>
             <tfoot>
               <tr style={{ background: '#D2BEF6', borderTop: '2px solid #000000' }}>
-                <td colSpan={3} style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 900, borderRight: '1px solid #000000' }}>Total</td>
-                <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 900, color: '#002B99', borderRight: '1px solid #000000' }}>{billSummary.billTotal}</td>
+                <td colSpan={3} style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, borderRight: '1px solid #000000' }}>Total</td>
+                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, color: '#002B99', borderRight: '1px solid #000000' }}>{billSummary.billTotal}</td>
                 <td style={{ background: '#D2BEF6' }}></td>
               </tr>
             </tfoot>

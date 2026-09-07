@@ -739,18 +739,17 @@ export const PartyMasterView: React.FC = () => {
           </div>
 
           {/* PRIVILEGES & STATUS TOGGLES: Active Status & Credit Facility */}
-          <div style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '10px', padding: '14px 16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '2px' }}>
+          <div className="party-status-toggle-container">
             {/* Active / Inactive Toggle */}
             <div>
               <label style={{ display: 'block', fontWeight: 900, fontSize: '0.86rem', color: '#1E293B', marginBottom: '6px' }}>
                 Party Status (Visibility)
               </label>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div className="status-btn-group">
                 <button
                   type="button"
                   onClick={() => { setIsTouched(true); setIsActive(true); }}
                   style={{
-                    flex: 1,
                     padding: '6px 12px',
                     borderRadius: '8px',
                     fontWeight: 800,
@@ -772,7 +771,6 @@ export const PartyMasterView: React.FC = () => {
                   type="button"
                   onClick={() => { setIsTouched(true); setIsActive(false); }}
                   style={{
-                    flex: 1,
                     padding: '6px 12px',
                     borderRadius: '8px',
                     fontWeight: 800,
@@ -798,12 +796,11 @@ export const PartyMasterView: React.FC = () => {
               <label style={{ display: 'block', fontWeight: 900, fontSize: '0.86rem', color: '#1E293B', marginBottom: '6px' }}>
                 Credit Facility (Payment Rules)
               </label>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div className="status-btn-group">
                 <button
                   type="button"
                   onClick={() => { setIsTouched(true); setAllowCredit(true); }}
                   style={{
-                    flex: 1,
                     padding: '6px 12px',
                     borderRadius: '8px',
                     fontWeight: 800,
@@ -825,7 +822,6 @@ export const PartyMasterView: React.FC = () => {
                   type="button"
                   onClick={() => { setIsTouched(true); setAllowCredit(false); }}
                   style={{
-                    flex: 1,
                     padding: '6px 12px',
                     borderRadius: '8px',
                     fontWeight: 800,

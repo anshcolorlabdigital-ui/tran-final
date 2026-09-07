@@ -873,26 +873,26 @@ export const PurchaseEntryView: React.FC = () => {
         </div>
 
         {/* ITEMS TABLE */}
-        <div className="table-responsive-wrapper" style={{ border: '2px solid #000000', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
-          <table style={{ width: '100%', minWidth: '540px', borderCollapse: 'collapse' }}>
+        <div className="table-responsive-wrapper">
+          <table style={{ width: '100%', minWidth: '500px', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#D2BEF6', borderBottom: '2px solid #000000' }}>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 800, borderRight: '1px solid #000000' }}>
+                <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800, borderRight: '1px solid #000000' }}>
                   Item
                 </th>
-                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '110px', borderRight: '1px solid #000000' }}>
+                <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, width: '100px', borderRight: '1px solid #000000' }}>
                   Besic Price
                 </th>
-                <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, width: '80px', borderRight: '1px solid #000000' }}>
+                <th style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 800, width: '70px', borderRight: '1px solid #000000' }}>
                   GST
                 </th>
-                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '110px', borderRight: '1px solid #000000' }}>
+                <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, width: '100px', borderRight: '1px solid #000000' }}>
                   Net Price
                 </th>
-                <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, width: '80px', borderRight: '1px solid #000000' }}>
+                <th style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 800, width: '70px', borderRight: '1px solid #000000' }}>
                   Qty
                 </th>
-                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '130px' }}>
+                <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, width: '110px' }}>
                   Amount
                 </th>
               </tr>
@@ -900,7 +900,7 @@ export const PurchaseEntryView: React.FC = () => {
             <tbody>
               {purchaseItems.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: '30px', textAlign: 'center', color: '#9CA3AF', fontWeight: 600 }}>
+                  <td colSpan={6} style={{ padding: '24px 12px', textAlign: 'center', color: '#9CA3AF', fontWeight: 600, fontSize: '0.88rem', whiteSpace: 'normal', lineHeight: 1.5 }}>
                     No items in this purchase bill. Select an item above and press Enter on Qty or click "+ Add".
                   </td>
                 </tr>
@@ -916,22 +916,22 @@ export const PurchaseEntryView: React.FC = () => {
                     }}
                     title="Click to edit item rates"
                   >
-                    <td style={{ padding: '8px 12px', fontWeight: 800, borderRight: '1px solid #000000' }}>
+                    <td style={{ padding: '8px 10px', fontWeight: 800, borderRight: '1px solid #000000' }}>
                       {item.itemName}
                     </td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, borderRight: '1px solid #000000' }}>
+                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, borderRight: '1px solid #000000' }}>
                       {item.basicPrice}
                     </td>
-                    <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, borderRight: '1px solid #000000' }}>
+                    <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700, borderRight: '1px solid #000000' }}>
                       {item.gstPercent}%
                     </td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, borderRight: '1px solid #000000' }}>
+                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, borderRight: '1px solid #000000' }}>
                       {item.nettPrice}
                     </td>
-                    <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, color: '#15803D', borderRight: '1px solid #000000' }}>
+                    <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 800, color: '#15803D', borderRight: '1px solid #000000' }}>
                       {item.qty}
                     </td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800 }}>
+                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800 }}>
                       {item.amount}
                     </td>
                   </tr>
