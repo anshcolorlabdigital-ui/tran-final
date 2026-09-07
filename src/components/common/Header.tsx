@@ -1,12 +1,10 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
-import { useAuth } from '../../context/AuthContext';
 import { formatDateToDisplay } from '../../utils/dateUtils';
-import { User, Calendar, ShieldCheck, RefreshCw, Menu, X } from 'lucide-react';
+import { Calendar, RefreshCw, Menu, X } from 'lucide-react';
 
 export const Header: React.FC = () => {
   const { selectedDate, setSelectedDate, triggerRefresh, isMobileMenuOpen, toggleMobileMenu } = useApp();
-  const { currentUser, users, switchUser } = useAuth();
 
   return (
     <header className="app-top-header">
@@ -50,29 +48,6 @@ export const Header: React.FC = () => {
           <RefreshCw size={14} />
           <span>Sync</span>
         </button>
-
-        {/* Active User Switcher */}
-        <div className="header-action-widget user-widget">
-          <User size={16} color="#4B5563" />
-          <span className="widget-label">USER:</span>
-          <select
-            value={currentUser.id}
-            onChange={e => switchUser(e.target.value)}
-            className="user-select"
-          >
-            {users.map(u => (
-              <option key={u.id} value={u.id}>
-                {u.name} ({u.role})
-              </option>
-            ))}
-          </select>
-          <span
-            className={`role-badge ${currentUser.role === 'ADMIN' ? 'role-admin' : 'role-operator'}`}
-          >
-            <ShieldCheck size={12} />
-            {currentUser.role}
-          </span>
-        </div>
       </div>
     </header>
   );

@@ -1,5 +1,7 @@
 import React from 'react';
 import { useApp } from './context/AppContext';
+import { useAuth } from './context/AuthContext';
+import { LoginView } from './components/auth/LoginView';
 import { Header } from './components/common/Header';
 import { Sidebar } from './components/common/Sidebar';
 import { DashboardView } from './components/dashboard/DashboardView';
@@ -27,59 +29,102 @@ import { QuickPartyModal } from './components/common/QuickPartyModal';
 import { QuickItemModal } from './components/common/QuickItemModal';
 import { QuickSupplierModal } from './components/common/QuickSupplierModal';
 import { AlertDialog } from './components/common/AlertDialog';
-import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Info, X, ShieldAlert } from 'lucide-react';
 
 export const App: React.FC = () => {
   const { activeTab, toasts, removeToast, alertModal, closeAlert } = useApp();
+  const { currentUser, isAuthenticated, hasPermission, isAdmin } = useAuth();
+
+  const renderRestrictedAccess = () => (
+    <div className="content-panel-grey" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '360px', textAlign: 'center', gap: '16px' }}>
+      <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <ShieldAlert size={36} color="#DC2626" />
+      </div>
+      <h2 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '1.4rem', fontWeight: 900, color: '#111827' }}>
+        Access Restricted
+      </h2>
+      <p style={{ color: '#4B5563', maxWidth: '420px', fontSize: '0.9rem', lineHeight: 1.5 }}>
+        Your user account (<strong>{currentUser?.name}</strong>) does not have permission to view this section. Please contact your system Administrator to request access.
+      </p>
+    </div>
+  );
 
   const renderActiveView = () => {
     switch (activeTab) {
       case 'DASHBOARD':
-        return <DashboardView />;
+        return hasPermission('VIEW_DASHBOARD') ? <DashboardView /> : renderRestrictedAccess();
       case 'ORDER':
-        return <OrdersView />;
+        return (hasPermission('VIEW_ORDERS') || hasPermission('MANAGE_ORDERS')) ? <OrdersView /> : renderRestrictedAccess();
       case 'ORDERED':
-        return <OrderedView />;
+        return (hasPermission('VIEW_ORDERED') || hasPermission('RECEIVE_ORDER')) ? <OrderedView /> : renderRestrictedAccess();
       case 'PURCHASE':
-        return <PurchaseEntryView />;
+        return (hasPermission('VIEW_PURCHASES') || hasPermission('CREATE_PURCHASE')) ? <PurchaseEntryView /> : renderRestrictedAccess();
       case 'SALE':
-        return <SalesEntryView />;
+        return (hasPermission('VIEW_SALES') || hasPermission('CREATE_SALE')) ? <SalesEntryView /> : renderRestrictedAccess();
       case 'SELF_USE':
-        return <SelfUseView />;
+        return (hasPermission('VIEW_SELF_USE') || hasPermission('CREATE_SELF_USE')) ? <SelfUseView /> : renderRestrictedAccess();
       case 'COLLECT_PAYMENT':
-        return <PaymentCollectionView />;
+        return hasPermission('COLLECT_PAYMENT') ? <PaymentCollectionView /> : renderRestrictedAccess();
       case 'PAY_SUPPLIER':
-        return <SupplierPaymentView />;
+        return hasPermission('PAY_SUPPLIER') ? <SupplierPaymentView /> : renderRestrictedAccess();
       case 'PARTY':
-        return <PartyMasterView />;
+        return (hasPermission('MANAGE_PARTY_MASTER') || hasPermission('VIEW_MASTERS') || hasPermission('MANAGE_MASTERS')) ? <PartyMasterView /> : renderRestrictedAccess();
       case 'ITEM':
-        return <ItemMasterView />;
+        return (hasPermission('MANAGE_ITEM_MASTER') || hasPermission('VIEW_MASTERS') || hasPermission('MANAGE_MASTERS')) ? <ItemMasterView /> : renderRestrictedAccess();
       case 'SUPPLIER':
-        return <SupplierMasterView />;
+        return (hasPermission('MANAGE_SUPPLIER_MASTER') || hasPermission('VIEW_MASTERS') || hasPermission('MANAGE_MASTERS')) ? <SupplierMasterView /> : renderRestrictedAccess();
       case 'OPENING_STOCK':
-        return <OpeningStockView />;
+        return (hasPermission('MANAGE_OPENING_STOCK') || hasPermission('VIEW_MASTERS') || hasPermission('ADJUST_STOCK') || hasPermission('MANAGE_MASTERS')) ? <OpeningStockView /> : renderRestrictedAccess();
       case 'REPORT_SALES':
-        return <SalesReportView />;
+        return (hasPermission('VIEW_SALES_REPORT') || hasPermission('VIEW_REPORTS')) ? <SalesReportView /> : renderRestrictedAccess();
       case 'REPORT_PURCHASES':
-        return <PurchaseReportView />;
+        return (hasPermission('VIEW_PURCHASE_REPORT') || hasPermission('VIEW_REPORTS')) ? <PurchaseReportView /> : renderRestrictedAccess();
       case 'REPORT_SELF_USE':
-        return <SelfUseReportView />;
+        return (hasPermission('VIEW_SELF_USE_REPORT') || hasPermission('VIEW_REPORTS')) ? <SelfUseReportView /> : renderRestrictedAccess();
       case 'REPORT_ITEM_STOCK':
-        return <ItemStockReportView />;
+        return (hasPermission('VIEW_ITEM_STOCK_REPORT') || hasPermission('VIEW_REPORTS')) ? <ItemStockReportView /> : renderRestrictedAccess();
       case 'REPORT_PARTY_LEDGER':
-        return <PartyLedgerReportView />;
+        return (hasPermission('VIEW_PARTY_LEDGER_REPORT') || hasPermission('VIEW_REPORTS')) ? <PartyLedgerReportView /> : renderRestrictedAccess();
       case 'REPORT_SUPPLIER_LEDGER':
-        return <SupplierLedgerReportView />;
+        return (hasPermission('VIEW_SUPPLIER_LEDGER_REPORT') || hasPermission('VIEW_REPORTS')) ? <SupplierLedgerReportView /> : renderRestrictedAccess();
       case 'REPORT_ITEM_LEDGER':
-        return <ItemLedgerReportView />;
+        return (hasPermission('VIEW_ITEM_LEDGER_REPORT') || hasPermission('VIEW_REPORTS')) ? <ItemLedgerReportView /> : renderRestrictedAccess();
       case 'ADMIN':
-        return <AdminSettingsView />;
+        return isAdmin ? <AdminSettingsView /> : renderRestrictedAccess();
       case 'USER':
         return <UserPermissionsView />;
       default:
         return <DashboardView />;
     }
   };
+
+  // If not logged in, render the Sign In View
+  if (!isAuthenticated || !currentUser) {
+    return (
+      <>
+        <LoginView />
+
+        {/* Global Toast Notifications on Login */}
+        <div className="toast-container no-print">
+          {toasts.map(toast => (
+            <div key={toast.id} className={`toast-item ${toast.type}`}>
+              {toast.type === 'success' && <CheckCircle2 size={18} />}
+              {toast.type === 'error' && <AlertCircle size={18} />}
+              {toast.type === 'warning' && <AlertCircle size={18} />}
+              {toast.type === 'info' && <Info size={18} />}
+              <span>{toast.message}</span>
+              <button
+                onClick={() => removeToast(toast.id)}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', marginLeft: '8px' }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  }
 
   return (
     <div className="app-layout">

@@ -450,7 +450,7 @@ export const AdminSettingsView: React.FC = () => {
       difference,
       type: difference > 0 ? 'INCREASE' : 'DECREASE',
       reason: adjReason.trim() || 'Physical inventory audit',
-      adjustedBy: currentUser.name,
+      adjustedBy: currentUser?.name || 'Administrator',
       createdAt: new Date().toISOString()
     };
 

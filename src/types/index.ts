@@ -1,17 +1,46 @@
 export type Permission =
+  // Dashboard
   | 'VIEW_DASHBOARD'
+  // Orders
+  | 'VIEW_ORDERS'
   | 'MANAGE_ORDERS'
-  | 'CREATE_SALE'
-  | 'EDIT_SALE'
-  | 'DELETE_SALE'
+  | 'VIEW_ORDERED'
+  | 'RECEIVE_ORDER'
+  // Purchases
+  | 'VIEW_PURCHASES'
   | 'CREATE_PURCHASE'
   | 'EDIT_PURCHASE'
   | 'DELETE_PURCHASE'
+  // Sales
+  | 'VIEW_SALES'
+  | 'CREATE_SALE'
+  | 'EDIT_SALE'
+  | 'DELETE_SALE'
+  // Self-Use
+  | 'VIEW_SELF_USE'
   | 'CREATE_SELF_USE'
   | 'EDIT_SELF_USE'
   | 'DELETE_SELF_USE'
-  | 'VIEW_REPORTS'
+  // Payments
+  | 'COLLECT_PAYMENT'
+  | 'PAY_SUPPLIER'
+  // Masters
+  | 'VIEW_MASTERS'
   | 'MANAGE_MASTERS'
+  | 'MANAGE_PARTY_MASTER'
+  | 'MANAGE_ITEM_MASTER'
+  | 'MANAGE_SUPPLIER_MASTER'
+  | 'MANAGE_OPENING_STOCK'
+  // Reports
+  | 'VIEW_REPORTS'
+  | 'VIEW_SALES_REPORT'
+  | 'VIEW_PURCHASE_REPORT'
+  | 'VIEW_SELF_USE_REPORT'
+  | 'VIEW_ITEM_STOCK_REPORT'
+  | 'VIEW_PARTY_LEDGER_REPORT'
+  | 'VIEW_SUPPLIER_LEDGER_REPORT'
+  | 'VIEW_ITEM_LEDGER_REPORT'
+  // Administration
   | 'ADJUST_STOCK'
   | 'MANAGE_USERS'
   | 'MANAGE_SETTINGS';
@@ -22,6 +51,8 @@ export interface User {
   id: string;
   name: string;
   username: string;
+  email?: string;
+  password?: string;
   role: UserRole;
   permissions: Permission[];
   isActive: boolean;

@@ -426,7 +426,12 @@ class DatabaseService {
 
   // --- USERS ---
   public getUsers(): User[] {
-    return this.get(STORAGE_KEYS.USERS, INITIAL_USERS);
+    const rawUsers = this.get<User[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    return rawUsers.map(u => ({
+      ...u,
+      email: u.email || (u.role === 'ADMIN' ? 'admin@ansh.com' : `${u.username || 'user'}@ansh.com`),
+      password: u.password || (u.role === 'ADMIN' ? 'admin' : (u.pin || u.username || '1234'))
+    }));
   }
 
   public saveUser(user: User): void {
