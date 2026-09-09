@@ -11,7 +11,8 @@ import {
   User,
   CompanySettings,
   PartyLog,
-  SupplierLog
+  SupplierLog,
+  PhysicalStockAudit
 } from '../types';
 import {
   INITIAL_COMPANY_SETTINGS,
@@ -49,6 +50,7 @@ const STORAGE_KEYS = {
   SELF_USES: 'rmms_self_uses_v1',
   STOCK_MOVEMENTS: 'rmms_stock_movements_v1',
   STOCK_ADJUSTMENTS: 'rmms_stock_adjustments_v1',
+  PHYSICAL_STOCK_AUDITS: 'rmms_physical_stock_audits_v1',
   PARTY_LOGS: 'rmms_party_logs_v1',
   SUPPLIER_LOGS: 'rmms_supplier_logs_v1',
   INITIALIZED: 'rmms_initialized_v1'
@@ -253,6 +255,7 @@ class DatabaseService {
       setupCollectionSync<PartyLog>('party_logs', STORAGE_KEYS.PARTY_LOGS);
       setupCollectionSync<User>('users', STORAGE_KEYS.USERS);
       setupCollectionSync<StockMovement>('stock_movements', STORAGE_KEYS.STOCK_MOVEMENTS);
+      setupCollectionSync<PhysicalStockAudit>('physical_stock_audits', STORAGE_KEYS.PHYSICAL_STOCK_AUDITS);
 
     } catch (err: any) {
       this.handleSyncError(err);
@@ -276,6 +279,7 @@ class DatabaseService {
       await this.batchSetDocs('purchases', this.getPurchases());
       await this.batchSetDocs('self_uses', this.getSelfUses());
       await this.batchSetDocs('stock_adjustments', this.getStockAdjustments());
+      await this.batchSetDocs('physical_stock_audits', this.getPhysicalStockAudits());
       await this.batchSetDocs('party_logs', this.getPartyLogs());
       await this.batchSetDocs('stock_movements', this.getStockMovements());
 
@@ -1300,6 +1304,35 @@ class DatabaseService {
     this.notify();
   }
 
+  // --- PHYSICAL STOCK AUDITS ---
+  public getPhysicalStockAudits(): PhysicalStockAudit[] {
+    return this.get(STORAGE_KEYS.PHYSICAL_STOCK_AUDITS, []);
+  }
+
+  public getPhysicalStockAuditById(id: string): PhysicalStockAudit | undefined {
+    return this.getPhysicalStockAudits().find(a => a.id === id);
+  }
+
+  public savePhysicalStockAudit(audit: PhysicalStockAudit): void {
+    const audits = this.getPhysicalStockAudits();
+    const index = audits.findIndex(a => a.id === audit.id);
+    if (index >= 0) {
+      audits[index] = audit;
+    } else {
+      audits.unshift(audit);
+    }
+    this.set(STORAGE_KEYS.PHYSICAL_STOCK_AUDITS, audits);
+    this.pushDocToFirestore('physical_stock_audits', audit.id, audit);
+    this.notify();
+  }
+
+  public deletePhysicalStockAudit(id: string): void {
+    const audits = this.getPhysicalStockAudits().filter(a => a.id !== id);
+    this.set(STORAGE_KEYS.PHYSICAL_STOCK_AUDITS, audits);
+    this.deleteDocFromFirestore('physical_stock_audits', id);
+    this.notify();
+  }
+
   // --- BACKUP & RESTORE ---
   public exportFullBackupJSON(): string {
     const backupData = {
@@ -1316,7 +1349,9 @@ class DatabaseService {
       selfUses: this.getSelfUses(),
       stockMovements: this.getStockMovements(),
       stockAdjustments: this.getStockAdjustments(),
-      partyLogs: this.getPartyLogs()
+      physicalStockAudits: this.getPhysicalStockAudits(),
+      partyLogs: this.getPartyLogs(),
+      supplierLogs: this.getSupplierLogs()
     };
     return JSON.stringify(backupData, null, 2);
   }
@@ -1341,8 +1376,11 @@ class DatabaseService {
       if (data.selfUses) this.set(STORAGE_KEYS.SELF_USES, data.selfUses);
       if (data.stockMovements) this.set(STORAGE_KEYS.STOCK_MOVEMENTS, data.stockMovements);
       if (data.stockAdjustments) this.set(STORAGE_KEYS.STOCK_ADJUSTMENTS, data.stockAdjustments);
+      if (data.physicalStockAudits) this.set(STORAGE_KEYS.PHYSICAL_STOCK_AUDITS, data.physicalStockAudits);
       if (data.partyLogs) this.set(STORAGE_KEYS.PARTY_LOGS, data.partyLogs);
+      if (data.supplierLogs) this.set(STORAGE_KEYS.SUPPLIER_LOGS, data.supplierLogs);
 
+      this.pushAllToCloudFirestore().catch(() => { });
       this.notify();
       return true;
     } catch (e) {
@@ -1588,6 +1626,15 @@ class DatabaseService {
           await this.batchDeleteDocs('stock_movements', movToDelete.map(m => m.id));
         }
       }
+
+      // Also clean physical stock audits matching the date filter
+      const allAudits = this.getPhysicalStockAudits();
+      const auditsToDelete = allAudits.filter(a => filterByDate(a.auditDate));
+      const remainingAudits = allAudits.filter(a => !filterByDate(a.auditDate));
+      this.set(STORAGE_KEYS.PHYSICAL_STOCK_AUDITS, remainingAudits);
+      if (auditsToDelete.length > 0) {
+        await this.batchDeleteDocs('physical_stock_audits', auditsToDelete.map(a => a.id));
+      }
     }
 
     const effectiveRolloverDate = toDate || new Date().toISOString().split('T')[0];
@@ -1679,10 +1726,12 @@ class DatabaseService {
       deletedCounts.items = items.length;
       this.set(STORAGE_KEYS.ITEMS, []);
       this.set(STORAGE_KEYS.STOCK_MOVEMENTS, []);
+      this.set(STORAGE_KEYS.PHYSICAL_STOCK_AUDITS, []);
       if (items.length > 0) {
         await this.batchDeleteDocs('items', items.map(i => i.id));
       }
       await this.batchDeleteDocs('stock_movements', this.getStockMovements().map(m => m.id));
+      await this.batchDeleteDocs('physical_stock_audits', this.getPhysicalStockAudits().map(a => a.id));
 
       const allOrders = this.getOrders();
       if (allOrders.length > 0) {
@@ -1696,9 +1745,11 @@ class DatabaseService {
       const suppliers = this.getSuppliers();
       deletedCounts.suppliers = suppliers.length;
       this.set(STORAGE_KEYS.SUPPLIERS, []);
+      this.set(STORAGE_KEYS.SUPPLIER_LOGS, []);
       if (suppliers.length > 0) {
         await this.batchDeleteDocs('suppliers', suppliers.map(s => s.id));
       }
+      await this.batchDeleteDocs('supplier_logs', this.getSupplierLogs().map(l => l.id));
     }
 
     // 9. Delete Parties (Only if explicitly checked)

@@ -1694,4 +1694,57 @@ button, input, select, textarea {
   transform: translateY(0);
 }
 
+/* 2-Column Responsive Entry Header Layout (Purchase, Sales, Self-Use) */
+.entry-form-header-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.entry-header-left-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.entry-header-right-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  gap: 10px;
+  background: #FFFFFF;
+  border: 1.5px solid #000000;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.entry-header-right-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.entry-header-right-row label {
+  font-weight: 900;
+  font-size: 0.88rem;
+  color: #111827;
+  white-space: nowrap;
+}
+
+.entry-header-right-row input {
+  flex: 1;
+  max-width: 175px;
+}
+
+@media (max-width: 768px) {
+  .entry-form-header-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+
 

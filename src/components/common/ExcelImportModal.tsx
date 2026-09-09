@@ -111,7 +111,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="📥 Bulk Import Items from Excel (.xlsx / .xls)" maxWidth="850px">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        
+
         {/* 1-Click Load Bundled Catalog Banner */}
         <div style={{ background: 'linear-gradient(135deg, #ECFDF5 0%, #DCFCE7 100%)', border: '2px solid #10B981', borderRadius: '10px', padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
           <div>

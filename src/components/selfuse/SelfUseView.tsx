@@ -8,10 +8,11 @@ import { getTodayDateString } from '../../utils/dateUtils';
 import { SelfUsePrintSlip } from './SelfUsePrintSlip';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { ItemSearchSelect, ItemSearchSelectHandle } from '../common/ItemSearchSelect';
+import { HistoryDateRangeFilter } from '../common/HistoryDateRangeFilter';
 import { Search, Keyboard } from 'lucide-react';
 
 export const SelfUseView: React.FC = () => {
-  const { showToast, showAlert, openQuickModal, refreshKey, selectedDate } = useApp();
+  const { showToast, showAlert, openQuickModal, refreshKey, selectedDate, historyFromDate, historyToDate } = useApp();
   const { hasPermission } = useAuth();
 
   const items = useMemo(() => db.getItems().filter(i => i.isActive !== false), [refreshKey]);
@@ -54,8 +55,10 @@ export const SelfUseView: React.FC = () => {
   const itemSearchRef = useRef<ItemSearchSelectHandle>(null);
   const unitARateInputRef = useRef<HTMLInputElement>(null);
   const unitAQtyInputRef = useRef<HTMLInputElement>(null);
+  const unitAAddBtnRef = useRef<HTMLButtonElement>(null);
   const unitBRateInputRef = useRef<HTMLInputElement>(null);
   const unitBQtyInputRef = useRef<HTMLInputElement>(null);
+  const unitBAddBtnRef = useRef<HTMLButtonElement>(null);
   const billDateInputRef = useRef<HTMLInputElement>(null);
   const billNoInputRef = useRef<HTMLInputElement>(null);
 
@@ -63,16 +66,13 @@ export const SelfUseView: React.FC = () => {
     if (!editingSelfUseId) {
       setBillNo(StockEngine.getNextBillNumber('SELF_USE'));
       setBillDate(selectedDate || getTodayDateString());
-      if (categories.length > 0 && !selectedCategory) {
-        setSelectedCategory(categories[0]);
-      }
     }
     const timer = setTimeout(() => {
       billDateInputRef.current?.focus();
       billDateInputRef.current?.select();
     }, 60);
     return () => clearTimeout(timer);
-  }, [editingSelfUseId, selectedDate, categories, refreshKey]);
+  }, [editingSelfUseId, selectedDate, refreshKey]);
 
   const selectedItemObj = useMemo(() => {
     return items.find(i => i.id === selectedItemId);
@@ -411,14 +411,17 @@ export const SelfUseView: React.FC = () => {
 
   const filteredHistory = useMemo(() => {
     const q = searchHistory.toLowerCase().trim();
-    if (!q) return selfUseHistory;
-    return selfUseHistory.filter(
-      su =>
+    return selfUseHistory.filter(su => {
+      if (historyFromDate && su.billDate < historyFromDate) return false;
+      if (historyToDate && su.billDate > historyToDate) return false;
+      if (!q) return true;
+      return (
         su.billNo.toLowerCase().includes(q) ||
         (su.category && su.category.toLowerCase().includes(q)) ||
         su.billDate.includes(q)
-    );
-  }, [selfUseHistory, searchHistory]);
+      );
+    });
+  }, [selfUseHistory, searchHistory, historyFromDate, historyToDate]);
 
   const isEditing = Boolean(editingSelfUseId && !isViewOnly);
   const isViewing = Boolean(editingSelfUseId && isViewOnly);
@@ -531,92 +534,97 @@ export const SelfUseView: React.FC = () => {
           } : undefined}
           style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}
         >
-        {/* Top Dates & Bill No Row */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <label style={{ fontWeight: 900, fontSize: '0.9rem' }}>BILL DATE</label>
-            <input
-              ref={billDateInputRef}
-              type="date"
-              className="input-text-clean"
-              value={billDate}
-              onChange={e => {
-                setIsTouched(true);
-                setBillDate(e.target.value);
-              }}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  billNoInputRef.current?.focus();
-                }
-              }}
-              style={{ width: '140px' }}
-            />
+        {/* TOP 2-COLUMN HEADER: Left (Catg, Item) | Right (Dates & Bill No) */}
+        <div className="entry-form-header-grid">
+          {/* LEFT COLUMN: Catg, Item */}
+          <div className="entry-header-left-col">
+            {/* CATEGORY SELECTION matching self use new.jpg */}
+            <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr 34px', gap: '8px', alignItems: 'center' }}>
+              <label style={{ fontWeight: 900, fontSize: '0.98rem' }}>CATG. :</label>
+              <select
+                className="input-text-clean"
+                value={selectedCategory}
+                onChange={e => {
+                  setIsTouched(true);
+                  setSelectedCategory(e.target.value);
+                  setSelectedItemId('');
+                }}
+                style={{ fontSize: '0.95rem', height: '38px', fontWeight: 700 }}
+              >
+                <option value="">-- All Categories --</option>
+                {categories.map(cat => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="btn-quick-n"
+                title="Create Item / Category"
+                onClick={() => openQuickModal('ITEM', () => setIsTouched(true))}
+              >
+                N
+              </button>
+            </div>
+
+            {/* ITEM SELECTION matching self use new.jpg */}
+            <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: '8px', alignItems: 'center' }}>
+              <label style={{ fontWeight: 900, fontSize: '0.98rem' }}>ITEM :</label>
+              <ItemSearchSelect
+                ref={itemSearchRef}
+                items={filteredCategoryItems}
+                selectedItemId={selectedItemId}
+                onSelect={handleItemSelect}
+                onQuickAdd={() => openQuickModal('ITEM', (newId) => handleItemSelect(newId))}
+                placeholder="Type to search item (e.g. ASTER)..."
+              />
+            </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <label style={{ fontWeight: 900, fontSize: '0.9rem' }}>BILL NO.</label>
-            <input
-              ref={billNoInputRef}
-              type="text"
-              className="input-text-clean"
-              value={billNo}
-              onChange={e => {
-                setIsTouched(true);
-                setBillNo(e.target.value);
-              }}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  itemSearchRef.current?.focus();
-                }
-              }}
-              style={{ width: '140px', fontWeight: 800 }}
-            />
+          {/* RIGHT COLUMN: Bill Date & Bill No */}
+          <div className="entry-header-right-col">
+            <div className="entry-header-right-row">
+              <label>BILL DATE</label>
+              <input
+                ref={billDateInputRef}
+                type="date"
+                className="input-text-clean"
+                value={billDate}
+                onChange={e => {
+                  setIsTouched(true);
+                  setBillDate(e.target.value);
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    billNoInputRef.current?.focus();
+                  }
+                }}
+              />
+            </div>
+
+            <div className="entry-header-right-row">
+              <label>BILL NO.</label>
+              <input
+                ref={billNoInputRef}
+                type="text"
+                className="input-text-clean"
+                value={billNo}
+                onChange={e => {
+                  setIsTouched(true);
+                  setBillNo(e.target.value);
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    itemSearchRef.current?.focus();
+                  }
+                }}
+                style={{ fontWeight: 800 }}
+              />
+            </div>
           </div>
-        </div>
-
-        {/* CATEGORY SELECTION matching self use new.jpg */}
-        <div style={{ display: 'grid', gridTemplateColumns: '85px 1fr 34px', gap: '10px', alignItems: 'center' }}>
-          <label style={{ fontWeight: 900, fontSize: '1.05rem' }}>CATG. :</label>
-          <select
-            className="input-text-clean"
-            value={selectedCategory}
-            onChange={e => {
-              setIsTouched(true);
-              setSelectedCategory(e.target.value);
-              setSelectedItemId('');
-            }}
-            style={{ fontSize: '0.95rem', height: '38px', fontWeight: 700 }}
-          >
-            <option value="">-- All Categories --</option>
-            {categories.map(cat => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="btn-quick-n"
-            title="Create Item / Category"
-            onClick={() => openQuickModal('ITEM', () => setIsTouched(true))}
-          >
-            N
-          </button>
-        </div>
-
-        {/* ITEM SELECTION matching self use new.jpg */}
-        <div style={{ display: 'grid', gridTemplateColumns: '85px 1fr', gap: '10px', alignItems: 'center' }}>
-          <label style={{ fontWeight: 900, fontSize: '1.05rem' }}>ITEM :</label>
-          <ItemSearchSelect
-            ref={itemSearchRef}
-            items={filteredCategoryItems}
-            selectedItemId={selectedItemId}
-            onSelect={handleItemSelect}
-            onQuickAdd={() => openQuickModal('ITEM', (newId) => handleItemSelect(newId))}
-            placeholder="Type to search item (e.g. ASTER)..."
-          />
         </div>
 
         {/* DUAL PRICING / CONSUMPTION INPUT CARDS (UNIT-A & UNIT-B) */}
@@ -682,7 +690,7 @@ export const SelfUseView: React.FC = () => {
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
-                      handleAddUnitAItem();
+                      unitAAddBtnRef.current?.focus();
                     }
                   }}
                   style={{ textAlign: 'center', padding: '6px', fontWeight: 900, color: '#EA3943' }}
@@ -704,10 +712,35 @@ export const SelfUseView: React.FC = () => {
 
               <div className="add-btn-col">
                 <button
+                  ref={unitAAddBtnRef}
                   type="button"
                   onClick={handleAddUnitAItem}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddUnitAItem();
+                    }
+                  }}
                   className="btn-customer-save"
-                  style={{ padding: '8px 16px', fontSize: '0.85rem', whiteSpace: 'nowrap' }}
+                  style={{
+                    padding: '8px 18px',
+                    fontSize: '0.85rem',
+                    fontWeight: 900,
+                    whiteSpace: 'nowrap',
+                    outline: 'none',
+                    transition: 'all 0.15s ease-in-out'
+                  }}
+                  onFocus={e => {
+                    e.currentTarget.style.boxShadow = '0 0 0 3.5px #1E40AF, 0 4px 14px rgba(30, 64, 175, 0.45)';
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                    e.currentTarget.style.borderColor = '#1E40AF';
+                  }}
+                  onBlur={e => {
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.transform = 'none';
+                    e.currentTarget.style.borderColor = '';
+                  }}
+                  title="Add item (or press Enter)"
                 >
                   + Add {selectedItemObj?.unitA?.unitName || 'Unit A'}
                 </button>
@@ -782,7 +815,7 @@ export const SelfUseView: React.FC = () => {
                     onKeyDown={e => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
-                        handleAddUnitBItem();
+                        unitBAddBtnRef.current?.focus();
                       }
                     }}
                     style={{ textAlign: 'center', padding: '6px', fontWeight: 900, color: '#EA3943' }}
@@ -804,10 +837,36 @@ export const SelfUseView: React.FC = () => {
 
                 <div className="add-btn-col">
                   <button
+                    ref={unitBAddBtnRef}
                     type="button"
                     onClick={handleAddUnitBItem}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddUnitBItem();
+                      }
+                    }}
                     className="btn-customer-save"
-                    style={{ padding: '8px 16px', fontSize: '0.85rem', whiteSpace: 'nowrap', background: '#A7F3D0' }}
+                    style={{
+                      padding: '8px 18px',
+                      fontSize: '0.85rem',
+                      fontWeight: 900,
+                      whiteSpace: 'nowrap',
+                      background: '#A7F3D0',
+                      outline: 'none',
+                      transition: 'all 0.15s ease-in-out'
+                    }}
+                    onFocus={e => {
+                      e.currentTarget.style.boxShadow = '0 0 0 3.5px #059669, 0 4px 14px rgba(5, 150, 105, 0.45)';
+                      e.currentTarget.style.transform = 'scale(1.05)';
+                      e.currentTarget.style.borderColor = '#059669';
+                    }}
+                    onBlur={e => {
+                      e.currentTarget.style.boxShadow = 'none';
+                      e.currentTarget.style.transform = 'none';
+                      e.currentTarget.style.borderColor = '';
+                    }}
+                    title="Add secondary unit item (or press Enter)"
                   >
                     + Add {selectedItemObj?.unitB?.unitName || 'Unit B'}
                   </button>
@@ -831,15 +890,18 @@ export const SelfUseView: React.FC = () => {
                 <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '120px', borderRight: '1px solid #000000' }}>
                   Rate
                 </th>
-                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '140px' }}>
+                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, width: '140px', borderRight: '1px solid #000000' }}>
                   Amount
+                </th>
+                <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, width: '60px' }}>
+                  Action
                 </th>
               </tr>
             </thead>
             <tbody>
               {selfUseItems.length === 0 ? (
                 <tr>
-                  <td colSpan={4} style={{ padding: '30px', textAlign: 'center', color: '#9CA3AF', fontWeight: 600 }}>
+                  <td colSpan={5} style={{ padding: '30px', textAlign: 'center', color: '#9CA3AF', fontWeight: 600 }}>
                     No items in current Self Use voucher. Select item & qty above.
                   </td>
                 </tr>
@@ -863,8 +925,30 @@ export const SelfUseView: React.FC = () => {
                     <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, borderRight: '1px solid #000000' }}>
                       {item.rate}
                     </td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800 }}>
+                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, borderRight: '1px solid #000000' }}>
                       {item.amount}
+                    </td>
+                    <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteItem(idx);
+                        }}
+                        style={{
+                          background: '#FEE2E2',
+                          border: '1px solid #EF4444',
+                          color: '#B91C1C',
+                          borderRadius: '4px',
+                          padding: '3px 8px',
+                          fontSize: '0.8rem',
+                          fontWeight: 800,
+                          cursor: 'pointer'
+                        }}
+                        title="Remove item from Self Use voucher"
+                      >
+                        ✕
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -875,9 +959,10 @@ export const SelfUseView: React.FC = () => {
                 <td colSpan={3} style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 900, borderRight: '1px solid #000000' }}>
                   Total
                 </td>
-                <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 900, color: '#002B99' }}>
+                <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 900, color: '#002B99', borderRight: '1px solid #000000' }}>
                   {totalAmount}
                 </td>
+                <td></td>
               </tr>
             </tfoot>
           </table>
@@ -927,16 +1012,19 @@ export const SelfUseView: React.FC = () => {
               {filteredHistory.length} {filteredHistory.length === 1 ? 'Record' : 'Records'}
             </span>
           </div>
-          <div style={{ position: 'relative', width: '280px' }}>
-            <Search size={14} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
-            <input
-              type="text"
-              placeholder="Search voucher no..."
-              className="input-text-clean"
-              value={searchHistory}
-              onChange={e => setSearchHistory(e.target.value)}
-              style={{ paddingLeft: '32px', fontSize: '0.85rem' }}
-            />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <HistoryDateRangeFilter />
+            <div style={{ position: 'relative', width: '220px' }}>
+              <Search size={14} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
+              <input
+                type="text"
+                placeholder="Search voucher no..."
+                className="input-text-clean"
+                value={searchHistory}
+                onChange={e => setSearchHistory(e.target.value)}
+                style={{ paddingLeft: '32px', fontSize: '0.85rem' }}
+              />
+            </div>
           </div>
         </div>
 

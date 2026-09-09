@@ -454,7 +454,30 @@ export const OrdersView: React.FC = () => {
             </div>
           ) : (
             <div className="table-responsive-wrapper">
-              <div style={{ minWidth: '580px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ minWidth: '540px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 110px 160px 80px',
+                    gap: '8px',
+                    padding: '6px 12px',
+                    background: 'var(--color-lime)',
+                    border: '1px solid #000000',
+                    borderRadius: '4px',
+                    fontFamily: 'Outfit, sans-serif',
+                    fontWeight: 800,
+                    fontSize: '0.85rem',
+                    textTransform: 'uppercase',
+                    color: '#000000',
+                    marginBottom: '2px'
+                  }}
+                >
+                  <div>ITEM & DESCRIPTION</div>
+                  <div style={{ textAlign: 'center', color: '#EA3943' }}>QTY</div>
+                  <div>ASSIGN SUPPLIER</div>
+                  <div style={{ textAlign: 'center' }}>ACTION</div>
+                </div>
+
                 {pendingLowStockItems.map(summary => {
                   const currentQty =
                     pendingOverrides[summary.item.id] !== undefined ? pendingOverrides[summary.item.id] : 0;
@@ -464,26 +487,11 @@ export const OrdersView: React.FC = () => {
                       key={summary.item.id}
                       style={{
                         display: 'grid',
-                        gridTemplateColumns: '110px 1fr 100px 140px 90px',
+                        gridTemplateColumns: '1fr 110px 160px 80px',
                         gap: '8px',
                         alignItems: 'center'
                       }}
                     >
-                      {/* Date */}
-                      <div
-                        style={{
-                          background: '#ECECEC',
-                          border: '1px solid #000000',
-                          borderRadius: '4px',
-                          padding: '6px 8px',
-                          fontWeight: 700,
-                          textAlign: 'center',
-                          fontSize: '0.85rem'
-                        }}
-                      >
-                        {formatDateToDisplay(selectedDate)}
-                      </div>
-
                       {/* Item Name & Description in Smaller Light Grey Font */}
                       <div
                         style={{

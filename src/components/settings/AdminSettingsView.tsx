@@ -32,6 +32,7 @@ import {
   restoreDatabaseFromExcel,
   importItemsFromExcel,
   loadBundledMaterialsCatalog,
+  downloadSampleRestoreExcelTemplate,
   ExcelRestorePreview,
   ExcelImportResult
 } from '../../utils/excelEngine';
@@ -964,6 +965,30 @@ export const AdminSettingsView: React.FC = () => {
               <FileSpreadsheet size={18} />
               <span>Download Multi-Sheet Excel Backup (.xlsx)</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                downloadSampleRestoreExcelTemplate();
+                showToast('Downloaded sample multi-sheet restore Excel template (.xlsx)!', 'success');
+              }}
+              style={{
+                backgroundColor: '#FFFFFF',
+                color: '#002B99',
+                border: '2px solid #002B99',
+                borderRadius: 'var(--radius-pill)',
+                padding: '10px 22px',
+                fontWeight: 800,
+                fontSize: '0.92rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              <Download size={17} />
+              <span>Download Sample Restore Template (.xlsx)</span>
+            </button>
           </div>
         </div>
       )}
@@ -973,6 +998,58 @@ export const AdminSettingsView: React.FC = () => {
           ========================================================================= */}
       {activeSubTab === 'RESTORE' && (
         <div style={{ background: '#FFFFFF', border: '2px solid #000000', borderRadius: '12px', padding: '24px' }}>
+          {/* Sample Template & Format Guide Banner */}
+          <div
+            style={{
+              background: '#EFF6FF',
+              border: '1.5px solid #93C5FD',
+              borderRadius: '10px',
+              padding: '14px 18px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+              marginBottom: '20px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <FileSpreadsheet size={24} color="#1D4ED8" />
+              <div>
+                <div style={{ fontWeight: 800, color: '#1E40AF', fontSize: '0.92rem' }}>
+                  Need the Official Multi-Sheet Restore Format & Instructions?
+                </div>
+                <div style={{ fontSize: '0.8rem', color: '#3B82F6' }}>
+                  Download our complete template pre-formatted with sample data for Items, Parties, Suppliers, Sales, Purchases, Orders, Payments & Audits.
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                downloadSampleRestoreExcelTemplate();
+                showToast('Downloaded sample multi-sheet restore Excel template (.xlsx)!', 'success');
+              }}
+              style={{
+                backgroundColor: '#1D4ED8',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: 'var(--radius-pill)',
+                padding: '8px 18px',
+                fontWeight: 800,
+                fontSize: '0.84rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 2px 4px rgba(29,78,216,0.2)'
+              }}
+            >
+              <Download size={15} />
+              Download Sample Template (.xlsx)
+            </button>
+          </div>
+
           {/* File Upload Box */}
           <div
             style={{
@@ -990,7 +1067,7 @@ export const AdminSettingsView: React.FC = () => {
               Choose or Drag & Drop Backup Excel Workbook (.xlsx / .xls)
             </h4>
             <p style={{ margin: '0 0 10px', fontSize: '0.82rem', color: '#6B7280' }}>
-              Restores all multi-sheet items, masters, sales, purchases, and orders directly into your system.
+              Restores all multi-sheet items, masters, sales, purchases, payments, audits and orders directly into your system.
             </p>
             <label
               style={{
@@ -1045,7 +1122,10 @@ export const AdminSettingsView: React.FC = () => {
                   { label: 'Orders', val: restoreExcelPreview.ordersCount },
                   { label: 'Sales Invoices', val: restoreExcelPreview.salesCount },
                   { label: 'Purchases', val: restoreExcelPreview.purchasesCount },
-                  { label: 'Self Uses', val: restoreExcelPreview.selfUseCount }
+                  { label: 'Self Uses', val: restoreExcelPreview.selfUseCount },
+                  { label: 'Physical Audits', val: restoreExcelPreview.physicalStockAuditsCount || 0 },
+                  { label: 'Customer Payments', val: restoreExcelPreview.partyLogsCount || 0 },
+                  { label: 'Supplier Payments', val: restoreExcelPreview.supplierLogsCount || 0 }
                 ].map(stat => (
                   <div key={stat.label} style={{ background: '#FFFFFF', padding: '8px 12px', borderRadius: '6px', border: '1px solid #BBF7D0' }}>
                     <div style={{ fontSize: '0.75rem', color: '#4B5563', fontWeight: 700 }}>{stat.label}</div>
@@ -1566,7 +1646,7 @@ export const AdminSettingsView: React.FC = () => {
           ========================================================================= */}
       {activeSubTab === 'COMPANY' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '850px', margin: '0 auto' }}>
-          
+
           {/* Cloud Firestore Sync Card */}
           <div style={{ background: '#EFF6FF', border: '2px solid #3B82F6', borderRadius: '12px', padding: '20px 22px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '14px' }}>
@@ -1655,7 +1735,7 @@ export const AdminSettingsView: React.FC = () => {
                     If you get a <em>Permission Denied</em> error in the browser console, paste the following rules in your <strong>Firebase Console &gt; Firestore Database &gt; Rules</strong>:
                   </p>
                   <pre style={{ background: '#1E293B', color: '#F8FAFC', padding: '10px', borderRadius: '6px', fontSize: '0.78rem', overflowX: 'auto', margin: 0 }}>
-{`rules_version = '2';
+                    {`rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /{document=**} {
@@ -1697,13 +1777,13 @@ service cloud.firestore {
             </h3>
 
             <form onSubmit={handleSaveCompanyProfile} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-              
+
               {/* Business Info Grid */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <h4 style={{ margin: 0, fontWeight: 800, fontSize: '0.95rem', color: '#374151' }}>
                   Business Identification
                 </h4>
-                
+
                 <div>
                   <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '4px' }}>
                     Business Name *

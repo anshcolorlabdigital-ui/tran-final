@@ -10,10 +10,11 @@ import { PurchasePrintVoucher } from './PurchasePrintVoucher';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { ItemSearchSelect, ItemSearchSelectHandle } from '../common/ItemSearchSelect';
 import { SearchableSelect, SearchableSelectHandle } from '../common/SearchableSelect';
+import { HistoryDateRangeFilter } from '../common/HistoryDateRangeFilter';
 import { Search, Keyboard } from 'lucide-react';
 
 export const PurchaseEntryView: React.FC = () => {
-  const { showToast, showAlert, openQuickModal, refreshKey, selectedDate, pendingPurchasePrefill, setPendingPurchasePrefill } = useApp();
+  const { showToast, showAlert, openQuickModal, refreshKey, selectedDate, pendingPurchasePrefill, setPendingPurchasePrefill, historyFromDate, historyToDate } = useApp();
   const { hasPermission } = useAuth();
 
   // Masters
@@ -95,6 +96,7 @@ export const PurchaseEntryView: React.FC = () => {
   const unitABasicPriceInputRef = useRef<HTMLInputElement>(null);
   const unitAGstPercentInputRef = useRef<HTMLInputElement>(null);
   const unitAQtyInputRef = useRef<HTMLInputElement>(null);
+  const unitAAddBtnRef = useRef<HTMLButtonElement>(null);
   const roundUpInputRef = useRef<HTMLInputElement>(null);
   const saveButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -186,6 +188,10 @@ export const PurchaseEntryView: React.FC = () => {
       setUnitABasicPrice(String(uA.basicPrice || 0));
       setUnitAGstPercent(String(uA.gstPercent || settings.defaultGstPercent || 0));
       setUnitAQty('1');
+      setTimeout(() => {
+        unitAQtyInputRef.current?.focus();
+        unitAQtyInputRef.current?.select();
+      }, 40);
     }
   };
 
@@ -465,14 +471,17 @@ export const PurchaseEntryView: React.FC = () => {
 
   const filteredPurchases = useMemo(() => {
     const q = searchHistory.toLowerCase().trim();
-    if (!q) return purchasesHistory;
-    return purchasesHistory.filter(
-      p =>
+    return purchasesHistory.filter(p => {
+      if (historyFromDate && p.billDate < historyFromDate) return false;
+      if (historyToDate && p.billDate > historyToDate) return false;
+      if (!q) return true;
+      return (
         p.billNo.toLowerCase().includes(q) ||
         p.supplierName.toLowerCase().includes(q) ||
         p.billDate.includes(q)
-    );
-  }, [purchasesHistory, searchHistory]);
+      );
+    });
+  }, [purchasesHistory, searchHistory, historyFromDate, historyToDate]);
 
   const isEditing = Boolean(editingPurchaseId && !isViewOnly);
   const isViewing = Boolean(editingPurchaseId && isViewOnly);
@@ -594,135 +603,138 @@ export const PurchaseEntryView: React.FC = () => {
           } : undefined}
           style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
         >
+          {/* TOP 2-COLUMN HEADER: Left (Party, Catg, Item) | Right (Dates & Bill No) */}
+          <div className="entry-form-header-grid">
+          {/* LEFT COLUMN: Party, Catg, Item */}
+          <div className="entry-header-left-col">
+            {/* PARTY / SUPPLIER SELECTION */}
+            <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: '8px', alignItems: 'center' }}>
+              <label style={{ fontWeight: 900, fontSize: '0.98rem' }}>Party :</label>
+              <SearchableSelect
+                ref={supplierSelectRef}
+                options={supplierOptions}
+                value={supplierId}
+                onChange={val => {
+                  setIsTouched(true);
+                  setSupplierId(val);
+                }}
+                onEnterNext={() => {
+                  categorySelectRef.current?.focus();
+                }}
+                placeholder="Type supplier name / phone or use arrows..."
+                onQuickAdd={() => openQuickModal('SUPPLIER', (newId) => {
+                  setIsTouched(true);
+                  setSupplierId(newId);
+                  setTimeout(() => categorySelectRef.current?.focus(), 40);
+                })}
+                quickAddTitle="Quick Create Supplier"
+              />
+            </div>
 
-        {/* Top Dates & Bill No Row */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <label style={{ fontWeight: 900, fontSize: '0.9rem' }}>BILL DATE</label>
-            <input
-              ref={billDateInputRef}
-              type="date"
-              className="input-text-clean"
-              value={billDate}
-              onChange={e => {
-                setIsTouched(true);
-                setBillDate(e.target.value);
-              }}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  billNoInputRef.current?.focus();
-                  billNoInputRef.current?.select();
-                }
-              }}
-              style={{ width: '140px' }}
-            />
+            {/* CATEGORY SELECTION */}
+            <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: '8px', alignItems: 'center' }}>
+              <label style={{ fontWeight: 900, fontSize: '0.98rem' }}>CATG. :</label>
+              <SearchableSelect
+                ref={categorySelectRef}
+                options={categoryOptions}
+                value={selectedCategory}
+                onChange={val => {
+                  setIsTouched(true);
+                  setSelectedCategory(val);
+                  setSelectedItemId('');
+                }}
+                onEnterNext={() => {
+                  itemSearchRef.current?.focus();
+                }}
+                placeholder="Type category or press Enter to choose item..."
+                onQuickAdd={() => openQuickModal('ITEM', () => setIsTouched(true))}
+                quickAddTitle="Quick Create Item / Category"
+              />
+            </div>
+
+            {/* SEARCHABLE ITEM SELECTION */}
+            <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: '8px', alignItems: 'center' }}>
+              <label style={{ fontWeight: 900, fontSize: '0.98rem' }}>ITEM :</label>
+              <ItemSearchSelect
+                ref={itemSearchRef}
+                items={filteredCategoryItems}
+                selectedItemId={selectedItemId}
+                onSelectItem={(item) => handleItemSelect(item ? item.id : '')}
+                onEnterNext={() => {
+                  unitAQtyInputRef.current?.focus();
+                  unitAQtyInputRef.current?.select();
+                }}
+                placeholder="Type item name/code to search or use arrow keys..."
+                onQuickAdd={() => openQuickModal('ITEM', (newId) => handleItemSelect(newId))}
+              />
+            </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <label style={{ fontWeight: 900, fontSize: '0.9rem' }}>BILL NO.</label>
-            <input
-              ref={billNoInputRef}
-              type="text"
-              placeholder="Supplier Bill #"
-              className="input-text-clean"
-              value={billNo}
-              onChange={e => {
-                setIsTouched(true);
-                setBillNo(e.target.value);
-              }}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  recdDateInputRef.current?.focus();
-                }
-              }}
-              style={{ width: '150px', fontWeight: 800 }}
-            />
+          {/* RIGHT COLUMN: Bill Date, Bill No, Recd Date */}
+          <div className="entry-header-right-col">
+            <div className="entry-header-right-row">
+              <label>BILL DATE</label>
+              <input
+                ref={billDateInputRef}
+                type="date"
+                className="input-text-clean"
+                value={billDate}
+                onChange={e => {
+                  setIsTouched(true);
+                  setBillDate(e.target.value);
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    billNoInputRef.current?.focus();
+                    billNoInputRef.current?.select();
+                  }
+                }}
+              />
+            </div>
+
+            <div className="entry-header-right-row">
+              <label>BILL NO.</label>
+              <input
+                ref={billNoInputRef}
+                type="text"
+                placeholder="Supplier Bill #"
+                className="input-text-clean"
+                value={billNo}
+                onChange={e => {
+                  setIsTouched(true);
+                  setBillNo(e.target.value);
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    recdDateInputRef.current?.focus();
+                  }
+                }}
+                style={{ fontWeight: 800 }}
+              />
+            </div>
+
+            <div className="entry-header-right-row">
+              <label>RECD. DATE</label>
+              <input
+                ref={recdDateInputRef}
+                type="date"
+                className="input-text-clean"
+                value={recdDate}
+                onChange={e => {
+                  setIsTouched(true);
+                  setRecdDate(e.target.value);
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    supplierSelectRef.current?.focus();
+                  }
+                }}
+              />
+            </div>
           </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <label style={{ fontWeight: 900, fontSize: '0.9rem' }}>RECD. DATE</label>
-            <input
-              ref={recdDateInputRef}
-              type="date"
-              className="input-text-clean"
-              value={recdDate}
-              onChange={e => {
-                setIsTouched(true);
-                setRecdDate(e.target.value);
-              }}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  supplierSelectRef.current?.focus();
-                }
-              }}
-              style={{ width: '140px' }}
-            />
-          </div>
-        </div>
-
-        {/* PARTY / SUPPLIER SELECTION */}
-        <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: '10px', alignItems: 'center' }}>
-          <label style={{ fontWeight: 900, fontSize: '1.05rem' }}>Party :</label>
-          <SearchableSelect
-            ref={supplierSelectRef}
-            options={supplierOptions}
-            value={supplierId}
-            onChange={val => {
-              setIsTouched(true);
-              setSupplierId(val);
-            }}
-            onEnterNext={() => {
-              categorySelectRef.current?.focus();
-            }}
-            placeholder="Type supplier name / phone or use arrows..."
-            onQuickAdd={() => openQuickModal('SUPPLIER', (newId) => {
-              setIsTouched(true);
-              setSupplierId(newId);
-              setTimeout(() => categorySelectRef.current?.focus(), 40);
-            })}
-            quickAddTitle="Quick Create Supplier"
-          />
-        </div>
-
-        {/* CATEGORY SELECTION */}
-        <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: '10px', alignItems: 'center' }}>
-          <label style={{ fontWeight: 900, fontSize: '1.05rem' }}>CATG. :</label>
-          <SearchableSelect
-            ref={categorySelectRef}
-            options={categoryOptions}
-            value={selectedCategory}
-            onChange={val => {
-              setIsTouched(true);
-              setSelectedCategory(val);
-              setSelectedItemId('');
-            }}
-            onEnterNext={() => {
-              itemSearchRef.current?.focus();
-            }}
-            placeholder="Type category or press Enter to choose item..."
-            onQuickAdd={() => openQuickModal('ITEM', () => setIsTouched(true))}
-            quickAddTitle="Quick Create Item / Category"
-          />
-        </div>
-
-        {/* SEARCHABLE ITEM SELECTION */}
-        <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: '10px', alignItems: 'center' }}>
-          <label style={{ fontWeight: 900, fontSize: '1.05rem' }}>ITEM :</label>
-          <ItemSearchSelect
-            ref={itemSearchRef}
-            items={filteredCategoryItems}
-            selectedItemId={selectedItemId}
-            onSelectItem={(item) => handleItemSelect(item ? item.id : '')}
-            onEnterNext={() => {
-              unitABasicPriceInputRef.current?.focus();
-              unitABasicPriceInputRef.current?.select();
-            }}
-            placeholder="Type item name/code to search or use arrow keys..."
-            onQuickAdd={() => openQuickModal('ITEM', (newId) => handleItemSelect(newId))}
-          />
         </div>
 
         {/* PRICING INPUT CARD (UNIT-A ONLY FOR PURCHASES) */}
@@ -809,20 +821,20 @@ export const PurchaseEntryView: React.FC = () => {
 
               <div>
                 <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
-                  Nett Price
+                  Net Price
                 </label>
                 <input
                   type="text"
                   readOnly
                   className="input-text-clean"
                   value={calculatedUnitAPricing.nettPrice}
-                  style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 700 }}
+                  style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 800 }}
                 />
               </div>
 
               <div>
                 <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>
-                  Qty ({selectedItemObj?.unitA?.unitName || selectedItemObj?.unit || 'Unit A'})
+                  Qty ({selectedItemObj?.unitA?.unitName || selectedItemObj?.unit || 'Units'})
                 </label>
                 <input
                   ref={unitAQtyInputRef}
@@ -837,7 +849,7 @@ export const PurchaseEntryView: React.FC = () => {
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
-                      handleAddUnitAItem();
+                      unitAAddBtnRef.current?.focus();
                     }
                   }}
                   style={{ textAlign: 'center', padding: '4px', fontWeight: 900, color: '#EA3943' }}
@@ -859,11 +871,35 @@ export const PurchaseEntryView: React.FC = () => {
 
               <div className="add-btn-col" style={{ paddingBottom: '2px' }}>
                 <button
+                  ref={unitAAddBtnRef}
                   type="button"
                   onClick={handleAddUnitAItem}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddUnitAItem();
+                    }
+                  }}
                   className="btn-customer-save"
-                  style={{ padding: '6px 16px', fontSize: '0.85rem', whiteSpace: 'nowrap' }}
-                  title="Add item (or press Enter in Qty field)"
+                  style={{
+                    padding: '7px 18px',
+                    fontSize: '0.85rem',
+                    fontWeight: 900,
+                    whiteSpace: 'nowrap',
+                    outline: 'none',
+                    transition: 'all 0.15s ease-in-out'
+                  }}
+                  onFocus={e => {
+                    e.currentTarget.style.boxShadow = '0 0 0 3.5px #1E40AF, 0 4px 14px rgba(30, 64, 175, 0.45)';
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                    e.currentTarget.style.borderColor = '#1E40AF';
+                  }}
+                  onBlur={e => {
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.transform = 'none';
+                    e.currentTarget.style.borderColor = '';
+                  }}
+                  title="Add item (or press Enter)"
                 >
                   + Add
                 </button>
@@ -874,7 +910,7 @@ export const PurchaseEntryView: React.FC = () => {
 
         {/* ITEMS TABLE */}
         <div className="table-responsive-wrapper">
-          <table style={{ width: '100%', minWidth: '500px', borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', minWidth: '520px', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#D2BEF6', borderBottom: '2px solid #000000' }}>
                 <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800, borderRight: '1px solid #000000' }}>
@@ -892,15 +928,18 @@ export const PurchaseEntryView: React.FC = () => {
                 <th style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 800, width: '70px', borderRight: '1px solid #000000' }}>
                   Qty
                 </th>
-                <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, width: '110px' }}>
+                <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, width: '110px', borderRight: '1px solid #000000' }}>
                   Amount
+                </th>
+                <th style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 800, width: '60px' }}>
+                  Action
                 </th>
               </tr>
             </thead>
             <tbody>
               {purchaseItems.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: '24px 12px', textAlign: 'center', color: '#9CA3AF', fontWeight: 600, fontSize: '0.88rem', whiteSpace: 'normal', lineHeight: 1.5 }}>
+                  <td colSpan={7} style={{ padding: '24px 12px', textAlign: 'center', color: '#9CA3AF', fontWeight: 600, fontSize: '0.88rem', whiteSpace: 'normal', lineHeight: 1.5 }}>
                     No items in this purchase bill. Select an item above and press Enter on Qty or click "+ Add".
                   </td>
                 </tr>
@@ -931,8 +970,30 @@ export const PurchaseEntryView: React.FC = () => {
                     <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 800, color: '#15803D', borderRight: '1px solid #000000' }}>
                       {item.qty}
                     </td>
-                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800 }}>
+                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, borderRight: '1px solid #000000' }}>
                       {item.amount}
+                    </td>
+                    <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteLineItem(idx);
+                        }}
+                        style={{
+                          background: '#FEE2E2',
+                          border: '1px solid #EF4444',
+                          color: '#B91C1C',
+                          borderRadius: '4px',
+                          padding: '3px 8px',
+                          fontSize: '0.8rem',
+                          fontWeight: 800,
+                          cursor: 'pointer'
+                        }}
+                        title="Remove item from bill"
+                      >
+                        ✕
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -1067,16 +1128,19 @@ export const PurchaseEntryView: React.FC = () => {
               {filteredPurchases.length} {filteredPurchases.length === 1 ? 'Record' : 'Records'}
             </span>
           </div>
-          <div style={{ position: 'relative', width: '280px' }}>
-            <Search size={14} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
-            <input
-              type="text"
-              placeholder="Search bill no, supplier..."
-              className="input-text-clean"
-              value={searchHistory}
-              onChange={e => setSearchHistory(e.target.value)}
-              style={{ paddingLeft: '32px', fontSize: '0.85rem' }}
-            />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <HistoryDateRangeFilter />
+            <div style={{ position: 'relative', width: '220px' }}>
+              <Search size={14} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
+              <input
+                type="text"
+                placeholder="Search bill no, supplier..."
+                className="input-text-clean"
+                value={searchHistory}
+                onChange={e => setSearchHistory(e.target.value)}
+                style={{ paddingLeft: '32px', fontSize: '0.85rem' }}
+              />
+            </div>
           </div>
         </div>
 

@@ -90,6 +90,14 @@ const PERMISSION_GROUPS: PermissionGroup[] = [
     ]
   },
   {
+    groupName: 'Physical Stock Audit',
+    permissions: [
+      { id: 'VIEW_PHYSICAL_STOCK', label: 'View Physical Stock Entry Screen' },
+      { id: 'MANAGE_PHYSICAL_STOCK', label: 'Create & Save Physical Stock Audits' },
+      { id: 'VIEW_PHYSICAL_STOCK_REPORT', label: 'View Physical Stock Variance Report & Export' }
+    ]
+  },
+  {
     groupName: 'System Administration',
     permissions: [
       { id: 'ADJUST_STOCK', label: 'Perform Stock Audits & Overrides' },

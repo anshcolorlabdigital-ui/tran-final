@@ -23,6 +23,8 @@ import { ItemStockReportView } from './components/reports/ItemStockReportView';
 import { PartyLedgerReportView } from './components/reports/PartyLedgerReportView';
 import { SupplierLedgerReportView } from './components/reports/SupplierLedgerReportView';
 import { ItemLedgerReportView } from './components/reports/ItemLedgerReportView';
+import { PhysicalStockView } from './components/physicalstock/PhysicalStockView';
+import { PhysicalStockReportView } from './components/reports/PhysicalStockReportView';
 import { AdminSettingsView } from './components/settings/AdminSettingsView';
 import { UserPermissionsView } from './components/settings/UserPermissionsView';
 import { QuickPartyModal } from './components/common/QuickPartyModal';
@@ -67,6 +69,8 @@ export const App: React.FC = () => {
         return hasPermission('COLLECT_PAYMENT') ? <PaymentCollectionView /> : renderRestrictedAccess();
       case 'PAY_SUPPLIER':
         return hasPermission('PAY_SUPPLIER') ? <SupplierPaymentView /> : renderRestrictedAccess();
+      case 'PHYSICAL_STOCK':
+        return (hasPermission('VIEW_PHYSICAL_STOCK') || hasPermission('MANAGE_PHYSICAL_STOCK') || isAdmin) ? <PhysicalStockView /> : renderRestrictedAccess();
       case 'PARTY':
         return (hasPermission('MANAGE_PARTY_MASTER') || hasPermission('VIEW_MASTERS') || hasPermission('MANAGE_MASTERS')) ? <PartyMasterView /> : renderRestrictedAccess();
       case 'ITEM':
@@ -89,6 +93,8 @@ export const App: React.FC = () => {
         return (hasPermission('VIEW_SUPPLIER_LEDGER_REPORT') || hasPermission('VIEW_REPORTS')) ? <SupplierLedgerReportView /> : renderRestrictedAccess();
       case 'REPORT_ITEM_LEDGER':
         return (hasPermission('VIEW_ITEM_LEDGER_REPORT') || hasPermission('VIEW_REPORTS')) ? <ItemLedgerReportView /> : renderRestrictedAccess();
+      case 'REPORT_PHYSICAL_STOCK':
+        return (hasPermission('VIEW_PHYSICAL_STOCK_REPORT') || hasPermission('VIEW_REPORTS') || isAdmin) ? <PhysicalStockReportView /> : renderRestrictedAccess();
       case 'ADMIN':
         return isAdmin ? <AdminSettingsView /> : renderRestrictedAccess();
       case 'USER':

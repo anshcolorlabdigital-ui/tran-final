@@ -39,3 +39,6 @@ export function parseDisplayDateToISO(displayStr: string): string {
   }
   return displayStr;
 }
+
+export const formatDateDMY = formatDateToDisplay;
+

@@ -42,6 +42,7 @@ export const ItemMasterView: React.FC = () => {
   const [category, setCategory] = useState('');
   const [supplierId, setSupplierId] = useState('');
   const [isActive, setIsActive] = useState(true);
+  const [disableRestockNotification, setDisableRestockNotification] = useState(false);
 
   // Unit A State
   const [unitAName, setUnitAName] = useState('Roll');
@@ -221,6 +222,7 @@ export const ItemMasterView: React.FC = () => {
 
     setMinStock(String(item.minStock || 0));
     setOpeningStock(String(item.openingStock || 0));
+    setDisableRestockNotification(Boolean(item.disableRestockNotification));
     showToast(viewOnly ? `Viewing ${item.name}` : `Loaded ${item.name} for editing`, 'info');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -238,6 +240,7 @@ export const ItemMasterView: React.FC = () => {
     setCategory('Paper & Sheets');
     if (suppliers.length > 0) setSupplierId(suppliers[0].id);
     setIsActive(true);
+    setDisableRestockNotification(false);
 
     setUnitAName('Roll');
     setUnitABasicPrice('0');
@@ -351,6 +354,7 @@ export const ItemMasterView: React.FC = () => {
         isActive: unitBActive
       } : undefined,
       isActive,
+      disableRestockNotification,
       createdAt: new Date().toISOString()
     };
 
@@ -399,7 +403,7 @@ export const ItemMasterView: React.FC = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey || e.altKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        handleSave({ preventDefault: () => {} } as any);
+        handleSave({ preventDefault: () => { } } as any);
       } else if (e.altKey && e.key.toLowerCase() === 'n') {
         e.preventDefault();
         handleCreateNew();
@@ -410,7 +414,7 @@ export const ItemMasterView: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedItemId, sno, name, hsn, description, category, supplierId, unitAName, unitABasicPrice, unitAGstPercent, unitATranPercent, unitAProfAm, unitAProfDeal, unitAMisPercent, unitASalePrice, unitAMrp, unitAActive, unitBName, unitBConversion, unitBBasicPrice, unitBGstPercent, unitBTranPercent, unitBProfAm, unitBProfDeal, unitBMisPercent, unitBSalePrice, unitBMrp, unitBActive, minStock, openingStock, hasSecondaryUnit, isActive, isViewOnly]);
+  }, [selectedItemId, sno, name, hsn, description, category, supplierId, unitAName, unitABasicPrice, unitAGstPercent, unitATranPercent, unitAProfAm, unitAProfDeal, unitAMisPercent, unitASalePrice, unitAMrp, unitAActive, unitBName, unitBConversion, unitBBasicPrice, unitBGstPercent, unitBTranPercent, unitBProfAm, unitBProfDeal, unitBMisPercent, unitBSalePrice, unitBMrp, unitBActive, minStock, openingStock, hasSecondaryUnit, isActive, disableRestockNotification, isViewOnly]);
 
   const filteredSummaries = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -431,12 +435,12 @@ export const ItemMasterView: React.FC = () => {
   const cardStateClass = isJustSaved
     ? 'is-saved-yellow'
     : isViewing
-    ? 'is-initial-blue'
-    : isEditing
-    ? 'is-editing-pink'
-    : isCreating
-    ? 'is-creating-green'
-    : 'is-initial-blue';
+      ? 'is-initial-blue'
+      : isEditing
+        ? 'is-editing-pink'
+        : isCreating
+          ? 'is-creating-green'
+          : 'is-initial-blue';
 
   const handleFormKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
     if (e.key === 'Enter') {
@@ -547,39 +551,6 @@ export const ItemMasterView: React.FC = () => {
             <FileSpreadsheet size={15} color="#16A34A" />
             Import from Excel (.xlsx)
           </button>
-
-          {/* Secondary Unit Toggle (OFF by default) */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: hasSecondaryUnit ? '#DCFCE7' : '#FFFFFF', padding: '6px 14px', borderRadius: '20px', border: '1px solid #D1D5DB' }}>
-            <input
-              type="checkbox"
-              id="hasSecondaryUnitCheckbox"
-              checked={hasSecondaryUnit}
-              onChange={e => {
-                setIsTouched(true);
-                setHasSecondaryUnit(e.target.checked);
-              }}
-              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-            />
-            <label htmlFor="hasSecondaryUnitCheckbox" style={{ fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', color: hasSecondaryUnit ? '#166534' : '#4B5563' }}>
-              Secondary Unit (Unit B) {hasSecondaryUnit ? 'ON' : 'OFF'}
-            </label>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#FFFFFF', padding: '6px 14px', borderRadius: '20px', border: '1px solid #D1D5DB' }}>
-            <input
-              type="checkbox"
-              id="activeItemCheckbox"
-              checked={isActive}
-              onChange={e => {
-                setIsTouched(true);
-                setIsActive(e.target.checked);
-              }}
-              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-            />
-            <label htmlFor="activeItemCheckbox" style={{ fontWeight: 800, fontSize: '0.88rem', cursor: 'pointer' }}>
-              Active
-            </label>
-          </div>
         </div>
       </div>
 
@@ -643,7 +614,73 @@ export const ItemMasterView: React.FC = () => {
           } : undefined}
           style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
         >
-          
+
+          {/* Unified Item Options Bar: Active, Disable Restock Alert, and Secondary Unit (Unit B) on the same line */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              flexWrap: 'wrap',
+              padding: '10px 14px',
+              background: '#FFFFFF',
+              borderRadius: '8px',
+              border: '1.5px solid #000000',
+              marginBottom: '4px'
+            }}
+          >
+            {/* 1. Active Item Toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: isActive ? '#DCFCE7' : '#F3F4F6', padding: '5px 12px', borderRadius: '16px', border: `1.5px solid ${isActive ? '#16A34A' : '#D1D5DB'}` }}>
+              <input
+                type="checkbox"
+                id="activeItemCheckbox"
+                checked={isActive}
+                onChange={e => {
+                  setIsTouched(true);
+                  setIsActive(e.target.checked);
+                }}
+                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+              />
+              <label htmlFor="activeItemCheckbox" style={{ fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', color: isActive ? '#166534' : '#6B7280' }}>
+                Active Item
+              </label>
+            </div>
+
+            {/* 2. Disable Restock Alert Toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: disableRestockNotification ? '#FEF3C7' : '#FFFFFF', padding: '5px 12px', borderRadius: '16px', border: `1.5px solid ${disableRestockNotification ? '#D97706' : '#D1D5DB'}` }}>
+              <input
+                type="checkbox"
+                id="disableRestockCheckbox"
+                checked={disableRestockNotification}
+                onChange={e => {
+                  setIsTouched(true);
+                  setDisableRestockNotification(e.target.checked);
+                }}
+                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+              />
+              <label htmlFor="disableRestockCheckbox" style={{ fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', color: disableRestockNotification ? '#92400E' : '#374151' }}>
+                Disable Restock Alert
+              </label>
+            </div>
+
+            {/* 3. Secondary Unit (Unit B) Toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: hasSecondaryUnit ? '#DCFCE7' : '#FFFFFF', padding: '5px 12px', borderRadius: '16px', border: `1.5px solid ${hasSecondaryUnit ? '#16A34A' : '#D1D5DB'}` }}>
+              <input
+                type="checkbox"
+                id="hasSecondaryUnitCheckbox"
+                checked={hasSecondaryUnit}
+                onChange={e => {
+                  setIsTouched(true);
+                  setHasSecondaryUnit(e.target.checked);
+                }}
+                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+              />
+              <label htmlFor="hasSecondaryUnitCheckbox" style={{ fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', color: hasSecondaryUnit ? '#166534' : '#4B5563' }}>
+                Secondary Unit (Unit B) {hasSecondaryUnit ? 'ON' : 'OFF'}
+              </label>
+            </div>
+          </div>
+
           {/* Row 1: Item Name, HSN Code */}
           <div className="form-grid-2col">
             <div>
@@ -1262,8 +1299,8 @@ export const ItemMasterView: React.FC = () => {
                     <td style={{ fontWeight: 800 }}>{s.item.name}</td>
                     <td>{s.item.supplierName || '-'}</td>
                     <td>
-                      {s.item.unitA 
-                        ? `${s.item.unitA.unitName}: ₹${s.item.unitA.salePrice ?? s.item.saleRate ?? 0} (Sale) / ₹${s.item.unitA.mrp ?? s.item.mrp ?? 0} (MRP)` 
+                      {s.item.unitA
+                        ? `${s.item.unitA.unitName}: ₹${s.item.unitA.salePrice ?? s.item.saleRate ?? 0} (Sale) / ₹${s.item.unitA.mrp ?? s.item.mrp ?? 0} (MRP)`
                         : `${s.item.unit || 'Pcs'}: ₹${s.item.saleRate || 0} (Sale) / ₹${s.item.mrp || 0} (MRP)`}
                     </td>
                     <td>
@@ -1273,18 +1310,35 @@ export const ItemMasterView: React.FC = () => {
                       {s.closingStock}
                     </td>
                     <td style={{ textAlign: 'center' }}>
-                      <span
-                        style={{
-                          fontSize: '0.75rem',
-                          fontWeight: 800,
-                          padding: '2px 8px',
-                          borderRadius: '12px',
-                          backgroundColor: s.item.isActive !== false ? '#DCFCE7' : '#FEE2E2',
-                          color: s.item.isActive !== false ? '#166534' : '#991B1B'
-                        }}
-                      >
-                        {s.item.isActive !== false ? 'Active' : 'Inactive'}
-                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                        <span
+                          style={{
+                            fontSize: '0.75rem',
+                            fontWeight: 800,
+                            padding: '2px 8px',
+                            borderRadius: '12px',
+                            backgroundColor: s.item.isActive !== false ? '#DCFCE7' : '#FEE2E2',
+                            color: s.item.isActive !== false ? '#166534' : '#991B1B'
+                          }}
+                        >
+                          {s.item.isActive !== false ? 'Active' : 'Inactive'}
+                        </span>
+                        {s.item.disableRestockNotification && (
+                          <span
+                            style={{
+                              fontSize: '0.68rem',
+                              fontWeight: 700,
+                              padding: '1px 6px',
+                              borderRadius: '8px',
+                              backgroundColor: '#FEF3C7',
+                              color: '#92400E'
+                            }}
+                            title="Restock alerts disabled for this item"
+                          >
+                            No Restock
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td style={{ textAlign: 'center' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>

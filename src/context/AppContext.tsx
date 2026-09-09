@@ -27,6 +27,11 @@ interface AppContextType {
   setActiveTab: (tab: ActiveNavTab) => void;
   selectedDate: string;
   setSelectedDate: (date: string) => void;
+  historyFromDate: string;
+  historyToDate: string;
+  setHistoryFromDate: (date: string) => void;
+  setHistoryToDate: (date: string) => void;
+  setHistoryDateRange: (from: string, to: string) => void;
   settings: CompanySettings;
   updateSettings: (newSettings: CompanySettings) => void;
   toasts: Toast[];
@@ -62,7 +67,14 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<ActiveNavTab>('DASHBOARD');
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDateString());
+  const [historyFromDate, setHistoryFromDate] = useState<string>(getTodayDateString());
+  const [historyToDate, setHistoryToDate] = useState<string>(getTodayDateString());
   const [settings, setSettings] = useState<CompanySettings>(() => db.getSettings());
+
+  const setHistoryDateRange = useCallback((from: string, to: string) => {
+    setHistoryFromDate(from);
+    setHistoryToDate(to);
+  }, []);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [refreshKey, setRefreshKey] = useState<number>(0);
   const [pendingPurchasePrefill, setPendingPurchasePrefill] = useState<any | null>(null);
@@ -167,6 +179,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setActiveTab: handleSetActiveTab,
         selectedDate,
         setSelectedDate,
+        historyFromDate,
+        historyToDate,
+        setHistoryFromDate,
+        setHistoryToDate,
+        setHistoryDateRange,
         settings,
         updateSettings,
         toasts,

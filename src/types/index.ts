@@ -31,6 +31,9 @@ export type Permission =
   | 'MANAGE_ITEM_MASTER'
   | 'MANAGE_SUPPLIER_MASTER'
   | 'MANAGE_OPENING_STOCK'
+  // Physical Stock
+  | 'VIEW_PHYSICAL_STOCK'
+  | 'MANAGE_PHYSICAL_STOCK'
   // Reports
   | 'VIEW_REPORTS'
   | 'VIEW_SALES_REPORT'
@@ -40,6 +43,7 @@ export type Permission =
   | 'VIEW_PARTY_LEDGER_REPORT'
   | 'VIEW_SUPPLIER_LEDGER_REPORT'
   | 'VIEW_ITEM_LEDGER_REPORT'
+  | 'VIEW_PHYSICAL_STOCK_REPORT'
   // Administration
   | 'ADJUST_STOCK'
   | 'MANAGE_USERS'
@@ -156,6 +160,7 @@ export interface Item {
   unitA?: ItemUnitPricing;
   unitB?: ItemUnitSecondaryPricing;
   isActive: boolean;
+  disableRestockNotification?: boolean; // When true, item is excluded from pending order queue and low-stock alert badges
   createdAt: string;
 }
 
@@ -393,6 +398,9 @@ export interface CompanySettings {
   orderPrefix: string;
   orderNextNumber?: number;
   orderPadDigits?: number;
+  physicalStockPrefix?: string;
+  physicalStockNextNumber?: number;
+  physicalStockPadDigits?: number;
 }
 
 export interface ItemStockSummary {
@@ -413,6 +421,32 @@ export interface ItemStockSummary {
   };
 }
 
+export interface PhysicalStockItem {
+  itemId: string;
+  itemName: string;
+  itemCode?: string;
+  category?: string;
+  unit: string;
+  systemStock: number;
+  physicalStock: number;
+  diffQty: number; // physicalStock - systemStock
+  rate: number;
+  diffValue: number; // diffQty * rate
+}
+
+export interface PhysicalStockAudit {
+  id: string;
+  auditNo: string;
+  auditDate: string; // YYYY-MM-DD
+  notes?: string;
+  items: PhysicalStockItem[];
+  totalSystemQty: number;
+  totalPhysicalQty: number;
+  totalDiffQty: number;
+  totalDiffValue: number;
+  createdAt: string;
+}
+
 export type ActiveNavTab =
   | 'DASHBOARD'
   | 'ORDER'
@@ -422,6 +456,7 @@ export type ActiveNavTab =
   | 'SELF_USE'
   | 'COLLECT_PAYMENT'
   | 'PAY_SUPPLIER'
+  | 'PHYSICAL_STOCK'
   | 'PARTY'
   | 'ITEM'
   | 'SUPPLIER'
@@ -433,5 +468,7 @@ export type ActiveNavTab =
   | 'REPORT_PARTY_LEDGER'
   | 'REPORT_SUPPLIER_LEDGER'
   | 'REPORT_ITEM_LEDGER'
+  | 'REPORT_PHYSICAL_STOCK'
   | 'ADMIN'
   | 'USER';
+

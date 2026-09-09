@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo, useImperativeHandle, forwardRef } from 'react';
 import { Item } from '../../types';
-import { StockEngine } from '../../db/stockEngine';
 import { Search, X, Check } from 'lucide-react';
 
 export interface ItemSearchSelectProps {
@@ -285,7 +284,6 @@ export const ItemSearchSelect = forwardRef<ItemSearchSelectHandle, ItemSearchSel
             filteredItems.map((item, idx) => {
               const isSelected = item.id === selectedItemId;
               const isHighlighted = idx === highlightedIndex;
-              const stock = StockEngine.getItemCurrentStock(item.id);
 
               return (
                 <div
@@ -322,23 +320,12 @@ export const ItemSearchSelect = forwardRef<ItemSearchSelectHandle, ItemSearchSel
                     {item.name}
                   </div>
 
-                  {/* Single Line: Stock Badge & Check on the right */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                    <span
-                      style={{
-                        fontSize: '0.76rem',
-                        fontWeight: 800,
-                        padding: '2px 8px',
-                        borderRadius: '10px',
-                        background: stock > 0 ? '#DCFCE7' : '#FEE2E2',
-                        color: stock > 0 ? '#15803D' : '#991B1B',
-                        whiteSpace: 'nowrap'
-                      }}
-                    >
-                      Stock: {stock} {item.unitA?.unitName || item.unit || 'Units'}
-                    </span>
-                    {isSelected && <Check size={15} color="#002B99" />}
-                  </div>
+                  {/* Check on the right if selected */}
+                  {isSelected && (
+                    <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                      <Check size={16} color="#002B99" />
+                    </div>
+                  )}
                 </div>
               );
             })

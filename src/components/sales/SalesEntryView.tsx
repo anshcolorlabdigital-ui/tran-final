@@ -10,10 +10,11 @@ import { SalesPrintInvoice } from './SalesPrintInvoice';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { ItemSearchSelect, ItemSearchSelectHandle } from '../common/ItemSearchSelect';
 import { SearchableSelect, SearchableSelectHandle } from '../common/SearchableSelect';
+import { HistoryDateRangeFilter } from '../common/HistoryDateRangeFilter';
 import { Search, Keyboard } from 'lucide-react';
 
 export const SalesEntryView: React.FC = () => {
-  const { showToast, showAlert, openQuickModal, refreshKey, selectedDate } = useApp();
+  const { showToast, showAlert, openQuickModal, refreshKey, selectedDate, historyFromDate, historyToDate } = useApp();
   const { hasPermission } = useAuth();
 
   // Master lists
@@ -639,14 +640,17 @@ export const SalesEntryView: React.FC = () => {
 
   const filteredSales = useMemo(() => {
     const q = searchHistory.toLowerCase().trim();
-    if (!q) return salesHistory;
-    return salesHistory.filter(
-      s =>
+    return salesHistory.filter(s => {
+      if (historyFromDate && s.billDate < historyFromDate) return false;
+      if (historyToDate && s.billDate > historyToDate) return false;
+      if (!q) return true;
+      return (
         s.billNo.toLowerCase().includes(q) ||
         s.partyName.toLowerCase().includes(q) ||
         s.billDate.includes(q)
-    );
-  }, [salesHistory, searchHistory]);
+      );
+    });
+  }, [salesHistory, searchHistory, historyFromDate, historyToDate]);
 
   const isEditing = Boolean(editingSaleId && !isViewOnly);
   const isViewing = Boolean(editingSaleId && isViewOnly);
@@ -768,102 +772,107 @@ export const SalesEntryView: React.FC = () => {
           } : undefined}
           style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
         >
-        {/* Top date and bill no */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '24px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <label style={{ fontWeight: 900, fontSize: '0.95rem' }}>BILL DATE</label>
-            <input
-              ref={billDateInputRef}
-              type="date"
-              className="input-text-clean"
-              value={billDate}
-              onChange={e => { setIsTouched(true); setBillDate(e.target.value); }}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  billNoInputRef.current?.focus();
-                  billNoInputRef.current?.select();
-                }
-              }}
-              style={{ width: '145px' }}
-            />
+        {/* TOP 2-COLUMN HEADER: Left (Party, Catg, Item) | Right (Dates & Bill No) */}
+        <div className="entry-form-header-grid">
+          {/* LEFT COLUMN: Party, Catg, Item */}
+          <div className="entry-header-left-col">
+            {/* PARTY SELECTION ROW */}
+            <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: '8px', alignItems: 'center' }}>
+              <label style={{ fontWeight: 900, fontSize: '0.98rem' }}>Party :</label>
+              <SearchableSelect
+                ref={partySelectRef}
+                options={partyOptions}
+                value={partyId}
+                onChange={val => handlePartyChange(val)}
+                onEnterNext={() => {
+                  categorySelectRef.current?.focus();
+                }}
+                placeholder="Type customer/party name/phone or use arrows..."
+                onQuickAdd={() => openQuickModal('PARTY', (newId) => {
+                  handlePartyChange(newId);
+                  setTimeout(() => categorySelectRef.current?.focus(), 40);
+                })}
+                quickAddTitle="Quick Create Party"
+              />
+            </div>
+
+            {/* CATG. ROW */}
+            <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: '8px', alignItems: 'center' }}>
+              <label style={{ fontWeight: 900, fontSize: '0.98rem' }}>CATG. :</label>
+              <SearchableSelect
+                ref={categorySelectRef}
+                options={categoryOptions}
+                value={selectedCategory}
+                onChange={val => {
+                  setIsTouched(true);
+                  setSelectedCategory(val);
+                  setSelectedItemId('');
+                }}
+                onEnterNext={() => {
+                  itemSearchRef.current?.focus();
+                }}
+                placeholder="Type category or press Enter to choose item..."
+                onQuickAdd={() => openQuickModal('ITEM', () => setIsTouched(true))}
+                quickAddTitle="Quick Create Item / Category"
+              />
+            </div>
+
+            {/* ITEM SELECTION ROW */}
+            <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: '8px', alignItems: 'center' }}>
+              <label style={{ fontWeight: 900, fontSize: '0.98rem' }}>ITEM :</label>
+              <ItemSearchSelect
+                ref={itemSearchRef}
+                items={filteredCategoryItems}
+                selectedItemId={selectedItemId}
+                onSelectItem={(item) => handleItemSelect(item ? item.id : '')}
+                onEnterNext={() => {
+                  unitAQtyInputRef.current?.focus();
+                  unitAQtyInputRef.current?.select();
+                }}
+                placeholder="Type item name/code to search or use arrow keys..."
+                onQuickAdd={() => openQuickModal('ITEM', (newId) => handleItemSelect(newId))}
+              />
+            </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <label style={{ fontWeight: 900, fontSize: '0.95rem' }}>BILL NO.</label>
-            <input
-              ref={billNoInputRef}
-              type="text"
-              className="input-text-clean"
-              value={billNo}
-              onChange={e => { setIsTouched(true); setBillNo(e.target.value); }}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  partySelectRef.current?.focus();
-                }
-              }}
-              style={{ width: '140px', fontWeight: 800 }}
-            />
+          {/* RIGHT COLUMN: Bill Date & Bill No */}
+          <div className="entry-header-right-col">
+            <div className="entry-header-right-row">
+              <label>BILL DATE</label>
+              <input
+                ref={billDateInputRef}
+                type="date"
+                className="input-text-clean"
+                value={billDate}
+                onChange={e => { setIsTouched(true); setBillDate(e.target.value); }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    billNoInputRef.current?.focus();
+                    billNoInputRef.current?.select();
+                  }
+                }}
+              />
+            </div>
+
+            <div className="entry-header-right-row">
+              <label>BILL NO.</label>
+              <input
+                ref={billNoInputRef}
+                type="text"
+                className="input-text-clean"
+                value={billNo}
+                onChange={e => { setIsTouched(true); setBillNo(e.target.value); }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    partySelectRef.current?.focus();
+                  }
+                }}
+                style={{ fontWeight: 800 }}
+              />
+            </div>
           </div>
-        </div>
-
-        {/* PARTY SELECTION ROW */}
-        <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: '10px', alignItems: 'center' }}>
-          <label style={{ fontWeight: 900, fontSize: '1.05rem' }}>Party :</label>
-          <SearchableSelect
-            ref={partySelectRef}
-            options={partyOptions}
-            value={partyId}
-            onChange={val => handlePartyChange(val)}
-            onEnterNext={() => {
-              categorySelectRef.current?.focus();
-            }}
-            placeholder="Type customer/party name/phone or use arrows..."
-            onQuickAdd={() => openQuickModal('PARTY', (newId) => {
-              handlePartyChange(newId);
-              setTimeout(() => categorySelectRef.current?.focus(), 40);
-            })}
-            quickAddTitle="Quick Create Party"
-          />
-        </div>
-
-        {/* CATG. ROW */}
-        <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: '10px', alignItems: 'center' }}>
-          <label style={{ fontWeight: 900, fontSize: '1.05rem' }}>CATG. :</label>
-          <SearchableSelect
-            ref={categorySelectRef}
-            options={categoryOptions}
-            value={selectedCategory}
-            onChange={val => {
-              setIsTouched(true);
-              setSelectedCategory(val);
-              setSelectedItemId('');
-            }}
-            onEnterNext={() => {
-              itemSearchRef.current?.focus();
-            }}
-            placeholder="Type category or press Enter to choose item..."
-            onQuickAdd={() => openQuickModal('ITEM', () => setIsTouched(true))}
-            quickAddTitle="Quick Create Item / Category"
-          />
-        </div>
-
-        {/* ITEM SELECTION ROW */}
-        <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: '10px', alignItems: 'center' }}>
-          <label style={{ fontWeight: 900, fontSize: '1.05rem' }}>ITEM :</label>
-          <ItemSearchSelect
-            ref={itemSearchRef}
-            items={filteredCategoryItems}
-            selectedItemId={selectedItemId}
-            onSelectItem={(item) => handleItemSelect(item ? item.id : '')}
-            onEnterNext={() => {
-              unitAQtyInputRef.current?.focus();
-              unitAQtyInputRef.current?.select();
-            }}
-            onQuickAdd={() => openQuickModal('ITEM', (newId) => handleItemSelect(newId))}
-            placeholder="Type to search item name/code or use arrow keys..."
-          />
         </div>
 
         {/* DUAL PRICING INPUT CARDS (UNIT-A & UNIT-B) */}
@@ -1367,9 +1376,12 @@ export const SalesEntryView: React.FC = () => {
               {filteredSales.length} {filteredSales.length === 1 ? 'Record' : 'Records'}
             </span>
           </div>
-          <div style={{ position: 'relative', width: '280px' }}>
-            <Search size={14} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
-            <input type="text" placeholder="Search invoice, customer..." className="input-text-clean" value={searchHistory} onChange={e => setSearchHistory(e.target.value)} style={{ paddingLeft: '32px', fontSize: '0.85rem' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <HistoryDateRangeFilter />
+            <div style={{ position: 'relative', width: '220px' }}>
+              <Search size={14} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
+              <input type="text" placeholder="Search invoice, customer..." className="input-text-clean" value={searchHistory} onChange={e => setSearchHistory(e.target.value)} style={{ paddingLeft: '32px', fontSize: '0.85rem' }} />
+            </div>
           </div>
         </div>
         <div className="custom-table-container">

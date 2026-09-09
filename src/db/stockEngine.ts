@@ -88,14 +88,19 @@ export class StockEngine {
    */
   public static getLowStockItems(): ItemStockSummary[] {
     const allSummaries = this.getAllItemsStockSummary();
-    return allSummaries.filter(s => s.isLowStock);
+    return allSummaries.filter(s => s.isLowStock && !s.item.disableRestockNotification);
   }
 
   /**
-   * Calculates dashboard sales metrics for a specified date
+   * Calculates dashboard sales metrics for a specified date or date range
    */
-  public static getDashboardSalesMetrics(dateString: string) {
-    const sales = db.getSales().filter(s => s.billDate === dateString);
+  public static getDashboardSalesMetrics(startDate: string, endDate?: string) {
+    const sales = db.getSales().filter(s => {
+      if (endDate && endDate !== startDate) {
+        return s.billDate >= startDate && s.billDate <= endDate;
+      }
+      return s.billDate === startDate;
+    });
     let cash = 0;
     let online = 0;
     let total = 0;
@@ -117,7 +122,7 @@ export class StockEngine {
   /**
    * Generates next serial / bill number based on customizable prefix and sequence configurations
    */
-  public static getNextBillNumber(type: 'SALE' | 'PURCHASE' | 'SELF_USE' | 'ORDER'): string {
+  public static getNextBillNumber(type: 'SALE' | 'PURCHASE' | 'SELF_USE' | 'ORDER' | 'PHYSICAL_STOCK'): string {
     const settings = db.getSettings();
     if (type === 'SALE') {
       const sales = db.getSales();
@@ -183,7 +188,23 @@ export class StockEngine {
       });
       return `${prefix}${String(nextNum).padStart(padDigits, '0')}`;
     }
-    return '1001';
+    if (type === 'PHYSICAL_STOCK') {
+      const audits = db.getPhysicalStockAudits();
+      const prefix = settings.physicalStockPrefix ?? 'PHY-';
+      const padDigits = Number(settings.physicalStockPadDigits) || 3;
+      const baseNum = Number(settings.physicalStockNextNumber) || 101;
+      let nextNum = baseNum;
+      audits.forEach(a => {
+        if (a.auditNo && a.auditNo.startsWith(prefix)) {
+          const numPart = parseInt(a.auditNo.slice(prefix.length), 10);
+          if (!isNaN(numPart) && numPart >= nextNum) {
+            nextNum = numPart + 1;
+          }
+        }
+      });
+      return `${prefix}${String(nextNum).padStart(padDigits, '0')}`;
+    }
+    return `DOC-${Date.now()}`;
   }
 
   /**
