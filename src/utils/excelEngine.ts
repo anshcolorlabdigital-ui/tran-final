@@ -92,7 +92,7 @@ export function importItemsFromExcel(
     }
 
     const rawSno = getColumnValue(row, ['sno', 'serialno', 'code', 'itemcode', 'srno']);
-    const rawCategory = getColumnValue(row, ['category', 'catg', 'catagory', 'group', 'type']);
+    const rawCategory = getColumnValue(row, ['category', 'catg', 'catagory', 'catagary', 'group', 'type']);
     const rawSupplier = getColumnValue(row, ['supplier', 'suppliername', 'vendor', 'firm']);
     const rawPrice = getColumnValue(row, ['baseprice', 'price', 'rate', 'basicprice', 'purchaserate', 'cost', 'costprice']);
     const rawGst = getColumnValue(row, ['gst', 'gst%', 'gstpercent', 'tax']);
@@ -104,8 +104,8 @@ export function importItemsFromExcel(
     const rawDisableAlert = getColumnValue(row, ['disablerestockalert', 'disablerestock', 'noalert', 'disablealert']);
 
     const basePrice = rawPrice !== '' && !isNaN(Number(rawPrice)) ? Number(rawPrice) : 0;
-    const rowGst = rawGst !== '' && !isNaN(Number(rawGst)) ? Number(rawGst) : (options?.defaultGst ?? 18);
-    const rowTran = rawTransport !== '' && !isNaN(Number(rawTransport)) ? Number(rawTransport) : (options?.defaultTransport ?? 10);
+    const rowGst = rawGst !== '' && !isNaN(Number(rawGst)) ? Number(rawGst) : (options?.defaultGst ?? 0);
+    const rowTran = rawTransport !== '' && !isNaN(Number(rawTransport)) ? Number(rawTransport) : (options?.defaultTransport ?? 0);
     const rowProfAm = rawProfAm !== '' && !isNaN(Number(rawProfAm)) ? Number(rawProfAm) : 0;
     const rowProfDeal = rawProfDeal !== '' && !isNaN(Number(rawProfDeal)) ? Number(rawProfDeal) : 25;
     const rowMisc = rawMisc !== '' && !isNaN(Number(rawMisc)) ? Number(rawMisc) : 0;
@@ -485,6 +485,33 @@ export function downloadCompleteExcelBackup(options: ExportFilterOptions, filena
   XLSX.writeFile(wb, `${filenameBase}_${dateSuffix}.xlsx`);
 }
 
+export interface ExcelRestoreSelection {
+  items?: boolean;
+  parties?: boolean;
+  suppliers?: boolean;
+  orders?: boolean;
+  sales?: boolean;
+  purchases?: boolean;
+  selfUse?: boolean;
+  adjustments?: boolean;
+  physicalStockAudits?: boolean;
+  customerPayments?: boolean;
+  supplierPayments?: boolean;
+}
+
+
+
+/**
+ * Parses numeric values safely from various Excel string representations
+ */
+function parseExcelNumber(val: any, fallback: number = 0): number {
+  if (val === undefined || val === null || val === '') return fallback;
+  if (typeof val === 'number') return isNaN(val) ? fallback : val;
+  const cleaned = String(val).replace(/[^0-9.-]/g, '');
+  const parsed = parseFloat(cleaned);
+  return isNaN(parsed) ? fallback : parsed;
+}
+
 /**
  * Inspects an Excel Backup File for Restore Preview
  */
@@ -585,9 +612,12 @@ export function inspectExcelBackup(fileData: ArrayBuffer | Uint8Array): ExcelRes
 }
 
 /**
- * Restores the complete database from an Excel (.xlsx/.xls) Backup Workbook or Item Catalog
+ * Restores the complete or selected database tables from an Excel (.xlsx/.xls) Backup Workbook or Item Catalog
  */
-export function restoreDatabaseFromExcel(fileData: ArrayBuffer | Uint8Array): {
+export function restoreDatabaseFromExcel(
+  fileData: ArrayBuffer | Uint8Array,
+  selection?: ExcelRestoreSelection
+): {
   success: boolean;
   restoredCounts: Record<string, number>;
   error?: string;
@@ -613,7 +643,7 @@ export function restoreDatabaseFromExcel(fileData: ArrayBuffer | Uint8Array): {
       const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
       // 1. Items Sheet (All fields including Disable Restock Alert & Unit B)
-      if (lower.includes('item') || lower.includes('material')) {
+      if ((lower.includes('item') || lower.includes('material')) && (!selection || selection.items !== false)) {
         rows.forEach(r => {
           const name = String(getColumnValue(r, ['itemname', 'item', 'name', 'material', 'product'])).trim();
           if (!name) return;
@@ -689,7 +719,7 @@ export function restoreDatabaseFromExcel(fileData: ArrayBuffer | Uint8Array): {
       }
 
       // 2. Suppliers Sheet
-      if (lower.includes('supp') || lower.includes('vendor')) {
+      if ((lower.includes('supp') || lower.includes('vendor')) && (!selection || selection.suppliers !== false)) {
         rows.forEach(r => {
           const name = String(getColumnValue(r, ['firmname', 'name', 'supplier', 'vendor'])).trim();
           if (!name) return;
@@ -719,7 +749,7 @@ export function restoreDatabaseFromExcel(fileData: ArrayBuffer | Uint8Array): {
       }
 
       // 3. Parties Sheet
-      if (lower.includes('part') || lower.includes('client') || lower.includes('cust')) {
+      if ((lower.includes('part') || lower.includes('client') || lower.includes('cust')) && !lower.includes('pay') && (!selection || selection.parties !== false)) {
         rows.forEach(r => {
           const name = String(getColumnValue(r, ['firmname', 'name', 'party', 'client'])).trim();
           if (!name) return;
@@ -761,7 +791,7 @@ export function restoreDatabaseFromExcel(fileData: ArrayBuffer | Uint8Array): {
       }
 
       // 4. Sales Sheet
-      if (lower.includes('sale')) {
+      if (lower.includes('sale') && (!selection || selection.sales !== false)) {
         const salesByBill = new Map<string, any[]>();
         rows.forEach(r => {
           const billNo = String(getColumnValue(r, ['billno', 'invoiceno', 'bill'])).trim();
@@ -829,7 +859,7 @@ export function restoreDatabaseFromExcel(fileData: ArrayBuffer | Uint8Array): {
       }
 
       // 5. Purchases Sheet
-      if (lower.includes('purch')) {
+      if (lower.includes('purch') && (!selection || selection.purchases !== false)) {
         const purByBill = new Map<string, any[]>();
         rows.forEach(r => {
           const billNo = String(getColumnValue(r, ['billno', 'invoiceno', 'bill'])).trim();
@@ -893,7 +923,7 @@ export function restoreDatabaseFromExcel(fileData: ArrayBuffer | Uint8Array): {
       }
 
       // 6. Orders Sheet
-      if (lower.includes('order')) {
+      if (lower.includes('order') && (!selection || selection.orders !== false)) {
         const ordersByNum = new Map<string, any[]>();
         rows.forEach(r => {
           const orderNumber = String(getColumnValue(r, ['ordernumber', 'orderno', 'number'])).trim();
@@ -935,7 +965,7 @@ export function restoreDatabaseFromExcel(fileData: ArrayBuffer | Uint8Array): {
       }
 
       // 7. Self Use Sheet
-      if (lower.includes('selfuse') || lower.includes('self_use') || lower.includes('internal')) {
+      if ((lower.includes('selfuse') || lower.includes('self_use') || lower.includes('internal')) && (!selection || selection.selfUse !== false)) {
         const selfUseByVoucher = new Map<string, any[]>();
         rows.forEach(r => {
           const billNo = String(getColumnValue(r, ['voucherno', 'billno', 'refno'])).trim();
@@ -977,7 +1007,7 @@ export function restoreDatabaseFromExcel(fileData: ArrayBuffer | Uint8Array): {
       }
 
       // 8. Physical Stock Audits Sheet
-      if (lower.includes('physical') || lower.includes('audit')) {
+      if ((lower.includes('physical') || lower.includes('audit')) && (!selection || selection.physicalStockAudits !== false)) {
         const auditsByVoucher = new Map<string, any[]>();
         rows.forEach(r => {
           const auditNo = String(getColumnValue(r, ['auditvoucherno', 'voucherno', 'auditno', 'voucher'])).trim();
@@ -1034,7 +1064,7 @@ export function restoreDatabaseFromExcel(fileData: ArrayBuffer | Uint8Array): {
       }
 
       // 9. Customer Payment Logs Sheet
-      if (lower.includes('custpay') || lower.includes('partylog') || (lower.includes('customer') && lower.includes('pay'))) {
+      if ((lower.includes('custpay') || lower.includes('partylog') || (lower.includes('customer') && lower.includes('pay'))) && (!selection || selection.customerPayments !== false)) {
         rows.forEach(r => {
           const partyName = String(getColumnValue(r, ['partyname', 'party', 'customer'])).trim();
           if (!partyName) return;
@@ -1069,7 +1099,7 @@ export function restoreDatabaseFromExcel(fileData: ArrayBuffer | Uint8Array): {
       }
 
       // 10. Supplier Payment Logs Sheet
-      if (lower.includes('supppay') || lower.includes('supplierlog') || (lower.includes('supplier') && lower.includes('pay'))) {
+      if ((lower.includes('supppay') || lower.includes('supplierlog') || (lower.includes('supplier') && lower.includes('pay'))) && (!selection || selection.supplierPayments !== false)) {
         rows.forEach(r => {
           const supplierName = String(getColumnValue(r, ['suppliername', 'supplier', 'vendor'])).trim();
           if (!supplierName) return;
@@ -1102,11 +1132,44 @@ export function restoreDatabaseFromExcel(fileData: ArrayBuffer | Uint8Array): {
           restoredCounts.supplierPayments += 1;
         });
       }
+
+      // 11. Stock Adjustments Sheet
+      if ((lower.includes('adjust') || lower.includes('stockadj')) && (!selection || selection.adjustments !== false)) {
+        rows.forEach(r => {
+          const itemName = String(getColumnValue(r, ['itemname', 'item', 'name'])).trim();
+          if (!itemName) return;
+          const item = db.getItems().find(i => i.name.toLowerCase() === itemName.toLowerCase());
+          const itemId = item?.id || `item-gen-${Date.now()}`;
+          const date = String(getColumnValue(r, ['date'])) || new Date().toISOString().split('T')[0];
+          const prevStock = Number(getColumnValue(r, ['previousstock', 'systemstock', 'oldstock'])) || 0;
+          const newStock = Number(getColumnValue(r, ['newstock', 'countedstock', 'actualstock'])) || 0;
+          const diffQty = Number(getColumnValue(r, ['difference', 'diffqty', 'varianceqty'])) || (newStock - prevStock);
+          const reason = String(getColumnValue(r, ['reason', 'notes', 'remarks'])) || 'Excel restore adjustment';
+          const adjNo = String(getColumnValue(r, ['adjustmentno', 'adjustmentnumber', 'adjno'])) || `ADJ-${Date.now().toString().slice(-4)}`;
+
+          const adj: StockAdjustment = {
+            id: String(getColumnValue(r, ['adjustmentid', 'id'])) || `adj-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            adjustmentNo: adjNo,
+            itemId,
+            itemName,
+            date,
+            previousStock: prevStock,
+            newStock,
+            difference: diffQty,
+            type: diffQty >= 0 ? 'INCREASE' : 'DECREASE',
+            reason,
+            adjustedBy: String(getColumnValue(r, ['adjustedby', 'user'])) || 'Admin',
+            createdAt: new Date().toISOString()
+          };
+          db.saveStockAdjustment(adj);
+          restoredCounts.adjustments = (restoredCounts.adjustments || 0) + 1;
+        });
+      }
     });
 
     // Fallback: If standard multi-sheet tables yielded 0 restored records, but the file contains items, run importItemsFromExcel!
     const totalMultiSheetRestored = Object.values(restoredCounts).reduce((a, b) => a + b, 0);
-    if (totalMultiSheetRestored === 0) {
+    if (totalMultiSheetRestored === 0 && (!selection || selection.items !== false)) {
       const importResult = importItemsFromExcel(fileData);
       restoredCounts.items = importResult.importedCount;
       restoredCounts.suppliers = importResult.createdSuppliersCount;

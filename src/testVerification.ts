@@ -944,7 +944,7 @@ async function runVerificationSuite() {
   // 50. Single-Click Read-Only Guard & Double-Click Edit Mode Invariant
   console.log('\nStep 50: Verifying View-Only Mode vs Direct Edit Mode Transitions...');
   let componentState = { isViewOnly: false, isEditPromptOpen: false, selectedId: '' };
-  
+
   // Single click simulation
   const handleSingleClick = (id: string) => {
     componentState = { isViewOnly: true, isEditPromptOpen: false, selectedId: id };
@@ -1003,18 +1003,18 @@ async function runVerificationSuite() {
 
   const importResult = importItemsFromExcel(importBuffer, { defaultGst: 18, defaultTransport: 10 });
   console.log(`Import Result: Total Rows=${importResult.totalRows}, Imported=${importResult.importedCount}, Created Suppliers=${importResult.createdSuppliersCount}`);
-  
+
   if (importResult.importedCount !== 3) {
     throw new Error(`Expected 3 imported items, got ${importResult.importedCount}`);
   }
-  
+
   const sunDigital = db.getSuppliers().find(s => s.name.toUpperCase().includes('SUN DIGITAL'));
   const apexGraphics = db.getSuppliers().find(s => s.name.toUpperCase().includes('APEX GRAPHICS'));
-  
+
   if (!sunDigital || !apexGraphics) {
     throw new Error('Auto-supplier creation failed for imported materials');
   }
-  
+
   const canvasItem = db.getItems().find(i => i.name.toUpperCase().includes('CANVAS MATTE ROLL'));
   console.log('Found canvasItem:', canvasItem);
   if (!canvasItem || !canvasItem.unitA || canvasItem.unitA.basicPrice !== 1200) {
@@ -1040,7 +1040,7 @@ async function runVerificationSuite() {
       adjustments: true
     }
   });
-  
+
   // Inspect dataset sheets
   if (!exportDataset.items.length || !exportDataset.suppliers.length) {
     throw new Error('Export dataset missing core master tables');
@@ -1059,7 +1059,7 @@ async function runVerificationSuite() {
   const backupBuffer = XLSX.write(backupWb, { type: 'array', bookType: 'xlsx' });
   const preview = inspectExcelBackup(backupBuffer);
   console.log(`Excel Backup Inspection: Valid=${preview.isValidBackup}, Total Records=${preview.totalRecords}, Sheets=${preview.sheetNames.join(', ')}`);
-  
+
   if (!preview.isValidBackup || preview.itemsCount === 0 || preview.suppliersCount === 0) {
     throw new Error('Excel backup inspection failed');
   }
@@ -1145,7 +1145,7 @@ async function runVerificationSuite() {
   console.log('\nStep 55: Verifying assets/ITEM.xls Catalog Import & Excel Inspection/Restore...');
   if (fs.existsSync('assets/ITEM.xls')) {
     const itemXlsBuffer = fs.readFileSync('assets/ITEM.xls');
-    
+
     // 1. Inspect as backup / catalog
     const xlsPreview = inspectExcelBackup(itemXlsBuffer);
     console.log(`assets/ITEM.xls Inspection: Valid=${xlsPreview.isValidBackup}, Items Count=${xlsPreview.itemsCount}, Suppliers Count=${xlsPreview.suppliersCount}`);
@@ -1164,7 +1164,7 @@ async function runVerificationSuite() {
     const allDbItems = db.getItems();
     const allDbSuppliers = db.getSuppliers();
     console.log(`Total Items in DB after import: ${allDbItems.length}, Total Suppliers: ${allDbSuppliers.length}`);
-    
+
     const photoGoodItem = allDbItems.find(i => i.category === 'PHOTO GOOD');
     const ajayColorSupplier = allDbSuppliers.find(s => s.name === 'AJAY COLOR FILM');
     const konarkSupplier = allDbSuppliers.find(s => s.name === 'KONARK ENTERPRISES');
@@ -1251,7 +1251,7 @@ async function runVerificationSuite() {
 
   // 57. Party Master Dual Profit Margin (0% Default) & Sales Entry Dual-Margin Pricing (MRP vs Sale Price)
   console.log('\nStep 57: Verifying Party Master Dual 0% Default Margins and Sales Entry MRP/Sale Price calculations...');
-  
+
   // 1. Party with default 0% margin for both Amateur and Dealer
   const partyDefault: Party = {
     id: 'party-test-default',
@@ -1298,7 +1298,7 @@ async function runVerificationSuite() {
 
   // 58. Item Master 8-Column Dual Margin Pricing & Item-level margin ingestion in Sales
   console.log('\nStep 58: Verifying Item Master 8-Column Dual Margin Pricing (Basic, GST, Tran, Mis, Prof % Am, Prof % deal, Sale Price, MRP)...');
-  
+
   // Basic = 1000, GST = 18% (180), Tran = 10% (100), Mis = 2% (20) -> Landed Nett = 1300
   // Prof % Am = 25% (250) -> MRP = 1300 + 250 = 1550
   // Prof % Deal = 15% (150) -> Sale Price = 1300 + 150 = 1450
@@ -2288,8 +2288,83 @@ async function runVerificationSuite() {
   console.log('✓ Clean single OPENING_BALANCE log presented in Party Ledger and Supplier Ledger respectively');
   console.log('Step 68 PASS? true: Party & Supplier balance rollovers upon transaction deletion verified.');
 
+  // 69. Selective Excel Restore with Module Checkboxes
+  console.log('\nStep 69: Verifying Selective Excel Restore with Checkbox Filtering...');
+  const selectiveWb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(selectiveWb, XLSX.utils.json_to_sheet([
+    { id: 'item-sel-1', name: 'SELECTIVE ITEM', category: 'General', currentStock: 100 }
+  ]), 'ITEMS_MASTER');
+  XLSX.utils.book_append_sheet(selectiveWb, XLSX.utils.json_to_sheet([
+    { id: 'party-sel-1', name: 'SELECTIVE PARTY', phone: '9876543210', openingBalance: 1200 }
+  ]), 'PARTIES_MASTER');
+  XLSX.utils.book_append_sheet(selectiveWb, XLSX.utils.json_to_sheet([
+    { id: 'sup-sel-1', name: 'SELECTIVE SUPPLIER', phone: '9123456780', openingBalance: 3400 }
+  ]), 'SUPPLIERS_MASTER');
+  XLSX.utils.book_append_sheet(selectiveWb, XLSX.utils.json_to_sheet([
+    { id: 'sale-sel-1', invoiceNumber: 'INV-SEL-1', partyId: 'party-sel-1', partyName: 'SELECTIVE PARTY', grandTotal: 5000, date: '2025-05-10', items: '[]' }
+  ]), 'SALES');
+
+  const selectiveBuffer = XLSX.write(selectiveWb, { type: 'array', bookType: 'xlsx' });
+  const selPreview = inspectExcelBackup(selectiveBuffer);
+  console.log(`Selective inspection: totalRecords=${selPreview.totalRecords}, items=${selPreview.itemsCount}, parties=${selPreview.partiesCount}, suppliers=${selPreview.suppliersCount}, sales=${selPreview.salesCount}`);
+
+  // Test 1: Only restore PARTIES (uncheck everything else)
+  const partyOnlyRes = restoreDatabaseFromExcel(selectiveBuffer, {
+    items: false,
+    parties: true,
+    suppliers: false,
+    orders: false,
+    purchases: false,
+    sales: false,
+    selfUse: false,
+    physicalStockAudits: false,
+    customerPayments: false,
+    supplierPayments: false,
+    adjustments: false
+  });
+
+  console.log('Parties Only Restore Result:', partyOnlyRes.restoredCounts);
+  if (!partyOnlyRes.success || partyOnlyRes.restoredCounts.parties !== 1 || partyOnlyRes.restoredCounts.items > 0 || partyOnlyRes.restoredCounts.sales > 0) {
+    throw new Error(`Selective parties restore failed: ${JSON.stringify(partyOnlyRes)}`);
+  }
+
+  // Verify party is restored
+  const restoredParty = db.getPartyById('party-sel-1');
+  if (!restoredParty || restoredParty.name !== 'SELECTIVE PARTY') {
+    throw new Error('Expected party-sel-1 to be restored');
+  }
+  // Verify item was NOT restored
+  const notRestoredItem = db.getItemById('item-sel-1');
+  if (notRestoredItem) {
+    throw new Error('Unchecked item should NOT have been restored');
+  }
+
+  // Test 2: Restore MASTERS ONLY (items + suppliers + parties)
+  const mastersRes = restoreDatabaseFromExcel(selectiveBuffer, {
+    items: true,
+    parties: true,
+    suppliers: true,
+    orders: false,
+    purchases: false,
+    sales: false,
+    selfUse: false,
+    physicalStockAudits: false,
+    customerPayments: false,
+    supplierPayments: false,
+    adjustments: false
+  });
+
+  console.log('Masters Only Restore Result:', mastersRes.restoredCounts);
+  if (!mastersRes.success || mastersRes.restoredCounts.items !== 1 || mastersRes.restoredCounts.suppliers !== 1 || mastersRes.restoredCounts.sales > 0) {
+    throw new Error(`Masters only restore failed: ${JSON.stringify(mastersRes)}`);
+  }
+
+  console.log('✓ Selective restore strictly respects checkbox states and only updates chosen modules');
+  console.log('✓ Unchecked modules remain intact without unintended data overwrite or pollution');
+  console.log('Step 69 PASS? true: Selective Excel Restore with Checkbox Filtering verified.');
+
   console.log('\n====================================================');
-  console.log('ALL 68 INVENTORY & ACCOUNTING SUITE STEPS PASSED!');
+  console.log('ALL 69 INVENTORY & ACCOUNTING SUITE STEPS PASSED!');
   console.log('====================================================\n');
 }
 

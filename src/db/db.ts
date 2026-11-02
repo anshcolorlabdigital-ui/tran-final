@@ -206,7 +206,7 @@ class DatabaseService {
 
     // Clean up any existing listeners before establishing new ones
     this.unsubs.forEach(unsub => {
-      try { unsub(); } catch (e) {}
+      try { unsub(); } catch (e) { }
     });
     this.unsubs = [];
 
@@ -402,7 +402,7 @@ class DatabaseService {
       this.set(STORAGE_KEYS.STOCK_MOVEMENTS, INITIAL_STOCK_MOVEMENTS);
       this.set(STORAGE_KEYS.STOCK_ADJUSTMENTS, []);
       this.set(STORAGE_KEYS.PARTY_LOGS, []);
-      this.pushAllToCloudFirestore().catch(() => {});
+      this.pushAllToCloudFirestore().catch(() => { });
       this.notify();
     } else {
       // Ensure basic system settings/users default if missing
@@ -413,7 +413,7 @@ class DatabaseService {
         this.set(STORAGE_KEYS.USERS, INITIAL_USERS);
       }
       // Purge any lingering A2222 test artifacts asynchronously
-      this.purgeOrphanedTestItems().catch(() => {});
+      this.purgeOrphanedTestItems().catch(() => { });
     }
   }
 

@@ -34,7 +34,8 @@ import {
   loadBundledMaterialsCatalog,
   downloadSampleRestoreExcelTemplate,
   ExcelRestorePreview,
-  ExcelImportResult
+  ExcelImportResult,
+  ExcelRestoreSelection
 } from '../../utils/excelEngine';
 import * as XLSX from 'xlsx';
 
@@ -129,11 +130,40 @@ export const AdminSettingsView: React.FC = () => {
   });
 
   // --- EXCEL RESTORE STATE ---
+  interface ExcelRestoreModulesSelection {
+    items: boolean;
+    parties: boolean;
+    suppliers: boolean;
+    orders: boolean;
+    sales: boolean;
+    purchases: boolean;
+    selfUse: boolean;
+    adjustments: boolean;
+    physicalStockAudits: boolean;
+    customerPayments: boolean;
+    supplierPayments: boolean;
+  }
+
+  const defaultRestoreModules: ExcelRestoreModulesSelection = {
+    items: true,
+    parties: true,
+    suppliers: true,
+    orders: true,
+    sales: true,
+    purchases: true,
+    selfUse: true,
+    adjustments: true,
+    physicalStockAudits: true,
+    customerPayments: true,
+    supplierPayments: true
+  };
+
   const [restoreBuffer, setRestoreBuffer] = useState<ArrayBuffer | null>(null);
   const [restoreFileName, setRestoreFileName] = useState<string>('');
   const [restoreFileSize, setRestoreFileSize] = useState<string>('');
   const [restoreExcelPreview, setRestoreExcelPreview] = useState<ExcelRestorePreview | null>(null);
   const [restoreParseError, setRestoreParseError] = useState<string | null>(null);
+  const [restoreModules, setRestoreModules] = useState<ExcelRestoreModulesSelection>(defaultRestoreModules);
 
   // --- EXCEL IMPORT ITEMS STATE ---
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -507,6 +537,20 @@ export const AdminSettingsView: React.FC = () => {
         const preview = inspectExcelBackup(buffer);
         if (preview.isValidBackup) {
           setRestoreExcelPreview(preview);
+          // Enable checkboxes for all modules present in the uploaded workbook
+          setRestoreModules({
+            items: preview.itemsCount > 0,
+            parties: preview.partiesCount > 0,
+            suppliers: preview.suppliersCount > 0,
+            orders: preview.ordersCount > 0,
+            sales: preview.salesCount > 0,
+            purchases: preview.purchasesCount > 0,
+            selfUse: preview.selfUseCount > 0,
+            adjustments: preview.adjustmentsCount > 0,
+            physicalStockAudits: (preview.physicalStockAuditsCount || 0) > 0,
+            customerPayments: (preview.partyLogsCount || 0) > 0,
+            supplierPayments: (preview.supplierLogsCount || 0) > 0
+          });
           showToast(`Excel backup "${file.name}" loaded for inspection.`, 'info');
         } else {
           setRestoreExcelPreview(null);
@@ -519,22 +563,165 @@ export const AdminSettingsView: React.FC = () => {
     e.target.value = '';
   };
 
+  // Restore Module Presets
+  const setRestorePreset = (preset: 'ALL' | 'CLEAR' | 'MASTERS' | 'TRANSACTIONS') => {
+    if (preset === 'ALL') {
+      setRestoreModules({
+        items: true,
+        parties: true,
+        suppliers: true,
+        orders: true,
+        sales: true,
+        purchases: true,
+        selfUse: true,
+        adjustments: true,
+        physicalStockAudits: true,
+        customerPayments: true,
+        supplierPayments: true
+      });
+    } else if (preset === 'CLEAR') {
+      setRestoreModules({
+        items: false,
+        parties: false,
+        suppliers: false,
+        orders: false,
+        sales: false,
+        purchases: false,
+        selfUse: false,
+        adjustments: false,
+        physicalStockAudits: false,
+        customerPayments: false,
+        supplierPayments: false
+      });
+    } else if (preset === 'MASTERS') {
+      setRestoreModules({
+        items: true,
+        parties: true,
+        suppliers: true,
+        orders: false,
+        sales: false,
+        purchases: false,
+        selfUse: false,
+        adjustments: false,
+        physicalStockAudits: false,
+        customerPayments: false,
+        supplierPayments: false
+      });
+    } else if (preset === 'TRANSACTIONS') {
+      setRestoreModules({
+        items: false,
+        parties: false,
+        suppliers: false,
+        orders: true,
+        sales: true,
+        purchases: true,
+        selfUse: true,
+        adjustments: true,
+        physicalStockAudits: true,
+        customerPayments: true,
+        supplierPayments: true
+      });
+    }
+  };
+
+  // Selected Record Counts in Restore
+  const selectedRestoreRecordCount = useMemo(() => {
+    if (!restoreExcelPreview) return 0;
+    let count = 0;
+    if (restoreModules.items) count += restoreExcelPreview.itemsCount;
+    if (restoreModules.parties) count += restoreExcelPreview.partiesCount;
+    if (restoreModules.suppliers) count += restoreExcelPreview.suppliersCount;
+    if (restoreModules.orders) count += restoreExcelPreview.ordersCount;
+    if (restoreModules.sales) count += restoreExcelPreview.salesCount;
+    if (restoreModules.purchases) count += restoreExcelPreview.purchasesCount;
+    if (restoreModules.selfUse) count += restoreExcelPreview.selfUseCount;
+    if (restoreModules.adjustments) count += restoreExcelPreview.adjustmentsCount;
+    if (restoreModules.physicalStockAudits) count += (restoreExcelPreview.physicalStockAuditsCount || 0);
+    if (restoreModules.customerPayments) count += (restoreExcelPreview.partyLogsCount || 0);
+    if (restoreModules.supplierPayments) count += (restoreExcelPreview.supplierLogsCount || 0);
+    return count;
+  }, [restoreExcelPreview, restoreModules]);
+
+  const selectedRestoreModulesCount = useMemo(() => {
+    return Object.values(restoreModules).filter(Boolean).length;
+  }, [restoreModules]);
+
   const executeExcelRestore = () => {
     if (!restoreBuffer) {
       showToast('Please select an Excel backup workbook first', 'error');
       return;
     }
-    const res = restoreDatabaseFromExcel(restoreBuffer);
+    const hasAnySelected = Object.values(restoreModules).some(Boolean);
+    if (!hasAnySelected) {
+      showToast('Please select at least one module checkbox to restore', 'error');
+      return;
+    }
+
+    const res = restoreDatabaseFromExcel(restoreBuffer, restoreModules);
     setIsRestoreConfirmOpen(false);
     if (res.success) {
       const total = Object.values(res.restoredCounts).reduce((a, b) => a + b, 0);
-      showToast(`Database restored successfully from Excel workbook (${total} records restored)!`, 'success');
+      showToast(`Database restored successfully (${total} records across ${selectedRestoreModulesCount} module(s) restored & synced to Firestore)!`, 'success');
       setRestoreBuffer(null);
       setRestoreExcelPreview(null);
       setRestoreFileName('');
     } else {
       showToast(`Failed to restore: ${res.error}`, 'error');
     }
+  };
+
+  // Render Restore Module Checkbox Card
+  const renderRestoreModuleCard = (
+    key: keyof ExcelRestoreModulesSelection,
+    label: string,
+    badgeCount: number,
+    isMaster = false
+  ) => {
+    const checked = restoreModules[key];
+    const hasData = badgeCount > 0;
+    return (
+      <label
+        key={key}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '10px 14px',
+          borderRadius: '8px',
+          background: checked ? (isMaster ? '#FEF2F2' : '#EEF2FF') : (hasData ? '#FFFFFF' : '#FAFAFA'),
+          border: checked ? (isMaster ? '2px solid #DC2626' : '2px solid #6366F1') : '1.5px solid #E5E7EB',
+          cursor: 'pointer',
+          fontSize: '0.88rem',
+          fontWeight: 800,
+          color: checked ? (isMaster ? '#991B1B' : '#1E1B4B') : '#6B7280',
+          transition: 'all 0.15s ease',
+          opacity: hasData ? 1 : 0.65
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={e => setRestoreModules(prev => ({ ...prev, [key]: e.target.checked }))}
+            style={{ width: '17px', height: '17px', accentColor: isMaster ? '#DC2626' : '#6366F1', cursor: 'pointer' }}
+          />
+          <span>{label}</span>
+        </div>
+        <span
+          style={{
+            backgroundColor: hasData ? (checked ? (isMaster ? '#DC2626' : '#6366F1') : '#E0E7FF') : '#E5E7EB',
+            color: hasData ? (checked ? '#FFFFFF' : '#4338CA') : '#6B7280',
+            fontSize: '0.78rem',
+            fontWeight: 900,
+            padding: '2px 10px',
+            borderRadius: '9999px',
+            marginLeft: '6px'
+          }}
+        >
+          {badgeCount} records
+        </span>
+      </label>
+    );
   };
 
   // Bulk Item Import from Excel Tab Handlers
@@ -1090,71 +1277,213 @@ export const AdminSettingsView: React.FC = () => {
             </label>
           </div>
 
-          {/* File Inspection / Preview Details */}
+          {/* File Inspection / Selective Restore Selection */}
           {restoreExcelPreview && (
             <div
               style={{
-                background: '#F0FDF4',
-                border: '1.5px solid #86EFAC',
-                borderRadius: '10px',
-                padding: '18px',
-                marginBottom: '20px'
+                background: '#FFFFFF',
+                border: '2px solid #6366F1',
+                borderRadius: '12px',
+                padding: '20px',
+                marginBottom: '20px',
+                boxShadow: '0 4px 12px rgba(99,102,241,0.08)'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <CheckCircle2 size={20} color="#15803D" />
-                  <span style={{ fontWeight: 900, color: '#166534', fontSize: '1rem' }}>
-                    Excel Backup: {restoreFileName} ({restoreFileSize})
-                  </span>
-                </div>
-                <span style={{ fontSize: '0.78rem', background: '#DCFCE7', color: '#166534', padding: '3px 10px', borderRadius: '12px', fontWeight: 800 }}>
-                  Ready to Restore • {restoreExcelPreview.totalRecords} Total Records
-                </span>
-              </div>
-
-              {/* Table of records found in file */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '10px' }}>
-                {[
-                  { label: 'Items Master', val: restoreExcelPreview.itemsCount },
-                  { label: 'Parties', val: restoreExcelPreview.partiesCount },
-                  { label: 'Suppliers', val: restoreExcelPreview.suppliersCount },
-                  { label: 'Orders', val: restoreExcelPreview.ordersCount },
-                  { label: 'Sales Invoices', val: restoreExcelPreview.salesCount },
-                  { label: 'Purchases', val: restoreExcelPreview.purchasesCount },
-                  { label: 'Self Uses', val: restoreExcelPreview.selfUseCount },
-                  { label: 'Physical Audits', val: restoreExcelPreview.physicalStockAuditsCount || 0 },
-                  { label: 'Customer Payments', val: restoreExcelPreview.partyLogsCount || 0 },
-                  { label: 'Supplier Payments', val: restoreExcelPreview.supplierLogsCount || 0 }
-                ].map(stat => (
-                  <div key={stat.label} style={{ background: '#FFFFFF', padding: '8px 12px', borderRadius: '6px', border: '1px solid #BBF7D0' }}>
-                    <div style={{ fontSize: '0.75rem', color: '#4B5563', fontWeight: 700 }}>{stat.label}</div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#166534' }}>{stat.val} records</div>
+              {/* Header Info & File Controls */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingBottom: '14px',
+                  borderBottom: '1.5px solid #EEF2FF',
+                  marginBottom: '16px',
+                  flexWrap: 'wrap',
+                  gap: '10px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <CheckCircle2 size={22} color="#16A34A" />
+                  <div>
+                    <div style={{ fontWeight: 900, color: '#1E1B4B', fontSize: '1.02rem' }}>
+                      {restoreFileName} <span style={{ fontWeight: 600, color: '#6B7280', fontSize: '0.82rem' }}>({restoreFileSize})</span>
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: '#16A34A', fontWeight: 800 }}>
+                      ✓ Valid Multi-Sheet Excel Backup • {restoreExcelPreview.totalRecords} total records found in file
+                    </div>
                   </div>
-                ))}
-              </div>
+                </div>
 
-              <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                 <button
                   type="button"
+                  onClick={() => {
+                    setRestoreBuffer(null);
+                    setRestoreExcelPreview(null);
+                    setRestoreFileName('');
+                  }}
+                  style={{
+                    background: '#FEF2F2',
+                    border: '1px solid #FCA5A5',
+                    color: '#991B1B',
+                    borderRadius: 'var(--radius-pill)',
+                    padding: '4px 14px',
+                    fontSize: '0.78rem',
+                    fontWeight: 800,
+                    cursor: 'pointer'
+                  }}
+                >
+                  ✕ Choose Different File
+                </button>
+              </div>
+
+              {/* Instructions and Presets Bar */}
+              <div
+                style={{
+                  background: '#F8FAFC',
+                  border: '1.5px solid #E2E8F0',
+                  borderRadius: '10px',
+                  padding: '12px 16px',
+                  marginBottom: '18px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '10px'
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 900, color: '#0F172A', fontSize: '0.9rem' }}>
+                    Select Data Modules to Restore:
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: '#64748B' }}>
+                    Check or uncheck the specific categories you wish to import from this workbook.
+                  </div>
+                </div>
+
+                {/* Quick Presets */}
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => setRestorePreset('ALL')}
+                    style={{ background: '#FFFFFF', border: '1.5px solid #6366F1', color: '#4F46E5', borderRadius: '12px', padding: '4px 12px', fontSize: '0.78rem', fontWeight: 800, cursor: 'pointer' }}
+                  >
+                    Select All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRestorePreset('MASTERS')}
+                    style={{ background: '#FFFFFF', border: '1px solid #CBD5E1', color: '#334155', borderRadius: '12px', padding: '4px 12px', fontSize: '0.78rem', fontWeight: 800, cursor: 'pointer' }}
+                  >
+                    Masters Only
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRestorePreset('TRANSACTIONS')}
+                    style={{ background: '#FFFFFF', border: '1px solid #CBD5E1', color: '#334155', borderRadius: '12px', padding: '4px 12px', fontSize: '0.78rem', fontWeight: 800, cursor: 'pointer' }}
+                  >
+                    Transactions Only
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRestorePreset('CLEAR')}
+                    style={{ background: '#FFFFFF', border: '1px solid #FCA5A5', color: '#DC2626', borderRadius: '12px', padding: '4px 12px', fontSize: '0.78rem', fontWeight: 800, cursor: 'pointer' }}
+                  >
+                    Deselect All
+                  </button>
+                </div>
+              </div>
+
+              {/* Grouped Modules Checkboxes */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '20px' }}>
+                {/* 1. MASTERS */}
+                <div>
+                  <div className="pill-header-lime" style={{ fontSize: '0.85rem', padding: '3px 14px', display: 'inline-block', marginBottom: '8px' }}>
+                    MASTERS
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px' }}>
+                    {renderRestoreModuleCard('items', 'ITEM MASTER', restoreExcelPreview.itemsCount, true)}
+                    {renderRestoreModuleCard('parties', 'PARTIES (CUSTOMERS)', restoreExcelPreview.partiesCount, true)}
+                    {renderRestoreModuleCard('suppliers', 'SUPPLIERS (VENDORS)', restoreExcelPreview.suppliersCount, true)}
+                  </div>
+                </div>
+
+                {/* 2. OPERATIONS / TRANSACTIONS */}
+                <div>
+                  <div className="pill-header-lime" style={{ fontSize: '0.85rem', padding: '3px 14px', display: 'inline-block', marginBottom: '8px' }}>
+                    OPERATIONS & TRANSACTIONS
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px' }}>
+                    {renderRestoreModuleCard('orders', 'ORDERS', restoreExcelPreview.ordersCount)}
+                    {renderRestoreModuleCard('purchases', 'PURCHASES', restoreExcelPreview.purchasesCount)}
+                    {renderRestoreModuleCard('sales', 'SALES INVOICES', restoreExcelPreview.salesCount)}
+                    {renderRestoreModuleCard('selfUse', 'SELF USE', restoreExcelPreview.selfUseCount)}
+                  </div>
+                </div>
+
+                {/* 3. LOGS, PAYMENTS & AUDITS */}
+                <div>
+                  <div className="pill-header-lime" style={{ fontSize: '0.85rem', padding: '3px 14px', display: 'inline-block', marginBottom: '8px' }}>
+                    PAYMENTS, AUDITS & ADJUSTMENTS
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px' }}>
+                    {renderRestoreModuleCard('physicalStockAudits', 'PHYSICAL AUDITS', restoreExcelPreview.physicalStockAuditsCount || 0)}
+                    {renderRestoreModuleCard('customerPayments', 'CUSTOMER PAYMENTS', restoreExcelPreview.partyLogsCount || 0)}
+                    {renderRestoreModuleCard('supplierPayments', 'SUPPLIER PAYMENTS', restoreExcelPreview.supplierLogsCount || 0)}
+                    {renderRestoreModuleCard('adjustments', 'STOCK ADJUSTMENTS', restoreExcelPreview.adjustmentsCount || 0)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons & Summary */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  borderTop: '1.5px dashed #E2E8F0',
+                  paddingTop: '16px',
+                  flexWrap: 'wrap',
+                  gap: '12px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span
+                    style={{
+                      background: selectedRestoreRecordCount > 0 ? '#DCFCE7' : '#FEE2E2',
+                      color: selectedRestoreRecordCount > 0 ? '#166534' : '#991B1B',
+                      padding: '5px 14px',
+                      borderRadius: '20px',
+                      fontWeight: 900,
+                      fontSize: '0.86rem'
+                    }}
+                  >
+                    {selectedRestoreRecordCount > 0
+                      ? `✓ ${selectedRestoreRecordCount} Records Selected across ${selectedRestoreModulesCount} Modules`
+                      : '⚠ No modules selected (Please check at least one box)'}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={selectedRestoreRecordCount === 0}
                   onClick={() => setIsRestoreConfirmOpen(true)}
                   style={{
-                    backgroundColor: '#6366F1',
+                    backgroundColor: selectedRestoreRecordCount > 0 ? '#6366F1' : '#D1D5DB',
                     color: '#FFFFFF',
                     border: 'none',
                     borderRadius: 'var(--radius-pill)',
                     padding: '10px 28px',
                     fontWeight: 900,
                     fontSize: '0.95rem',
-                    cursor: 'pointer',
+                    cursor: selectedRestoreRecordCount > 0 ? 'pointer' : 'not-allowed',
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '8px',
-                    boxShadow: '0 2px 6px rgba(99,102,241,0.3)'
+                    boxShadow: selectedRestoreRecordCount > 0 ? '0 2px 8px rgba(99,102,241,0.35)' : 'none'
                   }}
                 >
                   <Upload size={18} />
-                  Restore Database from Excel Workbook
+                  <span>Restore Selected Data ({selectedRestoreRecordCount} Records)</span>
                 </button>
               </div>
             </div>
@@ -2089,7 +2418,7 @@ service cloud.firestore {
         onClose={() => setIsRestoreConfirmOpen(false)}
         onConfirm={executeExcelRestore}
         title="Confirm Database Restore from Excel"
-        message={`Are you sure you want to restore the database from this Excel backup workbook (${restoreExcelPreview?.totalRecords || 0} records)? Existing records will be updated with the archive contents.`}
+        message={`Are you sure you want to restore the selected ${selectedRestoreModulesCount} module(s) (${selectedRestoreRecordCount} record(s)) from this Excel backup workbook? Existing records for selected modules will be updated with the archive contents.`}
       />
 
       {/* Confirmation Dialog: Delete Selected Data */}
