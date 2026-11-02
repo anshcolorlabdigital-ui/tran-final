@@ -77,20 +77,42 @@ export const ItemStockReportView: React.FC = () => {
     let totalPurchaseVal = 0;
     let totalSaleQty = 0;
     let totalSaleVal = 0;
+    let totalSaleCost = 0;
+    let totalProfit = 0;
     let totalSelfUseQty = 0;
     let totalSelfUseVal = 0;
     let totalClosingQty = 0;
     let totalValuation = 0;
 
     filteredSummaries.forEach(s => {
-      const rate = Number(s.item.unitA?.basicPrice ?? s.item.purchaseRate ?? 0);
-      const saleRate = Number(s.item.unitA?.salePrice ?? s.item.saleRate ?? rate);
+      const baseRate = Number(s.item.unitA?.basicPrice ?? s.item.purchaseRate ?? 0);
+      const gstPct = Number(s.item.unitA?.gstPercent ?? s.item.gstPercent ?? 0);
+      const tranPct = Number(s.item.unitA?.tranPercent ?? 0);
+      const misPct = Number(s.item.unitA?.misPercent ?? 0);
+      const gstAmt = Number((baseRate * (gstPct / 100)).toFixed(2));
+      const tranAmt = Number((baseRate * (tranPct / 100)).toFixed(2));
+      const misAmt = Number((baseRate * (misPct / 100)).toFixed(2));
+      const landedCostRate = Number(
+        s.item.unitA?.nettPrice && s.item.unitA.nettPrice > 0
+          ? s.item.unitA.nettPrice
+          : (baseRate + gstAmt + tranAmt + misAmt).toFixed(2)
+      );
 
-      const opVal = s.openingStock * rate;
-      const purVal = s.purchaseQty * rate;
+      const saleRate = Number(
+        s.item.unitA?.salePrice && s.item.unitA.salePrice > 0
+          ? s.item.unitA.salePrice
+          : s.item.saleRate && s.item.saleRate > 0
+          ? s.item.saleRate
+          : (landedCostRate > 0 ? (landedCostRate * 1.25) : baseRate)
+      );
+
+      const opVal = s.openingStock * baseRate;
+      const purVal = s.purchaseQty * baseRate;
       const salVal = s.saleQty * saleRate;
-      const suVal = s.selfUseQty * rate;
-      const stockVal = Math.max(0, s.closingStock) * rate;
+      const saleCostVal = s.saleQty * landedCostRate; // (base price + trans + gst + misc) * qty
+      const profitVal = salVal - saleCostVal;
+      const suVal = s.selfUseQty * baseRate;
+      const stockVal = Math.max(0, s.closingStock) * baseRate;
 
       totalOpeningQty += s.openingStock;
       totalOpeningVal += opVal;
@@ -98,6 +120,8 @@ export const ItemStockReportView: React.FC = () => {
       totalPurchaseVal += purVal;
       totalSaleQty += s.saleQty;
       totalSaleVal += salVal;
+      totalSaleCost += saleCostVal;
+      totalProfit += profitVal;
       totalSelfUseQty += s.selfUseQty;
       totalSelfUseVal += suVal;
       totalClosingQty += s.closingStock;
@@ -112,6 +136,8 @@ export const ItemStockReportView: React.FC = () => {
       totalPurchaseVal: Number(totalPurchaseVal.toFixed(2)),
       totalSaleQty: Number(totalSaleQty.toFixed(2)),
       totalSaleVal: Number(totalSaleVal.toFixed(2)),
+      totalSaleCost: Number(totalSaleCost.toFixed(2)),
+      totalProfit: Number(totalProfit.toFixed(2)),
       totalSelfUseQty: Number(totalSelfUseQty.toFixed(2)),
       totalSelfUseVal: Number(totalSelfUseVal.toFixed(2)),
       totalClosingQty: Number(totalClosingQty.toFixed(2)),
@@ -126,13 +152,34 @@ export const ItemStockReportView: React.FC = () => {
 
   const handleExportExcel = () => {
     const data = filteredSummaries.map((s, idx) => {
-      const rate = Number(s.item.unitA?.basicPrice ?? s.item.purchaseRate ?? 0);
-      const saleRate = Number(s.item.unitA?.salePrice ?? s.item.saleRate ?? rate);
-      const opVal = Number((s.openingStock * rate).toFixed(2));
-      const purVal = Number((s.purchaseQty * rate).toFixed(2));
+      const baseRate = Number(s.item.unitA?.basicPrice ?? s.item.purchaseRate ?? 0);
+      const gstPct = Number(s.item.unitA?.gstPercent ?? s.item.gstPercent ?? 0);
+      const tranPct = Number(s.item.unitA?.tranPercent ?? 0);
+      const misPct = Number(s.item.unitA?.misPercent ?? 0);
+      const gstAmt = Number((baseRate * (gstPct / 100)).toFixed(2));
+      const tranAmt = Number((baseRate * (tranPct / 100)).toFixed(2));
+      const misAmt = Number((baseRate * (misPct / 100)).toFixed(2));
+      const landedCostRate = Number(
+        s.item.unitA?.nettPrice && s.item.unitA.nettPrice > 0
+          ? s.item.unitA.nettPrice
+          : (baseRate + gstAmt + tranAmt + misAmt).toFixed(2)
+      );
+
+      const saleRate = Number(
+        s.item.unitA?.salePrice && s.item.unitA.salePrice > 0
+          ? s.item.unitA.salePrice
+          : s.item.saleRate && s.item.saleRate > 0
+          ? s.item.saleRate
+          : (landedCostRate > 0 ? (landedCostRate * 1.25) : baseRate)
+      );
+
+      const opVal = Number((s.openingStock * baseRate).toFixed(2));
+      const purVal = Number((s.purchaseQty * baseRate).toFixed(2));
       const salVal = Number((s.saleQty * saleRate).toFixed(2));
-      const suVal = Number((s.selfUseQty * rate).toFixed(2));
-      const stockVal = Number((Math.max(0, s.closingStock) * rate).toFixed(2));
+      const saleCostVal = Number((s.saleQty * landedCostRate).toFixed(2));
+      const profitVal = Number((salVal - saleCostVal).toFixed(2));
+      const suVal = Number((s.selfUseQty * baseRate).toFixed(2));
+      const stockVal = Number((Math.max(0, s.closingStock) * baseRate).toFixed(2));
 
       return {
         'S.No.': idx + 1,
@@ -140,13 +187,16 @@ export const ItemStockReportView: React.FC = () => {
         'Item Name': s.item.name,
         'Category': s.item.category || '',
         'Unit': s.item.unitA?.unitName || s.item.unit || 'Pcs',
-        'Unit Purchase Rate (₹)': rate,
+        'Unit Purchase Rate (₹)': baseRate,
+        'Unit Landed Cost (₹)': landedCostRate,
         'Opening Qty': Number(s.openingStock.toFixed(2)),
         'Opening Value (₹)': opVal,
         'Purchases Qty (+)': Number(s.purchaseQty.toFixed(2)),
         'Purchases Value (₹)': purVal,
         'Sales Qty (-)': Number(s.saleQty.toFixed(2)),
         'Sales Value (₹)': salVal,
+        'Sales Purchase Cost (Base+GST+Tran+Misc) (₹)': saleCostVal,
+        'Sales Profit (₹)': profitVal,
         'Self Use Qty (-)': Number(s.selfUseQty.toFixed(2)),
         'Self Use Value (₹)': suVal,
         'On-Hand Stock Qty': Number(s.closingStock.toFixed(2)),
@@ -162,12 +212,15 @@ export const ItemStockReportView: React.FC = () => {
       'Category': '',
       'Unit': '',
       'Unit Purchase Rate (₹)': '' as any,
+      'Unit Landed Cost (₹)': '' as any,
       'Opening Qty': totals.totalOpeningQty,
       'Opening Value (₹)': totals.totalOpeningVal,
       'Purchases Qty (+)': totals.totalPurchaseQty,
       'Purchases Value (₹)': totals.totalPurchaseVal,
       'Sales Qty (-)': totals.totalSaleQty,
       'Sales Value (₹)': totals.totalSaleVal,
+      'Sales Purchase Cost (Base+GST+Tran+Misc) (₹)': totals.totalSaleCost,
+      'Sales Profit (₹)': totals.totalProfit,
       'Self Use Qty (-)': totals.totalSelfUseQty,
       'Self Use Value (₹)': totals.totalSelfUseVal,
       'On-Hand Stock Qty': totals.totalClosingQty,
@@ -184,12 +237,15 @@ export const ItemStockReportView: React.FC = () => {
       { wch: 18 }, // Category
       { wch: 10 }, // Unit
       { wch: 18 }, // Rate
+      { wch: 18 }, // Landed Cost
       { wch: 14 }, // Opening Qty
       { wch: 18 }, // Opening Value
       { wch: 16 }, // Purchases Qty
       { wch: 18 }, // Purchases Value
       { wch: 14 }, // Sales Qty
       { wch: 18 }, // Sales Value
+      { wch: 22 }, // Sales Purchase Cost
+      { wch: 20 }, // Sales Profit
       { wch: 16 }, // Self Use Qty
       { wch: 18 }, // Self Use Value
       { wch: 18 }, // Stock Qty
@@ -347,7 +403,17 @@ export const ItemStockReportView: React.FC = () => {
             -₹{totals.totalSaleVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#EA3943', marginTop: '2px' }}>
-            Total Qty: -{totals.totalSaleQty}
+            Total Qty: -{totals.totalSaleQty} • Cost: ₹{totals.totalSaleCost.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+        </div>
+
+        <div style={{ background: '#F0FDF4', border: '1.5px solid #16A34A', borderRadius: '8px', padding: '12px 14px' }}>
+          <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#166534' }}>SALES PROFIT</div>
+          <div style={{ fontSize: '1.2rem', fontWeight: 900, color: totals.totalProfit >= 0 ? '#15803D' : '#DC2626' }}>
+            {totals.totalProfit >= 0 ? '+' : ''}₹{totals.totalProfit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#166534', marginTop: '2px' }}>
+            Sales ₹{totals.totalSaleVal.toLocaleString('en-IN')} - Cost ₹{totals.totalSaleCost.toLocaleString('en-IN')}
           </div>
         </div>
 
@@ -379,10 +445,11 @@ export const ItemStockReportView: React.FC = () => {
             <thead>
               <tr>
                 <th style={{ minWidth: '200px' }}>Item Description</th>
-                <th style={{ textAlign: 'right', width: '100px' }}>Rate (₹)</th>
+                <th style={{ textAlign: 'right', width: '110px' }}>Rate (₹)</th>
                 <th style={{ textAlign: 'right', minWidth: '130px' }}>1. Opening Value</th>
                 <th style={{ textAlign: 'right', minWidth: '130px', color: '#15803D' }}>2. Purchases (+)</th>
-                <th style={{ textAlign: 'right', minWidth: '130px', color: '#EA3943' }}>3. Sales (-)</th>
+                <th style={{ textAlign: 'right', minWidth: '140px', color: '#EA3943' }}>3. Sales (-)</th>
+                <th style={{ textAlign: 'right', minWidth: '130px', color: '#16A34A' }}>Profit (₹)</th>
                 <th style={{ textAlign: 'right', minWidth: '130px', color: '#B45309' }}>4. Self Use (-)</th>
                 <th style={{ textAlign: 'right', minWidth: '150px', color: '#047857' }}>Total Stock Valuation (₹)</th>
                 <th style={{ textAlign: 'center', width: '80px' }}>Action</th>
@@ -391,19 +458,40 @@ export const ItemStockReportView: React.FC = () => {
             <tbody>
               {filteredSummaries.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: '#6B7280', fontWeight: 700 }}>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: '32px', color: '#6B7280', fontWeight: 700 }}>
                     No stock summary items found matching the selected filters.
                   </td>
                 </tr>
               ) : (
                 filteredSummaries.map(s => {
-                  const rate = Number(s.item.unitA?.basicPrice ?? s.item.purchaseRate ?? 0);
-                  const saleRate = Number(s.item.unitA?.salePrice ?? s.item.saleRate ?? rate);
-                  const opVal = Number((s.openingStock * rate).toFixed(2));
-                  const purVal = Number((s.purchaseQty * rate).toFixed(2));
+                  const baseRate = Number(s.item.unitA?.basicPrice ?? s.item.purchaseRate ?? 0);
+                  const gstPct = Number(s.item.unitA?.gstPercent ?? s.item.gstPercent ?? 0);
+                  const tranPct = Number(s.item.unitA?.tranPercent ?? 0);
+                  const misPct = Number(s.item.unitA?.misPercent ?? 0);
+                  const gstAmt = Number((baseRate * (gstPct / 100)).toFixed(2));
+                  const tranAmt = Number((baseRate * (tranPct / 100)).toFixed(2));
+                  const misAmt = Number((baseRate * (misPct / 100)).toFixed(2));
+                  const landedCostRate = Number(
+                    s.item.unitA?.nettPrice && s.item.unitA.nettPrice > 0
+                      ? s.item.unitA.nettPrice
+                      : (baseRate + gstAmt + tranAmt + misAmt).toFixed(2)
+                  );
+
+                  const saleRate = Number(
+                    s.item.unitA?.salePrice && s.item.unitA.salePrice > 0
+                      ? s.item.unitA.salePrice
+                      : s.item.saleRate && s.item.saleRate > 0
+                      ? s.item.saleRate
+                      : (landedCostRate > 0 ? (landedCostRate * 1.25) : baseRate)
+                  );
+
+                  const opVal = Number((s.openingStock * baseRate).toFixed(2));
+                  const purVal = Number((s.purchaseQty * baseRate).toFixed(2));
                   const salVal = Number((s.saleQty * saleRate).toFixed(2));
-                  const suVal = Number((s.selfUseQty * rate).toFixed(2));
-                  const itemValuation = Number((Math.max(0, s.closingStock) * rate).toFixed(2));
+                  const salePurchaseCost = Number((s.saleQty * landedCostRate).toFixed(2)); // (base price + trans + gst + misc) * qty
+                  const profitVal = Number((salVal - salePurchaseCost).toFixed(2));
+                  const suVal = Number((s.selfUseQty * baseRate).toFixed(2));
+                  const itemValuation = Number((Math.max(0, s.closingStock) * baseRate).toFixed(2));
                   const isZero = s.closingStock <= 0;
                   const isLow = s.item.minStock && s.closingStock > 0 && s.closingStock <= s.item.minStock;
 
@@ -454,7 +542,12 @@ export const ItemStockReportView: React.FC = () => {
 
                       {/* Rate */}
                       <td style={{ textAlign: 'right', fontWeight: 700, fontSize: '0.88rem', color: '#374151' }}>
-                        ₹{rate.toFixed(2)}
+                        <div>₹{baseRate.toFixed(2)}</div>
+                        {landedCostRate !== baseRate && (
+                          <div style={{ fontSize: '0.70rem', color: '#6B7280', fontWeight: 600 }} title="Landed Cost (Base + GST + Transport + Misc)">
+                            Landed: ₹{landedCostRate.toFixed(2)}
+                          </div>
+                        )}
                       </td>
 
                       {/* 1. Opening Value */}
@@ -473,6 +566,23 @@ export const ItemStockReportView: React.FC = () => {
                       <td style={{ textAlign: 'right', fontWeight: 700, fontSize: '0.9rem', color: '#EA3943' }}>
                         <div>-₹{salVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                         <div style={{ fontSize: '0.72rem', color: '#991B1B', fontWeight: 600 }}>Qty: -{Number(s.saleQty.toFixed(2))}</div>
+                        <div style={{ fontSize: '0.68rem', color: '#6B7280', fontWeight: 600 }} title="Purchase Cost of Sold Items: (Base + GST + Tran + Misc) × Qty">
+                          Cost: ₹{salePurchaseCost.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      </td>
+
+                      {/* Profit Column (Right to Sales) */}
+                      <td style={{ textAlign: 'right', fontWeight: 900, fontSize: '0.92rem', color: profitVal >= 0 ? '#15803D' : '#DC2626' }}>
+                        <div>{profitVal >= 0 ? '+' : ''}₹{profitVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                        <div style={{ fontSize: '0.70rem', color: '#4B5563', fontWeight: 600 }}>
+                          {s.saleQty > 0 ? (
+                            <span title={`Sales ₹${salVal} - Purchase Cost ₹${salePurchaseCost}`}>
+                              {profitVal >= 0 ? 'Profit' : 'Loss'} ({((profitVal / (salVal || 1)) * 100).toFixed(0)}%)
+                            </span>
+                          ) : (
+                            <span style={{ color: '#9CA3AF' }}>-</span>
+                          )}
+                        </div>
                       </td>
 
                       {/* 4. Self Use Value (-) */}
@@ -532,6 +642,11 @@ export const ItemStockReportView: React.FC = () => {
                 <td style={{ textAlign: 'right', fontWeight: 900, color: '#EA3943' }}>
                   <div>-₹{totals.totalSaleVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                   <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#991B1B' }}>Qty: -{totals.totalSaleQty}</div>
+                  <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#6B7280' }}>Cost: ₹{totals.totalSaleCost.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                </td>
+                <td style={{ textAlign: 'right', fontWeight: 900, color: totals.totalProfit >= 0 ? '#15803D' : '#DC2626' }}>
+                  <div>{totals.totalProfit >= 0 ? '+' : ''}₹{totals.totalProfit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  <div style={{ fontSize: '0.70rem', fontWeight: 700, color: '#4B5563' }}>Sales Profit</div>
                 </td>
                 <td style={{ textAlign: 'right', fontWeight: 900, color: '#B45309' }}>
                   <div>-₹{totals.totalSelfUseVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
