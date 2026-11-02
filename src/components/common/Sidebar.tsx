@@ -153,7 +153,7 @@ export const Sidebar: React.FC = () => {
             {canViewPurchase && navItem('PURCHASE', 'PURCHASE')}
             {canViewSale && navItem('SALE', 'SALE')}
             {canViewSelfUse && navItem('SELF_USE', 'SELF USE')}
-            {canCollectPayment && navItem('COLLECT_PAYMENT', 'COLLECT PAYMENT')}
+            {canCollectPayment && navItem('COLLECT_PAYMENT', 'MONEY RECEIVE')}
             {canPaySupplier && navItem('PAY_SUPPLIER', 'PAY SUPPLIER')}
             {canPhysicalStock && navItem('PHYSICAL_STOCK', 'PHYSICAL STOCK')}
           </div>

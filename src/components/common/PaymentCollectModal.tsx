@@ -124,7 +124,7 @@ export const PaymentCollectModal: React.FC<PaymentCollectModalProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <CreditCard size={20} color="#002B99" />
             <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.2rem', color: '#002B99' }}>
-              COLLECT PAYMENT RECEIPT
+              MONEY RECEIVE RECEIPT
             </h3>
           </div>
           <button

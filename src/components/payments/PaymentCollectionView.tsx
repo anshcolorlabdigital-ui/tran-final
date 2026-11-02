@@ -365,7 +365,7 @@ export const PaymentCollectionView: React.FC = () => {
                 <PlusCircle size={20} />
               </div>
               <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.2rem', color: '#0F172A' }}>
-                Collect Payment Receipt
+                Money Receive Receipt
               </h3>
             </div>
             {activeParty && (
@@ -456,7 +456,7 @@ export const PaymentCollectionView: React.FC = () => {
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                 <label style={{ fontWeight: 800, fontSize: '0.85rem', color: '#1E293B' }}>
-                  Payment Amount Collected (₹) *
+                  Money Received Amount (₹) *
                 </label>
                 {activePartyBalance.outstandingBalance > 0 && (
                   <button

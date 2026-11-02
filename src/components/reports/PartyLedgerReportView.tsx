@@ -298,7 +298,7 @@ export const PartyLedgerReportView: React.FC = () => {
               }}
             >
               <PlusCircle size={17} />
-              <span>Collect Payment</span>
+              <span>Money Receive</span>
             </button>
 
             <button

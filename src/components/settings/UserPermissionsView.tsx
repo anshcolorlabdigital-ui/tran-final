@@ -62,7 +62,7 @@ const PERMISSION_GROUPS: PermissionGroup[] = [
   {
     groupName: 'Payments & Ledgers',
     permissions: [
-      { id: 'COLLECT_PAYMENT', label: 'Collect Customer Payments (Party Ledger)' },
+      { id: 'COLLECT_PAYMENT', label: 'Money Receive / Customer Payments (Party Ledger)' },
       { id: 'PAY_SUPPLIER', label: 'Pay Suppliers (Supplier Ledger)' }
     ]
   },
