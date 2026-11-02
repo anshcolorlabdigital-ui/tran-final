@@ -4,11 +4,10 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Item, Supplier } from '../../types';
 import { StockEngine } from '../../db/stockEngine';
-import { Search, FileSpreadsheet, Zap, RefreshCw } from 'lucide-react';
+import { Search, FileSpreadsheet } from 'lucide-react';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { ExcelImportModal } from '../common/ExcelImportModal';
 import { calculateItemUnitBreakdown } from '../../utils/calculations';
-import { loadBundledMaterialsCatalog } from '../../utils/excelEngine';
 
 export const ItemMasterView: React.FC = () => {
   const { refreshKey, showToast, showAlert, openItemLedger } = useApp();
@@ -78,19 +77,6 @@ export const ItemMasterView: React.FC = () => {
   const [isViewOnly, setIsViewOnly] = useState(false);
   const [isEditPromptOpen, setIsEditPromptOpen] = useState(false);
   const [isExcelImportOpen, setIsExcelImportOpen] = useState(false);
-  const [isImportingBundled, setIsImportingBundled] = useState(false);
-
-  const handleQuickLoadBundled = async () => {
-    setIsImportingBundled(true);
-    try {
-      const res = await loadBundledMaterialsCatalog();
-      showToast(`Successfully loaded ${res.importedCount} materials and ${res.createdSuppliersCount} suppliers from ITEM.xls!`, 'success');
-    } catch (err: any) {
-      showAlert(`Failed to load materials: ${err.message}`, 'Load Error', 'error');
-    } finally {
-      setIsImportingBundled(false);
-    }
-  };
 
   // Live Unit A Calculation
   const unitABreakdown = useMemo(() => {
@@ -504,30 +490,6 @@ export const ItemMasterView: React.FC = () => {
             <span style={{ color: '#D1D5DB' }}>|</span>
             <span><b>Alt+P:</b> Print</span>
           </div>
-
-          {/* 1-Click Load 569 Materials Button */}
-          <button
-            type="button"
-            onClick={handleQuickLoadBundled}
-            disabled={isImportingBundled}
-            style={{
-              background: '#059669',
-              color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '20px',
-              padding: '6px 16px',
-              fontWeight: 800,
-              fontSize: '0.85rem',
-              cursor: isImportingBundled ? 'not-allowed' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              boxShadow: '0 2px 4px rgba(5,150,105,0.3)'
-            }}
-          >
-            {isImportingBundled ? <RefreshCw size={14} className="spin" /> : <Zap size={14} />}
-            ⚡ 1-Click Load 569 Materials
-          </button>
 
           {/* Bulk Excel Import Button */}
           <button

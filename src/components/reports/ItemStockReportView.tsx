@@ -42,31 +42,33 @@ export const ItemStockReportView: React.FC = () => {
     return { inStock, lowStock, zeroStock, total: stockSummaries.length };
   }, [stockSummaries]);
 
-  // Filtered summaries
+  // Filtered summaries (sorted by closing stock descending - highest stock first)
   const filteredSummaries = useMemo(() => {
     const q = search.toLowerCase().trim();
-    return stockSummaries.filter(s => {
-      // Stock Status filter
-      if (stockStatusFilter === 'IN_STOCK' && s.closingStock <= 0) return false;
-      if (stockStatusFilter === 'ZERO_STOCK' && s.closingStock !== 0) return false;
-      if (stockStatusFilter === 'LOW_STOCK' && (s.closingStock <= 0 || s.closingStock > (s.item.minStock || 0))) return false;
+    return stockSummaries
+      .filter(s => {
+        // Stock Status filter
+        if (stockStatusFilter === 'IN_STOCK' && s.closingStock <= 0) return false;
+        if (stockStatusFilter === 'ZERO_STOCK' && s.closingStock !== 0) return false;
+        if (stockStatusFilter === 'LOW_STOCK' && (s.closingStock <= 0 || s.closingStock > (s.item.minStock || 0))) return false;
 
-      // Category filter
-      if (selectedCategory !== 'ALL' && s.item.category?.toLowerCase() !== selectedCategory.toLowerCase()) {
-        return false;
-      }
+        // Category filter
+        if (selectedCategory !== 'ALL' && s.item.category?.toLowerCase() !== selectedCategory.toLowerCase()) {
+          return false;
+        }
 
-      // Search query
-      if (q) {
-        return (
-          s.item.name.toLowerCase().includes(q) ||
-          (s.item.sno && s.item.sno.toLowerCase().includes(q)) ||
-          (s.item.category && s.item.category.toLowerCase().includes(q))
-        );
-      }
+        // Search query
+        if (q) {
+          return (
+            s.item.name.toLowerCase().includes(q) ||
+            (s.item.sno && s.item.sno.toLowerCase().includes(q)) ||
+            (s.item.category && s.item.category.toLowerCase().includes(q))
+          );
+        }
 
-      return true;
-    });
+        return true;
+      })
+      .sort((a, b) => (Number(b.closingStock) || 0) - (Number(a.closingStock) || 0));
   }, [stockSummaries, search, selectedCategory, stockStatusFilter]);
 
   // Aggregated totals for actual monetary values + quantities

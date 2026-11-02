@@ -31,7 +31,6 @@ import {
   inspectExcelBackup,
   restoreDatabaseFromExcel,
   importItemsFromExcel,
-  loadBundledMaterialsCatalog,
   downloadSampleRestoreExcelTemplate,
   ExcelRestorePreview,
   ExcelImportResult,
@@ -769,19 +768,6 @@ export const AdminSettingsView: React.FC = () => {
       showToast(`Imported ${res.importedCount} items and created ${res.createdSuppliersCount} suppliers!`, 'success');
     } catch (err: any) {
       showAlert(`Import failed: ${err.message}`, 'Import Error', 'error');
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
-  const handleLoadBundledCatalog = async () => {
-    setIsImporting(true);
-    try {
-      const res = await loadBundledMaterialsCatalog();
-      setImportResult(res);
-      showToast(`Successfully loaded and imported ${res.importedCount} materials and ${res.createdSuppliersCount} suppliers from ITEM.xls!`, 'success');
-    } catch (err: any) {
-      showAlert(`Failed to load materials catalog: ${err.message}`, 'Load Error', 'error');
     } finally {
       setIsImporting(false);
     }
@@ -1531,42 +1517,6 @@ export const AdminSettingsView: React.FC = () => {
             >
               <Download size={15} />
               Download Sample 4-Column Template
-            </button>
-          </div>
-
-          {/* 1-Click Load Pre-Bundled Catalog */}
-          <div style={{ background: 'linear-gradient(135deg, #ECFDF5 0%, #DCFCE7 100%)', border: '2px solid #10B981', borderRadius: '10px', padding: '14px 18px', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-            <div>
-              <span style={{ fontWeight: 900, color: '#065F46', fontSize: '0.96rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Zap size={18} color="#059669" />
-                Pre-Bundled Materials File Available (assets/ITEM.xls)
-              </span>
-              <span style={{ fontSize: '0.82rem', color: '#047857', marginTop: '2px', display: 'block' }}>
-                Contains all <strong>569 items/materials</strong> and <strong>29 suppliers</strong> ready to import in 1 click!
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={handleLoadBundledCatalog}
-              disabled={isImporting}
-              style={{
-                background: '#059669',
-                color: '#FFFFFF',
-                border: 'none',
-                borderRadius: '20px',
-                padding: '8px 20px',
-                fontWeight: 900,
-                fontSize: '0.85rem',
-                cursor: isImporting ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                boxShadow: '0 2px 6px rgba(5,150,105,0.3)',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              {isImporting ? <RefreshCw size={15} className="spin" /> : <Zap size={15} />}
-              ⚡ 1-Click Load 569 Materials
             </button>
           </div>
 

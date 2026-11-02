@@ -1,9 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { Modal } from './Modal';
-import { importItemsFromExcel, loadBundledMaterialsCatalog, ExcelImportResult } from '../../utils/excelEngine';
+import { importItemsFromExcel, ExcelImportResult } from '../../utils/excelEngine';
 import { useApp } from '../../context/AppContext';
 import * as XLSX from 'xlsx';
-import { FileSpreadsheet, Upload, Download, CheckCircle, AlertTriangle, RefreshCw, Zap } from 'lucide-react';
+import { FileSpreadsheet, Upload, Download, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface ExcelImportModalProps {
   isOpen: boolean;
@@ -71,19 +71,6 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
     }
   };
 
-  const handleLoadBundledCatalog = async () => {
-    setIsProcessing(true);
-    try {
-      const res = await loadBundledMaterialsCatalog();
-      setImportResult(res);
-      showToast(`Successfully imported ${res.importedCount} materials and created ${res.createdSuppliersCount} suppliers from ITEM.xls!`, 'success');
-    } catch (err: any) {
-      showAlert(`Failed to load ITEM.xls: ${err.message}`, 'Load Error', 'error');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
   const handleDownloadTemplate = () => {
     const templateData = [
       { 'Item': 'ASTER / PRINTING SHEET 70 GSM', 'Category': 'Paper & Sheets', 'Supplier': 'KONARK RAW MATERIALS', 'Base Price': 100 },
@@ -111,42 +98,6 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ isOpen, onCl
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="📥 Bulk Import Items from Excel (.xlsx / .xls)" maxWidth="850px">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
-        {/* 1-Click Load Bundled Catalog Banner */}
-        <div style={{ background: 'linear-gradient(135deg, #ECFDF5 0%, #DCFCE7 100%)', border: '2px solid #10B981', borderRadius: '10px', padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-          <div>
-            <span style={{ fontWeight: 900, color: '#065F46', fontSize: '0.96rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Zap size={18} color="#059669" />
-              Pre-Bundled Materials File Available (assets/ITEM.xls)
-            </span>
-            <span style={{ fontSize: '0.82rem', color: '#047857', marginTop: '2px', display: 'block' }}>
-              Contains all <strong>569 items/materials</strong> and <strong>29 suppliers</strong> ready to import in 1 click!
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={handleLoadBundledCatalog}
-            disabled={isProcessing}
-            style={{
-              background: '#059669',
-              color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '20px',
-              padding: '8px 20px',
-              fontWeight: 900,
-              fontSize: '0.85rem',
-              cursor: isProcessing ? 'not-allowed' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              boxShadow: '0 2px 6px rgba(5,150,105,0.3)',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            {isProcessing ? <RefreshCw size={15} className="spin" /> : <Zap size={15} />}
-            ⚡ 1-Click Load 569 Materials
-          </button>
-        </div>
 
         {/* Info Banner */}
         <div style={{ background: '#EFF6FF', border: '1.5px solid #BFDBFE', borderRadius: '8px', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
