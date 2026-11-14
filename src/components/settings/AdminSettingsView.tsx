@@ -21,7 +21,9 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
-  Zap
+  Zap,
+  Wrench,
+  Database
 } from 'lucide-react';
 import { getTodayDateString, formatDateToDisplay } from '../../utils/dateUtils';
 import { ConfirmDialog } from '../common/ConfirmDialog';
@@ -31,6 +33,7 @@ import {
   inspectExcelBackup,
   restoreDatabaseFromExcel,
   importItemsFromExcel,
+  loadBundledMaterialsCatalog,
   downloadSampleRestoreExcelTemplate,
   ExcelRestorePreview,
   ExcelImportResult,
@@ -38,7 +41,7 @@ import {
 } from '../../utils/excelEngine';
 import * as XLSX from 'xlsx';
 
-type AdminTab = 'COMPANY' | 'STOCK_AUDIT' | 'BACKUP' | 'RESTORE' | 'EXCEL_IMPORT' | 'DELETE';
+type AdminTab = 'COMPANY' | 'STOCK_AUDIT' | 'BACKUP' | 'RESTORE' | 'EXCEL_IMPORT' | 'DELETE' | 'MAINTENANCE';
 
 interface SidebarModulesSelection {
   // OPERATIONS
@@ -89,6 +92,63 @@ export const AdminSettingsView: React.FC = () => {
   const [isPullingCloud, setIsPullingCloud] = useState(false);
   const [showRulesInfo, setShowRulesInfo] = useState(false);
   const [isRulesCopied, setIsRulesCopied] = useState(false);
+
+  // Maintenance Mode State
+  const maintenanceMode = useMemo(() => db.getMaintenanceMode(), [refreshKey]);
+  const [isEnablingMaintenance, setIsEnablingMaintenance] = useState(false);
+  const [isDisablingMaintenance, setIsDisablingMaintenance] = useState(false);
+  const [isEnableMaintenanceConfirmOpen, setIsEnableMaintenanceConfirmOpen] = useState(false);
+  const [isDisableMaintenanceConfirmOpen, setIsDisableMaintenanceConfirmOpen] = useState(false);
+
+  const handleEnableMaintenance = async () => {
+    setIsEnableMaintenanceConfirmOpen(false);
+    setIsEnablingMaintenance(true);
+    try {
+      const res = await db.enableMaintenanceMode();
+      if (res.success) {
+        showToast(`Maintenance Mode activated! Snapshot of ${res.summary.totalRecords} records duplicated to Firebase.`, 'success');
+      } else {
+        showAlert(`Failed to enable Maintenance Mode: ${res.error}`, 'Maintenance Error', 'error');
+      }
+    } catch (err: any) {
+      showAlert(`Error enabling maintenance mode: ${err.message}`, 'Maintenance Error', 'error');
+    } finally {
+      setIsEnablingMaintenance(false);
+    }
+  };
+
+  const handleDisableMaintenance = async () => {
+    setIsDisableMaintenanceConfirmOpen(false);
+    setIsDisablingMaintenance(true);
+    try {
+      const res = await db.disableMaintenanceModeAndRestore();
+      if (res.success) {
+        showToast(`Maintenance Mode turned OFF! Exact backup snapshot (${res.restoredRecords} records) restored to the system.`, 'success');
+      } else {
+        showAlert(`Failed to restore backup snapshot: ${res.error}`, 'Restore Error', 'error');
+      }
+    } catch (err: any) {
+      showAlert(`Error restoring backup: ${err.message}`, 'Restore Error', 'error');
+    } finally {
+      setIsDisablingMaintenance(false);
+    }
+  };
+
+  const handleDownloadSnapshotJSON = () => {
+    const snapshot = db.getMaintenanceSnapshot();
+    if (!snapshot) {
+      showToast('No active maintenance snapshot found.', 'warning');
+      return;
+    }
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `RMMS_Maintenance_Snapshot_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Snapshot JSON downloaded!', 'success');
+  };
 
   // Dates
   const todayStr = getTodayDateString();
@@ -773,6 +833,19 @@ export const AdminSettingsView: React.FC = () => {
     }
   };
 
+  const handleLoadBundledCatalog = async () => {
+    setIsImporting(true);
+    try {
+      const res = await loadBundledMaterialsCatalog();
+      setImportResult(res);
+      showToast(`Successfully loaded and imported ${res.importedCount} materials and ${res.createdSuppliersCount} suppliers from ITEM.xls!`, 'success');
+    } catch (err: any) {
+      showAlert(`Failed to load materials catalog: ${err.message}`, 'Load Error', 'error');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const handleDownloadSampleTemplate = () => {
     const templateData = [
       { 'Item': 'ASTER / PRINTING SHEET 70 GSM', 'Category': 'Paper & Sheets', 'Supplier': 'KONARK RAW MATERIALS', 'Base Price': 100 },
@@ -912,6 +985,7 @@ export const AdminSettingsView: React.FC = () => {
         {/* Segmented Sub-Navigation Bar */}
         <div style={{ display: 'flex', gap: '8px', background: '#FFFFFF', padding: '5px', borderRadius: '30px', border: '1.5px solid #000000', flexWrap: 'wrap' }}>
           {[
+            { key: 'MAINTENANCE', label: 'Maintenance Mode', icon: Wrench },
             { key: 'BACKUP', label: 'Excel Backup', icon: Download },
             { key: 'RESTORE', label: 'Excel Restore', icon: Upload },
             { key: 'EXCEL_IMPORT', label: 'Import Items', icon: FileSpreadsheet },
@@ -937,17 +1011,370 @@ export const AdminSettingsView: React.FC = () => {
                   fontWeight: 800,
                   fontSize: '0.85rem',
                   transition: 'all 0.15s ease',
-                  background: isActive ? (tab.key === 'DELETE' ? '#EA3943' : tab.key === 'BACKUP' ? '#10B981' : tab.key === 'RESTORE' || tab.key === 'EXCEL_IMPORT' ? '#6366F1' : '#E2D2F8') : 'transparent',
+                  background: isActive
+                    ? (tab.key === 'MAINTENANCE' ? (maintenanceMode.enabled ? '#EA580C' : '#0284C7')
+                      : tab.key === 'DELETE' ? '#EA3943'
+                      : tab.key === 'BACKUP' ? '#10B981'
+                      : tab.key === 'RESTORE' || tab.key === 'EXCEL_IMPORT' ? '#6366F1'
+                      : '#E2D2F8')
+                    : 'transparent',
                   color: isActive ? (tab.key === 'COMPANY' || tab.key === 'STOCK_AUDIT' ? '#000000' : '#FFFFFF') : '#4B5563'
                 }}
               >
                 <Icon size={16} />
                 <span>{tab.label}</span>
+                {tab.key === 'MAINTENANCE' && maintenanceMode.enabled && (
+                  <span style={{
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    background: '#EF4444',
+                    display: 'inline-block',
+                    marginLeft: '2px',
+                    boxShadow: '0 0 0 2px #FFFFFF'
+                  }} />
+                )}
               </button>
             );
           })}
         </div>
       </div>
+
+      {/* Active Maintenance Mode Alert Header Banner in Admin */}
+      {maintenanceMode.enabled && activeSubTab !== 'MAINTENANCE' && (
+        <div style={{
+          background: '#FEF3C7',
+          border: '2px solid #F59E0B',
+          borderRadius: '10px',
+          padding: '12px 18px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <AlertTriangle size={20} color="#D97706" />
+            <span style={{ fontSize: '0.88rem', color: '#92400E', fontWeight: 700 }}>
+              <b>Maintenance Mode is Active:</b> All data changes and deletions are temporary. Revert and restore your original database from the Maintenance Mode tab.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('MAINTENANCE')}
+            style={{
+              background: '#D97706',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '6px 14px',
+              fontWeight: 800,
+              fontSize: '0.82rem',
+              cursor: 'pointer'
+            }}
+          >
+            Go to Maintenance Mode
+          </button>
+        </div>
+      )}
+
+      {/* =========================================================================
+          TAB: MAINTENANCE MODE (SNAPSHOT BACKUP & RESTORE)
+          ========================================================================= */}
+      {activeSubTab === 'MAINTENANCE' && (
+        <div style={{ background: '#FFFFFF', border: '2px solid #000000', borderRadius: '12px', padding: '24px' }}>
+          {/* Header banner */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '12px',
+                background: maintenanceMode.enabled ? '#FEF3C7' : '#E0F2FE',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: `1.5px solid ${maintenanceMode.enabled ? '#F59E0B' : '#0284C7'}`
+              }}>
+                <Wrench size={26} color={maintenanceMode.enabled ? '#D97706' : '#0369A1'} />
+              </div>
+              <div>
+                <h3 style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 900, fontSize: '1.25rem', color: '#111827', margin: 0 }}>
+                  Maintenance & Sandbox Mode
+                </h3>
+                <p style={{ margin: '3px 0 0', fontSize: '0.86rem', color: '#6B7280' }}>
+                  Duplicate your entire database to Firebase as a protected snapshot, test or clear data, and restore everything when finished.
+                </p>
+              </div>
+            </div>
+
+            {/* Current Status Pill */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 18px',
+              borderRadius: '24px',
+              background: maintenanceMode.enabled ? '#FFFBEB' : '#F0FDF4',
+              border: `2px solid ${maintenanceMode.enabled ? '#F59E0B' : '#16A34A'}`
+            }}>
+              <span style={{
+                width: '10px',
+                height: '10px',
+                borderRadius: '50%',
+                background: maintenanceMode.enabled ? '#D97706' : '#16A34A',
+                boxShadow: maintenanceMode.enabled ? '0 0 0 3px rgba(245, 158, 11, 0.25)' : '0 0 0 3px rgba(22, 163, 74, 0.25)'
+              }} />
+              <span style={{ fontWeight: 900, fontSize: '0.88rem', color: maintenanceMode.enabled ? '#B45309' : '#15803D' }}>
+                {maintenanceMode.enabled ? 'MAINTENANCE MODE ACTIVE' : 'NORMAL LIVE MODE'}
+              </span>
+            </div>
+          </div>
+
+          {/* Workflow Explanation Banner */}
+          <div style={{
+            background: '#F8FAFC',
+            border: '1.5px solid #E2E8F0',
+            borderRadius: '10px',
+            padding: '16px 20px',
+            marginBottom: '24px'
+          }}>
+            <h4 style={{ margin: '0 0 8px', fontSize: '0.95rem', fontWeight: 800, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Database size={16} color="#475569" />
+              How Maintenance Mode Works
+            </h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px', fontSize: '0.84rem', color: '#475569' }}>
+              <div style={{ background: '#FFFFFF', padding: '12px 14px', borderRadius: '8px', border: '1px solid #CBD5E1' }}>
+                <strong style={{ color: '#0F172A', display: 'block', marginBottom: '4px' }}>1. Turn ON (Snapshot & Duplicate)</strong>
+                Captures all 14 data collections (Items, Suppliers, Parties, Orders, Purchases, Sales, Self-Use, Movements, Audits, Settings) and duplicates them to Firebase cloud backup collections.
+              </div>
+              <div style={{ background: '#FFFFFF', padding: '12px 14px', borderRadius: '8px', border: '1px solid #CBD5E1' }}>
+                <strong style={{ color: '#0F172A', display: 'block', marginBottom: '4px' }}>2. Test / Clear / Modify Data</strong>
+                You can freely test workflows, import sample files, delete records, or wipe tables from the website. Live Firestore collections reflect these changes normally.
+              </div>
+              <div style={{ background: '#FFFFFF', padding: '12px 14px', borderRadius: '8px', border: '1px solid #CBD5E1' }}>
+                <strong style={{ color: '#0F172A', display: 'block', marginBottom: '4px' }}>3. Turn OFF (Exact Revert & Restore)</strong>
+                The system automatically restores the exact backed-up snapshot from Firebase into the live database. Any temporary items created are removed, and all original records return untouched.
+              </div>
+            </div>
+          </div>
+
+          {/* Active Maintenance Mode Panel */}
+          {maintenanceMode.enabled ? (
+            <div style={{
+              background: '#FFFBEB',
+              border: '2px solid #F59E0B',
+              borderRadius: '12px',
+              padding: '20px',
+              marginBottom: '20px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 900, color: '#92400E', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <AlertTriangle size={20} color="#D97706" />
+                    Protected Database Snapshot in Firebase
+                  </h4>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.84rem', color: '#B45309' }}>
+                    Snapshot captured on <b>{maintenanceMode.startedAt ? new Date(maintenanceMode.startedAt).toLocaleString() : 'N/A'}</b>.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDownloadSnapshotJSON}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '7px 14px',
+                    background: '#FFFFFF',
+                    border: '1.5px solid #D97706',
+                    borderRadius: '8px',
+                    color: '#92400E',
+                    fontWeight: 700,
+                    fontSize: '0.82rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Download size={14} />
+                  Download JSON Backup
+                </button>
+              </div>
+
+              {/* Snapshot Counts Grid */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                gap: '10px',
+                marginBottom: '20px'
+              }}>
+                {[
+                  { label: 'Items', count: maintenanceMode.snapshotSummary?.itemsCount ?? 0 },
+                  { label: 'Suppliers', count: maintenanceMode.snapshotSummary?.suppliersCount ?? 0 },
+                  { label: 'Parties', count: maintenanceMode.snapshotSummary?.partiesCount ?? 0 },
+                  { label: 'Sales', count: maintenanceMode.snapshotSummary?.salesCount ?? 0 },
+                  { label: 'Purchases', count: maintenanceMode.snapshotSummary?.purchasesCount ?? 0 },
+                  { label: 'Orders', count: maintenanceMode.snapshotSummary?.ordersCount ?? 0 },
+                  { label: 'Self-Use', count: maintenanceMode.snapshotSummary?.selfUseCount ?? 0 },
+                  { label: 'Movements', count: maintenanceMode.snapshotSummary?.stockMovementsCount ?? 0 },
+                  { label: 'Stock Audits', count: maintenanceMode.snapshotSummary?.physicalStockAuditsCount ?? 0 },
+                  { label: 'Total Records', count: maintenanceMode.snapshotSummary?.totalRecords ?? 0, highlight: true }
+                ].map(stat => (
+                  <div
+                    key={stat.label}
+                    style={{
+                      background: stat.highlight ? '#FDE68A' : '#FFFFFF',
+                      border: `1.5px solid ${stat.highlight ? '#D97706' : '#FCD34D'}`,
+                      borderRadius: '8px',
+                      padding: '10px',
+                      textAlign: 'center'
+                    }}
+                  >
+                    <div style={{ fontSize: '1.25rem', fontWeight: 900, color: stat.highlight ? '#78350F' : '#92400E' }}>
+                      {stat.count}
+                    </div>
+                    <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#78350F', textTransform: 'uppercase' }}>
+                      {stat.label}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Turn Off & Restore Button */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', background: '#FEF3C7', padding: '16px', borderRadius: '10px', border: '1.5px dashed #F59E0B' }}>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#92400E' }}>
+                    Ready to Revert Testing & Exit Maintenance Mode?
+                  </div>
+                  <div style={{ fontSize: '0.82rem', color: '#B45309' }}>
+                    Clicking below will delete any temporary items added, restore all deleted or altered records, and return the database to the exact snapshot.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsDisableMaintenanceConfirmOpen(true)}
+                  disabled={isDisablingMaintenance}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '10px 24px',
+                    borderRadius: '8px',
+                    border: '2px solid #000000',
+                    background: '#EA580C',
+                    color: '#FFFFFF',
+                    fontWeight: 900,
+                    fontSize: '0.95rem',
+                    cursor: isDisablingMaintenance ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 4px 10px rgba(234, 88, 12, 0.3)'
+                  }}
+                >
+                  <RotateCcw size={18} className={isDisablingMaintenance ? 'spin' : ''} />
+                  {isDisablingMaintenance ? 'Restoring All Data...' : 'Turn OFF Maintenance Mode & Restore Data'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Inactive Maintenance Mode Panel */
+            <div style={{
+              background: '#F0FDF4',
+              border: '2px solid #22C55E',
+              borderRadius: '12px',
+              padding: '20px',
+              marginBottom: '20px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 900, color: '#166534', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <CheckCircle2 size={20} color="#16A34A" />
+                    Live System Ready for Maintenance Mode
+                  </h4>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.84rem', color: '#15803D' }}>
+                    {maintenanceMode.lastRestoredAt
+                      ? `Last restored from snapshot on: ${new Date(maintenanceMode.lastRestoredAt).toLocaleString()}`
+                      : 'No previous maintenance mode session recorded.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Current Live Counts Grid */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                gap: '10px',
+                marginBottom: '20px'
+              }}>
+                {[
+                  { label: 'Active Items', count: items.length },
+                  { label: 'Suppliers', count: db.getSuppliers().length },
+                  { label: 'Parties', count: db.getParties().length },
+                  { label: 'Sales', count: db.getSales().length },
+                  { label: 'Purchases', count: db.getPurchases().length },
+                  { label: 'Orders', count: db.getOrders().length },
+                  { label: 'Movements', count: db.getStockMovements().length },
+                  {
+                    label: 'Total Live Records',
+                    count: items.length + db.getSuppliers().length + db.getParties().length + db.getSales().length + db.getPurchases().length + db.getOrders().length + db.getStockMovements().length,
+                    highlight: true
+                  }
+                ].map(stat => (
+                  <div
+                    key={stat.label}
+                    style={{
+                      background: stat.highlight ? '#DCFCE7' : '#FFFFFF',
+                      border: `1.5px solid ${stat.highlight ? '#16A34A' : '#BBF7D0'}`,
+                      borderRadius: '8px',
+                      padding: '10px',
+                      textAlign: 'center'
+                    }}
+                  >
+                    <div style={{ fontSize: '1.25rem', fontWeight: 900, color: stat.highlight ? '#14532D' : '#166534' }}>
+                      {stat.count}
+                    </div>
+                    <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#166534', textTransform: 'uppercase' }}>
+                      {stat.label}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Turn On Button */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', background: '#DCFCE7', padding: '16px', borderRadius: '10px', border: '1.5px dashed #22C55E' }}>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#14532D' }}>
+                    Start Maintenance Mode (Create Firebase Cloud Snapshot)
+                  </div>
+                  <div style={{ fontSize: '0.82rem', color: '#15803D' }}>
+                    This will duplicate your current data into Firebase backup collections so you can safely test, delete, and modify data.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsEnableMaintenanceConfirmOpen(true)}
+                  disabled={isEnablingMaintenance}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '10px 24px',
+                    borderRadius: '8px',
+                    border: '2px solid #000000',
+                    background: '#0284C7',
+                    color: '#FFFFFF',
+                    fontWeight: 900,
+                    fontSize: '0.95rem',
+                    cursor: isEnablingMaintenance ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 4px 10px rgba(2, 132, 199, 0.3)'
+                  }}
+                >
+                  <Wrench size={18} className={isEnablingMaintenance ? 'spin' : ''} />
+                  {isEnablingMaintenance ? 'Creating Firebase Backup...' : 'Turn ON Maintenance Mode'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* =========================================================================
           TAB 1: BACKUP DATA (EXCEL ONLY)
@@ -1517,6 +1944,42 @@ export const AdminSettingsView: React.FC = () => {
             >
               <Download size={15} />
               Download Sample 4-Column Template
+            </button>
+          </div>
+
+          {/* 1-Click Load Pre-Bundled Catalog */}
+          <div style={{ background: 'linear-gradient(135deg, #ECFDF5 0%, #DCFCE7 100%)', border: '2px solid #10B981', borderRadius: '10px', padding: '14px 18px', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <span style={{ fontWeight: 900, color: '#065F46', fontSize: '0.96rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Zap size={18} color="#059669" />
+                Pre-Bundled Materials File Available (assets/ITEM.xls)
+              </span>
+              <span style={{ fontSize: '0.82rem', color: '#047857', marginTop: '2px', display: 'block' }}>
+                Contains all <strong>569 items/materials</strong> and <strong>29 suppliers</strong> ready to import in 1 click!
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleLoadBundledCatalog}
+              disabled={isImporting}
+              style={{
+                background: '#059669',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '20px',
+                padding: '8px 20px',
+                fontWeight: 900,
+                fontSize: '0.85rem',
+                cursor: isImporting ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 2px 6px rgba(5,150,105,0.3)',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {isImporting ? <RefreshCw size={15} className="spin" /> : <Zap size={15} />}
+              ⚡ 1-Click Load 569 Materials
             </button>
           </div>
 
@@ -2361,6 +2824,24 @@ service cloud.firestore {
           </form>
         </div>
       )}
+
+      {/* Confirmation Dialog: Enable Maintenance Mode */}
+      <ConfirmDialog
+        isOpen={isEnableMaintenanceConfirmOpen}
+        onClose={() => setIsEnableMaintenanceConfirmOpen(false)}
+        onConfirm={handleEnableMaintenance}
+        title="Turn ON Maintenance Mode (Create Firebase Backup)"
+        message={`Are you sure you want to turn ON Maintenance Mode? This will duplicate your entire database (${items.length} items, ${salesCount} sales, ${partiesCount} parties, and all other collections) to Firebase as a protected snapshot. While active, any testing or deletions can be made and will be completely restored when turned OFF.`}
+      />
+
+      {/* Confirmation Dialog: Disable Maintenance Mode & Restore Data */}
+      <ConfirmDialog
+        isOpen={isDisableMaintenanceConfirmOpen}
+        onClose={() => setIsDisableMaintenanceConfirmOpen(false)}
+        onConfirm={handleDisableMaintenance}
+        title="Turn OFF Maintenance Mode & Restore All Data"
+        message={`Are you sure you want to turn OFF Maintenance Mode? This will discard changes made during maintenance, remove any temporary items created, and restore the exact original backup snapshot (${maintenanceMode.snapshotSummary?.totalRecords || 'all'} records) from Firebase back into the live system.`}
+      />
 
       {/* Confirmation Dialog: Restore Database from Excel */}
       <ConfirmDialog

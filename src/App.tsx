@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useApp } from './context/AppContext';
 import { useAuth } from './context/AuthContext';
+import { db } from './db/db';
 import { LoginView } from './components/auth/LoginView';
 import { Header } from './components/common/Header';
 import { Sidebar } from './components/common/Sidebar';
@@ -31,11 +32,12 @@ import { QuickPartyModal } from './components/common/QuickPartyModal';
 import { QuickItemModal } from './components/common/QuickItemModal';
 import { QuickSupplierModal } from './components/common/QuickSupplierModal';
 import { AlertDialog } from './components/common/AlertDialog';
-import { CheckCircle2, AlertCircle, Info, X, ShieldAlert } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Info, X, ShieldAlert, Wrench } from 'lucide-react';
 
 export const App: React.FC = () => {
-  const { activeTab, toasts, removeToast, alertModal, closeAlert } = useApp();
+  const { activeTab, setActiveTab, toasts, removeToast, alertModal, closeAlert, refreshKey } = useApp();
   const { currentUser, isAuthenticated, hasPermission, isAdmin } = useAuth();
+  const maintenanceMode = useMemo(() => db.getMaintenanceMode(), [refreshKey]);
 
   const renderRestrictedAccess = () => (
     <div className="content-panel-grey" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '360px', textAlign: 'center', gap: '16px' }}>
@@ -136,6 +138,70 @@ export const App: React.FC = () => {
     <div className="app-layout">
       {/* Top Header */}
       <Header />
+
+      {/* Global Maintenance Mode Active Banner */}
+      {maintenanceMode.enabled && (
+        <div style={{
+          background: 'linear-gradient(90deg, #F59E0B 0%, #EA580C 100%)',
+          color: '#FFFFFF',
+          padding: '10px 24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px',
+          borderBottom: '2px solid #C2410C',
+          boxShadow: '0 2px 8px rgba(234, 88, 12, 0.3)',
+          zIndex: 50
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{
+              background: '#FFFFFF',
+              color: '#EA580C',
+              borderRadius: '50%',
+              width: '28px',
+              height: '28px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 900,
+              fontSize: '0.9rem',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+            }}>
+              ⚠️
+            </span>
+            <div style={{ fontSize: '0.88rem' }}>
+              <strong style={{ fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Maintenance Mode Active:
+              </strong>{' '}
+              A complete database snapshot was duplicated to Firebase Cloud ({maintenanceMode.snapshotSummary?.totalRecords ?? 'all'} records). You can safely test, delete, and clear records. All changes will be reverted when turned OFF.
+            </div>
+          </div>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('ADMIN')}
+              style={{
+                background: '#FFFFFF',
+                color: '#9A3412',
+                border: '1.5px solid #000000',
+                borderRadius: '6px',
+                padding: '6px 14px',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.15)'
+              }}
+            >
+              <Wrench size={14} />
+              Manage in Admin Settings
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Main Content Body */}
       <main className="app-body-container">

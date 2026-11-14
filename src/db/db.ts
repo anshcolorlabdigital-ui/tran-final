@@ -12,7 +12,9 @@ import {
   CompanySettings,
   PartyLog,
   SupplierLog,
-  PhysicalStockAudit
+  PhysicalStockAudit,
+  MaintenanceModeState,
+  MaintenanceSnapshotSummary
 } from '../types';
 import {
   INITIAL_COMPANY_SETTINGS,
@@ -53,7 +55,9 @@ const STORAGE_KEYS = {
   PHYSICAL_STOCK_AUDITS: 'rmms_physical_stock_audits_v1',
   PARTY_LOGS: 'rmms_party_logs_v1',
   SUPPLIER_LOGS: 'rmms_supplier_logs_v1',
-  INITIALIZED: 'rmms_initialized_v1'
+  INITIALIZED: 'rmms_initialized_v1',
+  MAINTENANCE_STATUS: 'rmms_maintenance_status_v1',
+  MAINTENANCE_SNAPSHOT: 'rmms_maintenance_snapshot_v1'
 };
 
 export interface CloudSyncState {
@@ -77,6 +81,14 @@ function safeSetStorage(key: string, value: string): void {
     window.localStorage.setItem(key, value);
   } else {
     memoryStore[key] = value;
+  }
+}
+
+function safeRemoveStorage(key: string): void {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    window.localStorage.removeItem(key);
+  } else {
+    delete memoryStore[key];
   }
 }
 
@@ -227,6 +239,20 @@ class DatabaseService {
         this.handleSyncError(err);
       });
       this.unsubs.push(settingsUnsub);
+
+      // Real-time listener for Maintenance Mode Status
+      const maintenanceUnsub = onSnapshot(doc(firestore, 'app_metadata', 'maintenance_status'), (docSnap) => {
+        if (docSnap.exists()) {
+          const cloudStatus = docSnap.data() as MaintenanceModeState;
+          if (cloudStatus) {
+            this.set(STORAGE_KEYS.MAINTENANCE_STATUS, cloudStatus);
+            this.notify();
+          }
+        }
+      }, (err) => {
+        // Silently handled if offline
+      });
+      this.unsubs.push(maintenanceUnsub);
 
       // 2. Pure real-time collection synchronization (Firestore is single source of truth)
       const setupCollectionSync = <T extends { id: string }>(
@@ -1386,6 +1412,286 @@ class DatabaseService {
     } catch (e) {
       console.error('Failed to import backup:', e);
       return false;
+    }
+  }
+
+  // --- MAINTENANCE MODE BACKUP & RESTORE ---
+  public getMaintenanceMode(): MaintenanceModeState {
+    return this.get<MaintenanceModeState>(STORAGE_KEYS.MAINTENANCE_STATUS, { enabled: false });
+  }
+
+  public getMaintenanceSnapshot(): any | null {
+    const raw = safeGetStorage(STORAGE_KEYS.MAINTENANCE_SNAPSHOT);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  public async enableMaintenanceMode(): Promise<{ success: boolean; summary: MaintenanceSnapshotSummary; error?: string }> {
+    try {
+      this.cloudSyncState.status = 'SYNCING';
+      this.notify();
+
+      // 1. Gather all current records into a snapshot
+      const settings = this.getSettings();
+      const users = this.getUsers();
+      const parties = this.getParties();
+      const suppliers = this.getSuppliers();
+      const items = this.getItems();
+      const orders = this.getOrders();
+      const sales = this.getSales();
+      const purchases = this.getPurchases();
+      const selfUses = this.getSelfUses();
+      const stockMovements = this.getStockMovements();
+      const stockAdjustments = this.getStockAdjustments();
+      const physicalStockAudits = this.getPhysicalStockAudits();
+      const partyLogs = this.getPartyLogs();
+      const supplierLogs = this.getSupplierLogs();
+
+      const snapshot = {
+        version: '1.0',
+        capturedAt: new Date().toISOString(),
+        settings,
+        users,
+        parties,
+        suppliers,
+        items,
+        orders,
+        sales,
+        purchases,
+        selfUses,
+        stockMovements,
+        stockAdjustments,
+        physicalStockAudits,
+        partyLogs,
+        supplierLogs
+      };
+
+      const summary: MaintenanceSnapshotSummary = {
+        itemsCount: items.length,
+        partiesCount: parties.length,
+        suppliersCount: suppliers.length,
+        salesCount: sales.length,
+        purchasesCount: purchases.length,
+        ordersCount: orders.length,
+        selfUseCount: selfUses.length,
+        stockAdjustmentsCount: stockAdjustments.length,
+        stockMovementsCount: stockMovements.length,
+        physicalStockAuditsCount: physicalStockAudits.length,
+        partyLogsCount: partyLogs.length,
+        supplierLogsCount: supplierLogs.length,
+        usersCount: users.length,
+        totalRecords: (
+          items.length +
+          parties.length +
+          suppliers.length +
+          sales.length +
+          purchases.length +
+          orders.length +
+          selfUses.length +
+          stockAdjustments.length +
+          stockMovements.length +
+          physicalStockAudits.length +
+          partyLogs.length +
+          supplierLogs.length +
+          users.length
+        )
+      };
+
+      // 2. Persist full snapshot locally
+      safeSetStorage(STORAGE_KEYS.MAINTENANCE_SNAPSHOT, JSON.stringify(snapshot));
+
+      // 3. Duplicate everything to Firebase under backup collections
+      await setDoc(doc(firestore, 'app_metadata', 'backup_settings'), JSON.parse(JSON.stringify(settings)));
+      await this.batchSetDocs('backup_items', items);
+      await this.batchSetDocs('backup_suppliers', suppliers);
+      await this.batchSetDocs('backup_parties', parties);
+      await this.batchSetDocs('backup_orders', orders);
+      await this.batchSetDocs('backup_sales', sales);
+      await this.batchSetDocs('backup_purchases', purchases);
+      await this.batchSetDocs('backup_self_uses', selfUses);
+      await this.batchSetDocs('backup_stock_adjustments', stockAdjustments);
+      await this.batchSetDocs('backup_physical_stock_audits', physicalStockAudits);
+      await this.batchSetDocs('backup_party_logs', partyLogs);
+      await this.batchSetDocs('backup_supplier_logs', supplierLogs);
+      await this.batchSetDocs('backup_stock_movements', stockMovements);
+      await this.batchSetDocs('backup_users', users);
+
+      // 4. Update maintenance status state
+      const state: MaintenanceModeState = {
+        enabled: true,
+        startedAt: new Date().toISOString(),
+        snapshotSummary: summary
+      };
+      this.set(STORAGE_KEYS.MAINTENANCE_STATUS, state);
+      await setDoc(doc(firestore, 'app_metadata', 'maintenance_status'), JSON.parse(JSON.stringify(state)));
+
+      this.updateSyncSuccess();
+      this.notify();
+      return { success: true, summary };
+    } catch (err: any) {
+      console.error('Failed to enable maintenance mode:', err);
+      this.handleSyncError(err);
+      return {
+        success: false,
+        summary: {
+          itemsCount: 0,
+          partiesCount: 0,
+          suppliersCount: 0,
+          salesCount: 0,
+          purchasesCount: 0,
+          ordersCount: 0,
+          selfUseCount: 0,
+          stockAdjustmentsCount: 0,
+          stockMovementsCount: 0,
+          physicalStockAuditsCount: 0,
+          partyLogsCount: 0,
+          supplierLogsCount: 0,
+          usersCount: 0,
+          totalRecords: 0
+        },
+        error: err?.message || 'Error creating maintenance snapshot'
+      };
+    }
+  }
+
+  public async disableMaintenanceModeAndRestore(): Promise<{ success: boolean; restoredRecords: number; error?: string }> {
+    try {
+      this.cloudSyncState.status = 'SYNCING';
+      this.notify();
+
+      let snapshot = this.getMaintenanceSnapshot();
+
+      // If missing from local storage, fallback to pulling from Firestore backup collections
+      if (!snapshot) {
+        try {
+          const fetchBackupCollection = async <T>(collName: string): Promise<T[]> => {
+            const snap = await getDocs(collection(firestore, collName));
+            return snap.docs.map(d => d.data() as T);
+          };
+          const backupSettingsDoc = await getDoc(doc(firestore, 'app_metadata', 'backup_settings'));
+          const backupSettings = backupSettingsDoc.exists() ? backupSettingsDoc.data() as CompanySettings : this.getSettings();
+
+          snapshot = {
+            settings: backupSettings,
+            items: await fetchBackupCollection<Item>('backup_items'),
+            suppliers: await fetchBackupCollection<Supplier>('backup_suppliers'),
+            parties: await fetchBackupCollection<Party>('backup_parties'),
+            orders: await fetchBackupCollection<SupplierOrder>('backup_orders'),
+            sales: await fetchBackupCollection<Sale>('backup_sales'),
+            purchases: await fetchBackupCollection<Purchase>('backup_purchases'),
+            selfUses: await fetchBackupCollection<SelfUse>('backup_self_uses'),
+            stockAdjustments: await fetchBackupCollection<StockAdjustment>('backup_stock_adjustments'),
+            physicalStockAudits: await fetchBackupCollection<PhysicalStockAudit>('backup_physical_stock_audits'),
+            partyLogs: await fetchBackupCollection<PartyLog>('backup_party_logs'),
+            supplierLogs: await fetchBackupCollection<SupplierLog>('backup_supplier_logs'),
+            stockMovements: await fetchBackupCollection<StockMovement>('backup_stock_movements'),
+            users: await fetchBackupCollection<User>('backup_users')
+          };
+        } catch (fetchErr) {
+          console.warn('Fallback backup fetch error:', fetchErr);
+        }
+      }
+
+      if (!snapshot) {
+        throw new Error('No backup snapshot found to restore. Cannot revert data.');
+      }
+
+      let totalRestored = 0;
+
+      // Helper function to restore a collection:
+      // 1. Delete IDs created during maintenance mode
+      // 2. Set snapshot records back into live Firestore & local storage
+      const restoreCollection = async <T extends { id: string }>(
+        collectionName: string,
+        storageKey: string,
+        snapshotItems: T[]
+      ): Promise<number> => {
+        const currentItems = this.get<T[]>(storageKey, []);
+        const snapshotIds = new Set((snapshotItems || []).map(i => String(i.id)));
+        const idsToDelete = currentItems
+          .map(i => String(i.id))
+          .filter(id => id && !snapshotIds.has(id));
+
+        if (idsToDelete.length > 0) {
+          await this.batchDeleteDocs(collectionName, idsToDelete);
+        }
+        if (snapshotItems && snapshotItems.length > 0) {
+          await this.batchSetDocs(collectionName, snapshotItems);
+        }
+        this.set(storageKey, snapshotItems || []);
+        return (snapshotItems || []).length;
+      };
+
+      // Restore all collections
+      totalRestored += await restoreCollection('items', STORAGE_KEYS.ITEMS, snapshot.items || []);
+      totalRestored += await restoreCollection('suppliers', STORAGE_KEYS.SUPPLIERS, snapshot.suppliers || []);
+      totalRestored += await restoreCollection('parties', STORAGE_KEYS.PARTIES, snapshot.parties || []);
+      totalRestored += await restoreCollection('orders', STORAGE_KEYS.ORDERS, snapshot.orders || []);
+      totalRestored += await restoreCollection('sales', STORAGE_KEYS.SALES, snapshot.sales || []);
+      totalRestored += await restoreCollection('purchases', STORAGE_KEYS.PURCHASES, snapshot.purchases || []);
+      totalRestored += await restoreCollection('self_uses', STORAGE_KEYS.SELF_USES, snapshot.selfUses || []);
+      totalRestored += await restoreCollection('stock_adjustments', STORAGE_KEYS.STOCK_ADJUSTMENTS, snapshot.stockAdjustments || []);
+      totalRestored += await restoreCollection('physical_stock_audits', STORAGE_KEYS.PHYSICAL_STOCK_AUDITS, snapshot.physicalStockAudits || []);
+      totalRestored += await restoreCollection('party_logs', STORAGE_KEYS.PARTY_LOGS, snapshot.partyLogs || []);
+      totalRestored += await restoreCollection('supplier_logs', STORAGE_KEYS.SUPPLIER_LOGS, snapshot.supplierLogs || []);
+      totalRestored += await restoreCollection('stock_movements', STORAGE_KEYS.STOCK_MOVEMENTS, snapshot.stockMovements || []);
+      totalRestored += await restoreCollection('users', STORAGE_KEYS.USERS, snapshot.users || []);
+
+      if (snapshot.settings) {
+        this.set(STORAGE_KEYS.SETTINGS, snapshot.settings);
+        await setDoc(doc(firestore, 'app_metadata', 'settings'), JSON.parse(JSON.stringify(snapshot.settings)));
+      }
+
+      // Clean up backup collections from Firebase
+      const cleanBackupCollection = async (collName: string, items: any[]) => {
+        if (items && items.length > 0) {
+          try {
+            await this.batchDeleteDocs(collName, items.map(i => String(i.id)).filter(Boolean));
+          } catch (e) {
+            console.warn(`Error cleaning up backup collection ${collName}:`, e);
+          }
+        }
+      };
+
+      await Promise.allSettled([
+        cleanBackupCollection('backup_items', snapshot.items),
+        cleanBackupCollection('backup_suppliers', snapshot.suppliers),
+        cleanBackupCollection('backup_parties', snapshot.parties),
+        cleanBackupCollection('backup_orders', snapshot.orders),
+        cleanBackupCollection('backup_sales', snapshot.sales),
+        cleanBackupCollection('backup_purchases', snapshot.purchases),
+        cleanBackupCollection('backup_self_uses', snapshot.selfUses),
+        cleanBackupCollection('backup_stock_adjustments', snapshot.stockAdjustments),
+        cleanBackupCollection('backup_physical_stock_audits', snapshot.physicalStockAudits),
+        cleanBackupCollection('backup_party_logs', snapshot.partyLogs),
+        cleanBackupCollection('backup_supplier_logs', snapshot.supplierLogs),
+        cleanBackupCollection('backup_stock_movements', snapshot.stockMovements),
+        cleanBackupCollection('backup_users', snapshot.users),
+        deleteDoc(doc(firestore, 'app_metadata', 'backup_settings')).catch(() => { })
+      ]);
+
+      // Set maintenance status to turned off
+      const restoredState: MaintenanceModeState = {
+        enabled: false,
+        startedAt: undefined,
+        snapshotSummary: undefined,
+        lastRestoredAt: new Date().toISOString()
+      };
+      this.set(STORAGE_KEYS.MAINTENANCE_STATUS, restoredState);
+      safeRemoveStorage(STORAGE_KEYS.MAINTENANCE_SNAPSHOT);
+      await setDoc(doc(firestore, 'app_metadata', 'maintenance_status'), JSON.parse(JSON.stringify(restoredState)));
+
+      this.updateSyncSuccess();
+      this.notify();
+      return { success: true, restoredRecords: totalRestored };
+    } catch (err: any) {
+      console.error('Failed to restore maintenance mode backup:', err);
+      this.handleSyncError(err);
+      return { success: false, restoredRecords: 0, error: err?.message || 'Failed to restore backup snapshot' };
     }
   }
 

@@ -23,15 +23,6 @@ export const PurchaseEntryView: React.FC = () => {
   const items = useMemo(() => db.getItems().filter(i => i.isActive !== false), [refreshKey]);
   const purchasesHistory = useMemo(() => db.getPurchases(), [refreshKey]);
 
-  // Unique categories from items
-  const categories = useMemo(() => {
-    const set = new Set<string>();
-    items.forEach(i => {
-      if (i.category) set.add(i.category);
-    });
-    return Array.from(set);
-  }, [items]);
-
   // Options for SearchableSelects
   const supplierOptions = useMemo(() => {
     return suppliers.map(s => ({
@@ -44,26 +35,11 @@ export const PurchaseEntryView: React.FC = () => {
     }));
   }, [suppliers]);
 
-  const categoryOptions = useMemo(() => {
-    const allOpt = [{ id: '', label: '-- All Categories --', subLabel: 'Show all catalog items' }];
-    const catOpts = categories.map(c => {
-      const count = items.filter(i => i.category?.toLowerCase() === c.toLowerCase()).length;
-      return {
-        id: c,
-        label: c,
-        subLabel: `${count} items in category`,
-        badge: `${count}`
-      };
-    });
-    return [...allOpt, ...catOpts];
-  }, [categories, items]);
-
   // Header State
   const [billDate, setBillDate] = useState<string>(getTodayDateString());
   const [recdDate, setRecdDate] = useState<string>(getTodayDateString());
   const [billNo, setBillNo] = useState<string>('');
   const [supplierId, setSupplierId] = useState<string>('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(null);
   const [associatedOrderId, setAssociatedOrderId] = useState<string | null>(null);
   const [isJustSaved, setIsJustSaved] = useState(false);
@@ -91,7 +67,6 @@ export const PurchaseEntryView: React.FC = () => {
   const billNoInputRef = useRef<HTMLInputElement>(null);
   const recdDateInputRef = useRef<HTMLInputElement>(null);
   const supplierSelectRef = useRef<SearchableSelectHandle>(null);
-  const categorySelectRef = useRef<SearchableSelectHandle>(null);
   const itemSearchRef = useRef<ItemSearchSelectHandle>(null);
   const unitABasicPriceInputRef = useRef<HTMLInputElement>(null);
   const unitAGstPercentInputRef = useRef<HTMLInputElement>(null);
@@ -99,12 +74,6 @@ export const PurchaseEntryView: React.FC = () => {
   const unitAAddBtnRef = useRef<HTMLButtonElement>(null);
   const roundUpInputRef = useRef<HTMLInputElement>(null);
   const saveButtonRef = useRef<HTMLButtonElement>(null);
-
-  // Filter items by category if selected
-  const filteredCategoryItems = useMemo(() => {
-    if (!selectedCategory) return items;
-    return items.filter(i => i.category?.toLowerCase() === selectedCategory.toLowerCase());
-  }, [items, selectedCategory]);
 
   // Handle incoming order prefill from ORDERED section
   useEffect(() => {
@@ -180,7 +149,6 @@ export const PurchaseEntryView: React.FC = () => {
     setEditingItemIndex(null);
     const found = items.find(i => i.id === itemId);
     if (found) {
-      if (found.category) setSelectedCategory(found.category);
       const uA = found.unitA || {
         basicPrice: found.purchaseRate || 0,
         gstPercent: found.gstPercent || settings.defaultGstPercent || 0,
@@ -279,8 +247,6 @@ export const PurchaseEntryView: React.FC = () => {
   const handleEditLineItem = (index: number) => {
     setIsTouched(true);
     const item = purchaseItems[index];
-    const foundItem = items.find(i => i.id === item.itemId);
-    if (foundItem?.category) setSelectedCategory(foundItem.category);
     setSelectedItemId(item.itemId);
     setUnitABasicPrice(String(item.basicPrice));
     setUnitAGstPercent(String(item.gstPercent));
@@ -310,7 +276,6 @@ export const PurchaseEntryView: React.FC = () => {
     setBillDate(getTodayDateString());
     setRecdDate(getTodayDateString());
     setSupplierId('');
-    setSelectedCategory('');
     setPurchaseItems([]);
     setSelectedItemId('');
     setEditingItemIndex(null);
@@ -603,10 +568,10 @@ export const PurchaseEntryView: React.FC = () => {
           } : undefined}
           style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
         >
-          {/* TOP 2-COLUMN HEADER: Left (Party, Catg, Item) | Right (Dates & Bill No) */}
+          {/* TOP 2-COLUMN HEADER: Left (Party, Item) | Right (Dates & Bill No) */}
           <div className="entry-form-header-grid">
-          {/* LEFT COLUMN: Party, Catg, Item */}
-          <div className="entry-header-left-col">
+          {/* LEFT COLUMN: Party, Item */}
+          <div className="entry-header-left-col" style={{ justifyContent: 'center', gap: '14px' }}>
             {/* PARTY / SUPPLIER SELECTION */}
             <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: '8px', alignItems: 'center' }}>
               <label style={{ fontWeight: 900, fontSize: '0.98rem' }}>Party :</label>
@@ -619,36 +584,15 @@ export const PurchaseEntryView: React.FC = () => {
                   setSupplierId(val);
                 }}
                 onEnterNext={() => {
-                  categorySelectRef.current?.focus();
+                  itemSearchRef.current?.focus();
                 }}
                 placeholder="Type supplier name / phone or use arrows..."
                 onQuickAdd={() => openQuickModal('SUPPLIER', (newId) => {
                   setIsTouched(true);
                   setSupplierId(newId);
-                  setTimeout(() => categorySelectRef.current?.focus(), 40);
+                  setTimeout(() => itemSearchRef.current?.focus(), 40);
                 })}
                 quickAddTitle="Quick Create Supplier"
-              />
-            </div>
-
-            {/* CATEGORY SELECTION */}
-            <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: '8px', alignItems: 'center' }}>
-              <label style={{ fontWeight: 900, fontSize: '0.98rem' }}>CATG. :</label>
-              <SearchableSelect
-                ref={categorySelectRef}
-                options={categoryOptions}
-                value={selectedCategory}
-                onChange={val => {
-                  setIsTouched(true);
-                  setSelectedCategory(val);
-                  setSelectedItemId('');
-                }}
-                onEnterNext={() => {
-                  itemSearchRef.current?.focus();
-                }}
-                placeholder="Type category or press Enter to choose item..."
-                onQuickAdd={() => openQuickModal('ITEM', () => setIsTouched(true))}
-                quickAddTitle="Quick Create Item / Category"
               />
             </div>
 
@@ -657,7 +601,7 @@ export const PurchaseEntryView: React.FC = () => {
               <label style={{ fontWeight: 900, fontSize: '0.98rem' }}>ITEM :</label>
               <ItemSearchSelect
                 ref={itemSearchRef}
-                items={filteredCategoryItems}
+                items={items}
                 selectedItemId={selectedItemId}
                 onSelectItem={(item) => handleItemSelect(item ? item.id : '')}
                 onEnterNext={() => {

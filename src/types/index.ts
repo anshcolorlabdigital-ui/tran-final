@@ -447,6 +447,30 @@ export interface PhysicalStockAudit {
   createdAt: string;
 }
 
+export interface MaintenanceSnapshotSummary {
+  itemsCount: number;
+  partiesCount: number;
+  suppliersCount: number;
+  salesCount: number;
+  purchasesCount: number;
+  ordersCount: number;
+  selfUseCount: number;
+  stockAdjustmentsCount: number;
+  stockMovementsCount: number;
+  physicalStockAuditsCount: number;
+  partyLogsCount: number;
+  supplierLogsCount: number;
+  usersCount: number;
+  totalRecords: number;
+}
+
+export interface MaintenanceModeState {
+  enabled: boolean;
+  startedAt?: string;
+  snapshotSummary?: MaintenanceSnapshotSummary;
+  lastRestoredAt?: string;
+}
+
 export type ActiveNavTab =
   | 'DASHBOARD'
   | 'ORDER'
