@@ -2,28 +2,19 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../../db/db';
 import { StockEngine } from '../../db/stockEngine';
 import { useApp } from '../../context/AppContext';
-import { Item, Sale, Purchase, SelfUse, StockMovement } from '../../types';
+import { Item, Sale, Purchase, SelfUse } from '../../types';
 import { formatDateToDisplay, getTodayDateString } from '../../utils/dateUtils';
-import { formatCurrency } from '../../utils/calculations';
+import { calculateItemUnitBreakdown, calculateUnitBFromUnitA } from '../../utils/calculations';
 import {
-  Boxes,
-  Search,
+  FileSpreadsheet,
   Printer,
-  Download,
-  Calendar,
-  Layers,
+  Search,
   X,
-  Tag,
-  ArrowDownLeft,
-  ArrowUpRight,
   ExternalLink,
   Receipt,
   ShoppingCart,
   Building2,
-  SlidersHorizontal,
-  Info,
-  CheckCircle2,
-  AlertTriangle
+  ChevronUp
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -51,8 +42,7 @@ export const ItemLedgerReportView: React.FC = () => {
     selectedLedgerItemId,
     setSelectedLedgerItemId,
     showToast,
-    showAlert,
-    setActiveTab
+    showAlert
   } = useApp();
 
   const items = useMemo(() => db.getItems().filter(i => i.isActive !== false), [refreshKey]);
@@ -81,17 +71,40 @@ export const ItemLedgerReportView: React.FC = () => {
     return items.find(i => i.id === currentItemId);
   }, [items, currentItemId]);
 
-  // Date filters
-  const [fromDate, setFromDate] = useState<string>('2026-08-01');
-  const [toDate, setToDate] = useState<string>(getTodayDateString());
-  const [isAllTime, setIsAllTime] = useState<boolean>(true);
-  const [typeFilter, setTypeFilter] = useState<'ALL' | 'INWARD' | 'OUTWARD' | 'SALE' | 'PURCHASE' | 'SELF_USE'>('ALL');
+  // View mode toggles
+  const [showQty, setShowQty] = useState<boolean>(true);
+  const [showAmount, setShowAmount] = useState<boolean>(false);
+
+  // Search filter
   const [searchTerm, setSearchTerm] = useState<string>('');
 
   // Detailed Document Popup States
   const [selectedSaleDetail, setSelectedSaleDetail] = useState<Sale | null>(null);
   const [selectedPurchaseDetail, setSelectedPurchaseDetail] = useState<Purchase | null>(null);
   const [selectedSelfUseDetail, setSelectedSelfUseDetail] = useState<SelfUse | null>(null);
+
+  // Unit A pricing breakdown
+  const unitABreakdown = useMemo(() => {
+    if (!activeItem) {
+      return calculateItemUnitBreakdown({ basicPrice: 0 });
+    }
+    return calculateItemUnitBreakdown({
+      basicPrice: activeItem.unitA?.basicPrice ?? activeItem.purchaseRate ?? 0,
+      gstPercent: activeItem.unitA?.gstPercent ?? activeItem.gstPercent ?? 0,
+      tranPercent: activeItem.unitA?.tranPercent ?? 0,
+      misPercent: activeItem.unitA?.misPercent ?? 0,
+      profPercentDeal: activeItem.unitA?.profPercentDeal ?? activeItem.profPercentDeal ?? 0,
+      roundUpSale: activeItem.unitA?.roundUpSale ?? activeItem.roundUpSale ?? 0,
+      profPercentAm: activeItem.unitA?.profPercentAm ?? activeItem.profPercentAm ?? 0,
+      roundUpMrp: activeItem.unitA?.roundUpMrp ?? activeItem.roundUpMrp ?? 0,
+    });
+  }, [activeItem]);
+
+  // Unit B pricing breakdown
+  const unitBBreakdown = useMemo(() => {
+    const conv = activeItem?.unitB?.conversionFactor || 50;
+    return calculateUnitBFromUnitA(unitABreakdown, conv);
+  }, [unitABreakdown, activeItem]);
 
   // Build complete chronological ledger entries for the active item
   const rawLedgerEntries = useMemo<ItemLedgerEntry[]>(() => {
@@ -239,23 +252,9 @@ export const ItemLedgerReportView: React.FC = () => {
     return entries;
   }, [activeItem, stockMovements, purchases, sales, selfUses, refreshKey]);
 
-  // Filtered ledger entries based on UI filters
+  // Filtered ledger entries based on search
   const filteredLedger = useMemo<ItemLedgerEntry[]>(() => {
     return rawLedgerEntries.filter(entry => {
-      // Date filter
-      if (!isAllTime) {
-        if (fromDate && entry.date < fromDate) return false;
-        if (toDate && entry.date > toDate) return false;
-      }
-
-      // Type filter
-      if (typeFilter === 'INWARD' && entry.inwardQty <= 0) return false;
-      if (typeFilter === 'OUTWARD' && entry.outwardQty <= 0) return false;
-      if (typeFilter === 'SALE' && entry.type !== 'SALE') return false;
-      if (typeFilter === 'PURCHASE' && entry.type !== 'PURCHASE') return false;
-      if (typeFilter === 'SELF_USE' && entry.type !== 'SELF_USE') return false;
-
-      // Text search
       if (searchTerm.trim()) {
         const query = searchTerm.toLowerCase();
         const refMatch = (entry.refNo || '').toLowerCase().includes(query);
@@ -263,10 +262,9 @@ export const ItemLedgerReportView: React.FC = () => {
         const notesMatch = (entry.notes || '').toLowerCase().includes(query);
         if (!refMatch && !partyMatch && !notesMatch) return false;
       }
-
       return true;
     });
-  }, [rawLedgerEntries, fromDate, toDate, isAllTime, typeFilter, searchTerm]);
+  }, [rawLedgerEntries, searchTerm]);
 
   // Summary Metrics for the Active Item
   const itemSummary = useMemo(() => {
@@ -279,8 +277,7 @@ export const ItemLedgerReportView: React.FC = () => {
         totalSoldQty: 0,
         totalSoldValue: 0,
         totalSelfUseQty: 0,
-        totalSelfUseValue: 0,
-        isLowStock: false
+        totalSelfUseValue: 0
       };
     }
 
@@ -308,8 +305,6 @@ export const ItemLedgerReportView: React.FC = () => {
       }
     });
 
-    const isLowStock = currentStock <= Number(activeItem.minStock || 0);
-
     return {
       currentStock,
       openingStock,
@@ -318,32 +313,64 @@ export const ItemLedgerReportView: React.FC = () => {
       totalSoldQty: Number(totalSoldQty.toFixed(2)),
       totalSoldValue: Number(totalSoldValue.toFixed(2)),
       totalSelfUseQty: Number(totalSelfUseQty.toFixed(2)),
-      totalSelfUseValue: Number(totalSelfUseValue.toFixed(2)),
-      isLowStock
+      totalSelfUseValue: Number(totalSelfUseValue.toFixed(2))
     };
   }, [activeItem, rawLedgerEntries]);
 
-  // Quick preset filters
-  const setQuickFilter = (type: 'ALL' | 'TODAY' | 'MONTH' | 'YEAR') => {
-    const today = getTodayDateString();
-    if (type === 'ALL') {
-      setIsAllTime(true);
-    } else if (type === 'TODAY') {
-      setIsAllTime(false);
-      setFromDate(today);
-      setToDate(today);
-    } else if (type === 'MONTH') {
-      setIsAllTime(false);
-      const parts = today.split('-');
-      setFromDate(`${parts[0]}-${parts[1]}-01`);
-      setToDate(today);
-    } else if (type === 'YEAR') {
-      setIsAllTime(false);
-      const parts = today.split('-');
-      setFromDate(`${parts[0]}-04-01`); // Indian FY Apr 1
-      setToDate(today);
+  // Complete metrics for 6 cards: OPP, PURCHASES, SALES, PROFIT & %, SELF USE, STOCK VALUE
+  const activeItemMetrics = useMemo(() => {
+    if (!activeItem) {
+      return {
+        oppValue: 0,
+        purchasesValue: 0,
+        salesValue: 0,
+        salesProfit: 0,
+        profitPct: 0,
+        selfUseValue: 0,
+        stockValue: 0,
+        totalPurcQty: 0,
+        totalSaleQty: 0,
+        totalUseQty: 0,
+        closingStock: 0
+      };
     }
-  };
+
+    const baseRate = Number(activeItem.unitA?.basicPrice ?? activeItem.purchaseRate ?? 0);
+    const gstPct = Number(activeItem.unitA?.gstPercent ?? activeItem.gstPercent ?? 0);
+    const tranPct = Number(activeItem.unitA?.tranPercent ?? 0);
+    const misPct = Number(activeItem.unitA?.misPercent ?? 0);
+    const gstAmt = Number((baseRate * (gstPct / 100)).toFixed(2));
+    const tranAmt = Number((baseRate * (tranPct / 100)).toFixed(2));
+    const misAmt = Number((baseRate * (misPct / 100)).toFixed(2));
+    const landedCostRate = Number(
+      activeItem.unitA?.nettPrice && activeItem.unitA.nettPrice > 0
+        ? activeItem.unitA.nettPrice
+        : (baseRate + gstAmt + tranAmt + misAmt).toFixed(2)
+    );
+
+    const oppValue = Number((itemSummary.openingStock * baseRate).toFixed(2));
+    const purchasesValue = Number(itemSummary.totalPurchasedValue.toFixed(2));
+    const salesValue = Number(itemSummary.totalSoldValue.toFixed(2));
+    const saleCost = Number((itemSummary.totalSoldQty * landedCostRate).toFixed(2));
+    const salesProfit = Number((salesValue - saleCost).toFixed(2));
+    const profitPct = saleCost > 0 ? Number(((salesProfit / saleCost) * 100).toFixed(1)) : 0;
+    const selfUseValue = Number(itemSummary.totalSelfUseValue.toFixed(2));
+    const stockValue = Number((Math.max(0, itemSummary.currentStock) * baseRate).toFixed(2));
+
+    return {
+      oppValue,
+      purchasesValue,
+      salesValue,
+      salesProfit,
+      profitPct,
+      selfUseValue,
+      stockValue,
+      totalPurcQty: itemSummary.totalPurchasedQty,
+      totalSaleQty: itemSummary.totalSoldQty,
+      totalUseQty: itemSummary.totalSelfUseQty,
+      closingStock: itemSummary.currentStock
+    };
+  }, [activeItem, itemSummary]);
 
   // Open Document Detail Modal on click
   const handleOpenDocDetail = (entry: ItemLedgerEntry) => {
@@ -362,23 +389,35 @@ export const ItemLedgerReportView: React.FC = () => {
     }
   };
 
-  // Export ledger to Excel
+  // Export ledger to Excel matching layout
   const handleExportExcel = () => {
     if (!activeItem) return;
+    const baseRate = Number(activeItem.unitA?.basicPrice ?? activeItem.purchaseRate ?? 0);
     const exportRows = filteredLedger.map((entry, idx) => ({
       '#': idx + 1,
       'Date': formatDateToDisplay(entry.date),
-      'Type': entry.type,
-      'Voucher / Bill No': entry.refNo,
-      'Party / Supplier / Purpose': entry.counterparty,
-      'Rate (₹)': entry.rate,
-      'Inward (Inflow +)': entry.inwardQty > 0 ? entry.inwardQty : 0,
-      'Outward (Outflow -)': entry.outwardQty > 0 ? entry.outwardQty : 0,
-      'Running Balance': entry.runningBalance,
-      'Unit': activeItem.unit || 'Roll',
-      'Total Amount (₹)': entry.totalAmount,
-      'Remarks': entry.notes || ''
+      'Bill No': entry.refNo,
+      'Supplier / Party': entry.counterparty,
+      'Unit': activeItem.unitA?.unitName || activeItem.unit || 'PCS',
+      'B. Price': entry.rate || baseRate || 0,
+      'Purc.': entry.inwardQty > 0 ? entry.inwardQty : 0,
+      'Sale': entry.type === 'SALE' && entry.outwardQty > 0 ? entry.outwardQty : 0,
+      'Use': entry.type === 'SELF_USE' && entry.outwardQty > 0 ? entry.outwardQty : 0,
+      'Stock': entry.runningBalance
     }));
+
+    exportRows.push({
+      '#': '' as any,
+      'Date': '',
+      'Bill No': '',
+      'Supplier / Party': 'TOTAL',
+      'Unit': '',
+      'B. Price': '' as any,
+      'Purc.': activeItemMetrics.totalPurcQty,
+      'Sale': activeItemMetrics.totalSaleQty,
+      'Use': activeItemMetrics.totalUseQty,
+      'Stock': activeItemMetrics.closingStock
+    });
 
     const ws = XLSX.utils.json_to_sheet(exportRows);
     const wb = XLSX.utils.book_new();
@@ -393,533 +432,539 @@ export const ItemLedgerReportView: React.FC = () => {
   };
 
   return (
-    <div className="item-ledger-view" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {/* TOP HEADER & ITEM SWITCHER BAR */}
-      <div
-        className="glass-card"
-        style={{
-          background: '#FFFFFF',
-          border: '2px solid #000000',
-          borderRadius: '12px',
-          padding: '16px 20px',
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '14px'
-        }}
-      >
-        {/* Title & Item Selector */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: '320px' }}>
-          <div
-            style={{
-              background: '#D2BEF6',
-              border: '2px solid #000000',
-              borderRadius: '10px',
-              padding: '10px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            <Boxes size={28} color="#002B99" />
-          </div>
-
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h2 style={{ margin: 0, fontWeight: 900, fontSize: '1.35rem', color: '#002B99' }}>
-                Item Stock & Transaction Ledger
-              </h2>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#475569' }}>
-                Select Item:
-              </span>
-              <select
-                value={currentItemId}
-                onChange={e => {
-                  setCurrentItemId(e.target.value);
-                  setSelectedLedgerItemId(e.target.value);
-                }}
-                className="input-text-clean"
-                style={{
-                  fontWeight: 900,
-                  fontSize: '0.98rem',
-                  padding: '6px 12px',
-                  background: '#F0FDF4',
-                  border: '2px solid #000000',
-                  borderRadius: '8px',
-                  color: '#002B99',
-                  minWidth: '280px',
-                  maxWidth: '450px'
-                }}
-              >
-                {items.map(item => (
-                  <option key={item.id} value={item.id}>
-                    {item.name} {item.unit ? `(${item.unit})` : ''} {item.category ? `• ${item.category}` : ''}
-                  </option>
-                ))}
-              </select>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('REPORT_ITEM_STOCK')}
-                className="btn-classic"
-                style={{
-                  background: '#EFF6FF',
-                  color: '#1D4ED8',
-                  borderColor: '#93C5FD',
-                  fontSize: '0.8rem',
-                  padding: '4px 10px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}
-                title="View All Items Stock Table"
-              >
-                <Layers size={14} /> All Items Stock Report
-              </button>
-            </div>
-          </div>
+    <div className="item-ledger-view" style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: '#F8FAFC', padding: '16px', borderRadius: '12px', border: '1.5px solid #000000', position: 'relative' }}>
+      
+      {/* 1. TOP HEADER BAR */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+        <div
+          style={{
+            background: '#BFF573',
+            border: '1.5px solid #000000',
+            borderRadius: '9999px',
+            padding: '6px 28px',
+            fontWeight: 900,
+            fontSize: '1.05rem',
+            letterSpacing: '0.04em',
+            color: '#000000',
+            display: 'inline-flex',
+            alignItems: 'center'
+          }}
+        >
+          ITEM LEADGER
         </div>
 
-        {/* Action Buttons: Excel & Print */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
             type="button"
             onClick={handleExportExcel}
             className="btn-classic"
             style={{
-              background: '#047857',
+              background: '#059669',
               color: '#FFFFFF',
               fontWeight: 800,
               fontSize: '0.85rem',
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              padding: '8px 14px'
+              padding: '7px 14px',
+              borderRadius: '8px',
+              border: '1.5px solid #047857',
+              cursor: 'pointer'
             }}
           >
-            <Download size={16} /> Excel
+            <FileSpreadsheet size={16} /> Export Excel (.xlsx)
           </button>
           <button
             type="button"
             onClick={handlePrint}
             className="btn-classic"
             style={{
-              background: '#334155',
+              background: '#EF4444',
               color: '#FFFFFF',
               fontWeight: 800,
               fontSize: '0.85rem',
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              padding: '8px 14px'
+              padding: '7px 14px',
+              borderRadius: '8px',
+              border: '1.5px solid #DC2626',
+              cursor: 'pointer'
             }}
           >
-            <Printer size={16} /> Print
+            <Printer size={16} /> PRINT REPORT
           </button>
         </div>
       </div>
 
-      {/* ACTIVE ITEM DETAILS & PRICING BAR */}
-      {activeItem && (
-        <div
-          className="glass-card"
+      {/* 2. ITEM SELECTOR ROW */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <span style={{ fontWeight: 900, fontSize: '0.9rem', color: '#000000', minWidth: '95px' }}>
+          ITEM NAME
+        </span>
+        <select
+          value={currentItemId}
+          onChange={e => {
+            setCurrentItemId(e.target.value);
+            setSelectedLedgerItemId(e.target.value);
+          }}
+          className="input-text-clean"
           style={{
-            background: '#F8FAFC',
-            border: '2px solid #000000',
-            borderRadius: '12px',
-            padding: '12px 18px',
-            display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '12px'
+            fontWeight: 800,
+            fontSize: '0.92rem',
+            padding: '6px 14px',
+            border: '1.5px solid #000000',
+            borderRadius: '6px',
+            minWidth: '280px',
+            maxWidth: '480px',
+            background: '#FFFFFF'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 900, fontSize: '1.05rem', color: '#1E293B' }}>
-              📦 {activeItem.name}
-            </span>
-            <span style={{ background: '#E2E8F0', padding: '2px 8px', borderRadius: '4px', fontSize: '0.78rem', fontWeight: 800, color: '#334155' }}>
-              Category: {activeItem.category || 'General'}
-            </span>
-            <span style={{ background: '#DBEAFE', padding: '2px 8px', borderRadius: '4px', fontSize: '0.78rem', fontWeight: 800, color: '#1E40AF' }}>
-              Unit: {activeItem.unit || 'Roll'}
-            </span>
-            {activeItem.minStock !== undefined && activeItem.minStock > 0 && (
-              <span style={{ background: '#FEF3C7', padding: '2px 8px', borderRadius: '4px', fontSize: '0.78rem', fontWeight: 800, color: '#92400E' }}>
-                Min Stock: {activeItem.minStock} {activeItem.unit}
-              </span>
-            )}
-          </div>
+          {items.map(item => (
+            <option key={item.id} value={item.id}>
+              {item.name} {item.unit ? `(${item.unit})` : ''} {item.category ? `• ${item.category}` : ''}
+            </option>
+          ))}
+        </select>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.82rem', fontWeight: 700, color: '#475569' }}>
-            <span>Basic: <strong style={{ color: '#002B99' }}>₹{activeItem.unitA?.basicPrice ?? activeItem.purchaseRate ?? 0}</strong></span>
-            <span>•</span>
-            <span>GST: <strong>{activeItem.gstPercent || 0}%</strong></span>
-            <span>•</span>
-            <span>Sale Price (Dealer): <strong style={{ color: '#16A34A' }}>₹{activeItem.saleRate || activeItem.unitA?.salePrice || (activeItem.unitA?.basicPrice ?? activeItem.purchaseRate ?? 0)}</strong></span>
-            <span>•</span>
-            <span>MRP (Amateur): <strong style={{ color: '#9333EA' }}>₹{activeItem.mrp || activeItem.unitA?.mrp || (activeItem.unitA?.basicPrice ?? activeItem.purchaseRate ?? 0)}</strong></span>
-          </div>
-        </div>
-      )}
-
-      {/* KPI SUMMARY CARDS */}
-      {activeItem && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-          {/* Card 1: Current Stock */}
-          <div
-            style={{
-              background: itemSummary.isLowStock ? '#FEF2F2' : '#F0FDF4',
-              border: '2px solid #000000',
-              borderRadius: '10px',
-              padding: '12px 16px',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 800, color: itemSummary.isLowStock ? '#991B1B' : '#166534', textTransform: 'uppercase' }}>
-                Current Physical Stock
-              </span>
-              {itemSummary.isLowStock ? (
-                <span style={{ background: '#FEE2E2', color: '#DC2626', fontSize: '0.68rem', fontWeight: 900, padding: '2px 6px', borderRadius: '4px' }}>
-                  LOW STOCK
-                </span>
-              ) : (
-                <span style={{ background: '#DCFCE7', color: '#15803D', fontSize: '0.68rem', fontWeight: 900, padding: '2px 6px', borderRadius: '4px' }}>
-                  HEALTHY
-                </span>
-              )}
-            </div>
-            <div style={{ fontSize: '1.65rem', fontWeight: 900, color: itemSummary.isLowStock ? '#DC2626' : '#16A34A', marginTop: '2px' }}>
-              {itemSummary.currentStock} <span style={{ fontSize: '0.9rem', fontWeight: 700 }}>{activeItem.unit || 'Roll'}</span>
-            </div>
-            <div style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 600 }}>
-              Opening: {itemSummary.openingStock} {activeItem.unit || 'Roll'}
-            </div>
-          </div>
-
-          {/* Card 2: Total Purchased (Inflow) */}
-          <div
-            style={{
-              background: '#FFFFFF',
-              border: '2px solid #000000',
-              borderRadius: '10px',
-              padding: '12px 16px',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center'
-            }}
-          >
-            <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#047857', textTransform: 'uppercase' }}>
-              Total Inflow (Purchased)
-            </div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#047857', marginTop: '2px' }}>
-              +{itemSummary.totalPurchasedQty} <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>{activeItem.unit || 'Roll'}</span>
-            </div>
-            <div style={{ fontSize: '0.72rem', color: '#065F46', fontWeight: 700 }}>
-              Purchase Value: ₹{itemSummary.totalPurchasedValue}
-            </div>
-          </div>
-
-          {/* Card 3: Total Sold (Outflow) */}
-          <div
-            style={{
-              background: '#FFFFFF',
-              border: '2px solid #000000',
-              borderRadius: '10px',
-              padding: '12px 16px',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center'
-            }}
-          >
-            <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#1E40AF', textTransform: 'uppercase' }}>
-              Total Outflow (Sold)
-            </div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#1D4ED8', marginTop: '2px' }}>
-              -{itemSummary.totalSoldQty} <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>{activeItem.unit || 'Roll'}</span>
-            </div>
-            <div style={{ fontSize: '0.72rem', color: '#1E3A8A', fontWeight: 700 }}>
-              Sales Billed: ₹{itemSummary.totalSoldValue}
-            </div>
-          </div>
-
-          {/* Card 4: Total Self-Used */}
-          <div
-            style={{
-              background: '#FFFFFF',
-              border: '2px solid #000000',
-              borderRadius: '10px',
-              padding: '12px 16px',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center'
-            }}
-          >
-            <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#6B21A8', textTransform: 'uppercase' }}>
-              Self-Use / Internal
-            </div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#7E22CE', marginTop: '2px' }}>
-              -{itemSummary.totalSelfUseQty} <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>{activeItem.unit || 'Roll'}</span>
-            </div>
-            <div style={{ fontSize: '0.72rem', color: '#581C87', fontWeight: 700 }}>
-              Consumed Value: ₹{itemSummary.totalSelfUseValue}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* FILTER & SEARCH TOOLBAR */}
-      <div
-        className="glass-card"
-        style={{
-          background: '#FFFFFF',
-          border: '2px solid #000000',
-          borderRadius: '10px',
-          padding: '12px 16px',
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '12px'
-        }}
-      >
-        {/* Left: Date Presets & Inputs */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', gap: '4px', background: '#F1F5F9', padding: '3px', borderRadius: '8px' }}>
-            <button
-              type="button"
-              onClick={() => setQuickFilter('ALL')}
-              style={{
-                padding: '4px 10px',
-                fontSize: '0.78rem',
-                fontWeight: 800,
-                borderRadius: '6px',
-                border: 'none',
-                cursor: 'pointer',
-                background: isAllTime ? '#002B99' : 'transparent',
-                color: isAllTime ? '#FFFFFF' : '#475569'
-              }}
-            >
-              All Time
-            </button>
-            <button
-              type="button"
-              onClick={() => setQuickFilter('TODAY')}
-              style={{
-                padding: '4px 10px',
-                fontSize: '0.78rem',
-                fontWeight: 800,
-                borderRadius: '6px',
-                border: 'none',
-                cursor: 'pointer',
-                background: !isAllTime && fromDate === getTodayDateString() && toDate === getTodayDateString() ? '#002B99' : 'transparent',
-                color: !isAllTime && fromDate === getTodayDateString() && toDate === getTodayDateString() ? '#FFFFFF' : '#475569'
-              }}
-            >
-              Today
-            </button>
-            <button
-              type="button"
-              onClick={() => setQuickFilter('MONTH')}
-              style={{
-                padding: '4px 10px',
-                fontSize: '0.78rem',
-                fontWeight: 800,
-                borderRadius: '6px',
-                border: 'none',
-                cursor: 'pointer',
-                background: !isAllTime && fromDate.endsWith('-01') && toDate === getTodayDateString() ? '#002B99' : 'transparent',
-                color: !isAllTime && fromDate.endsWith('-01') && toDate === getTodayDateString() ? '#FFFFFF' : '#475569'
-              }}
-            >
-              This Month
-            </button>
-            <button
-              type="button"
-              onClick={() => setQuickFilter('YEAR')}
-              style={{
-                padding: '4px 10px',
-                fontSize: '0.78rem',
-                fontWeight: 800,
-                borderRadius: '6px',
-                border: 'none',
-                cursor: 'pointer',
-                background: !isAllTime && fromDate.endsWith('-04-01') ? '#002B99' : 'transparent',
-                color: !isAllTime && fromDate.endsWith('-04-01') ? '#FFFFFF' : '#475569'
-              }}
-            >
-              This FY
-            </button>
-          </div>
-
-          {/* Custom Date Pickers */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', fontWeight: 700 }}>
-            <span>From:</span>
-            <input
-              type="date"
-              className="input-text-clean"
-              value={fromDate}
-              onChange={e => {
-                setFromDate(e.target.value);
-                setIsAllTime(false);
-              }}
-              style={{ padding: '3px 8px', fontSize: '0.8rem', width: '130px' }}
-            />
-            <span>To:</span>
-            <input
-              type="date"
-              className="input-text-clean"
-              value={toDate}
-              onChange={e => {
-                setToDate(e.target.value);
-                setIsAllTime(false);
-              }}
-              style={{ padding: '3px 8px', fontSize: '0.8rem', width: '130px' }}
-            />
-          </div>
-        </div>
-
-        {/* Right: Type Filter & Text Search */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <select
-            value={typeFilter}
-            onChange={e => setTypeFilter(e.target.value as any)}
+        {/* Quick Search */}
+        <div style={{ position: 'relative', width: '220px', marginLeft: 'auto' }}>
+          <Search size={15} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+          <input
+            type="text"
             className="input-text-clean"
-            style={{ fontWeight: 800, fontSize: '0.82rem', padding: '4px 8px', height: '32px' }}
-          >
-            <option value="ALL">All Types</option>
-            <option value="INWARD">Inward Only (+)</option>
-            <option value="OUTWARD">Outward Only (-)</option>
-            <option value="SALE">Sales (Invoices)</option>
-            <option value="PURCHASE">Purchases (Stock In)</option>
-            <option value="SELF_USE">Self-Use (Consumed)</option>
-          </select>
+            placeholder="Search bill or party..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            style={{ paddingLeft: '28px', fontSize: '0.82rem', height: '32px', width: '100%', borderRadius: '6px', border: '1.5px solid #CBD5E1' }}
+          />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => setSearchTerm('')}
+              style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}
+            >
+              <X size={14} color="#94A3B8" />
+            </button>
+          )}
+        </div>
+      </div>
 
-          <div style={{ position: 'relative', width: '220px' }}>
-            <Search size={15} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
-            <input
-              type="text"
-              className="input-text-clean"
-              placeholder="Search Bill / Party..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              style={{ paddingLeft: '28px', fontSize: '0.82rem', height: '32px' }}
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => setSearchTerm('')}
-                style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}
+      {/* 3. ITEM PRICING BREAKDOWN (UNIT-A & UNIT-B) */}
+      <div style={{ background: '#FFFFFF', border: '1.5px solid #E2E8F0', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        
+        {/* UNIT-A SECTION */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontWeight: 900, fontSize: '0.88rem', color: '#000000' }}>UNIT-A :</span>
+              <span
+                style={{
+                  border: '1.5px solid #F43F5E',
+                  color: '#E11D48',
+                  background: '#FFF1F2',
+                  padding: '2px 14px',
+                  borderRadius: '4px',
+                  fontWeight: 900,
+                  fontSize: '0.85rem'
+                }}
               >
-                <X size={14} color="#94A3B8" />
-              </button>
-            )}
+                {activeItem?.unitA?.unitName || activeItem?.unit || 'PIC'}
+              </span>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 800, cursor: 'default' }}>
+                <input type="checkbox" checked={activeItem?.unitA?.isActive !== false} readOnly style={{ accentColor: '#2563EB', width: '16px', height: '16px' }} />
+                Active
+              </label>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontWeight: 800, fontSize: '0.82rem', color: '#000000' }}>Min Stock :</span>
+              <span
+                style={{
+                  border: '1.5px solid #000000',
+                  padding: '3px 18px',
+                  borderRadius: '4px',
+                  fontWeight: 900,
+                  fontSize: '0.85rem',
+                  background: '#FFFFFF',
+                  minWidth: '60px',
+                  textAlign: 'center'
+                }}
+              >
+                {activeItem?.minStock ?? 0}
+              </span>
+            </div>
+          </div>
+
+          {/* Unit A 10-column pricing table */}
+          <div className="pricing-calc-scroll-wrapper">
+            <div className="pricing-calc-grid-10" style={{ gap: '6px' }}>
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Besic Price</label>
+                <div style={{ border: '1.5px solid #000000', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                  {unitABreakdown.basicPrice}
+                </div>
+                <div className="subtext-calc-red">{unitABreakdown.basicPrice}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>GST %</label>
+                <div style={{ border: '1.5px solid #000000', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                  {unitABreakdown.gstPercent}
+                </div>
+                <div className="subtext-calc-red">{unitABreakdown.gstAmt}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>tran%</label>
+                <div style={{ border: '1.5px solid #000000', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                  {unitABreakdown.tranPercent}
+                </div>
+                <div className="subtext-calc-red">{unitABreakdown.tranAmt}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>mis%</label>
+                <div style={{ border: '1.5px solid #000000', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                  {unitABreakdown.misPercent}
+                </div>
+                <div className="subtext-calc-red">{unitABreakdown.misAmt}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Prof% -S</label>
+                <div style={{ border: '1.5px solid #8B5CF6', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                  {unitABreakdown.profPercentDeal}
+                </div>
+                <div className="subtext-calc-red">{unitABreakdown.profDealAmt}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Round-S</label>
+                <div style={{ border: '1.5px solid #8B5CF6', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                  {unitABreakdown.roundUpSale}
+                </div>
+                <div className="subtext-calc-red">{unitABreakdown.roundUpSale}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#2563EB' }}>Sale Price</label>
+                <div style={{ border: '2px solid #2563EB', borderRadius: '4px', padding: '4px', fontWeight: 900, fontSize: '0.92rem', background: '#EFF6FF', color: '#1D4ED8', textAlign: 'center' }}>
+                  {unitABreakdown.salePrice}
+                </div>
+                <div className="subtext-calc-red">{unitABreakdown.salePrice}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Prof% -M</label>
+                <div style={{ border: '1.5px solid #3B82F6', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                  {unitABreakdown.profPercentAm}
+                </div>
+                <div className="subtext-calc-red">{unitABreakdown.profAmAmt}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Round-M</label>
+                <div style={{ border: '1.5px solid #3B82F6', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                  {unitABreakdown.roundUpMrp}
+                </div>
+                <div className="subtext-calc-red">{unitABreakdown.roundUpMrp}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#2563EB' }}>mrp</label>
+                <div style={{ border: '2px solid #2563EB', borderRadius: '4px', padding: '4px', fontWeight: 900, fontSize: '0.92rem', background: '#EFF6FF', color: '#1D4ED8', textAlign: 'center' }}>
+                  {unitABreakdown.mrp}
+                </div>
+                <div className="subtext-calc-red">{unitABreakdown.mrp}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* UNIT-B SECTION */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '8px', borderTop: '1px dashed #CBD5E1' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontWeight: 900, fontSize: '0.88rem', color: '#000000' }}>UNIT-B :</span>
+              <span
+                style={{
+                  border: '1.5px solid #F43F5E',
+                  color: '#E11D48',
+                  background: '#FFF1F2',
+                  padding: '2px 14px',
+                  borderRadius: '4px',
+                  fontWeight: 900,
+                  fontSize: '0.85rem'
+                }}
+              >
+                {activeItem?.unitB?.unitName || 'Mt'}
+              </span>
+              <span style={{ fontWeight: 800, fontSize: '0.85rem', color: '#000000' }}>
+                1 {activeItem?.unitA?.unitName || activeItem?.unit || 'PIC'} ={' '}
+                <span style={{ border: '1.5px solid #059669', padding: '2px 10px', borderRadius: '4px', fontWeight: 900, color: '#059669', background: '#ECFDF5' }}>
+                  {activeItem?.unitB?.conversionFactor || 50}
+                </span>{' '}
+                {activeItem?.unitB?.unitName || 'Mt'}
+              </span>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 800, cursor: 'default' }}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(activeItem?.hasSecondaryUnit || activeItem?.unitB?.isActive)}
+                  readOnly
+                  style={{ accentColor: '#2563EB', width: '16px', height: '16px' }}
+                />
+                Active Unit B
+              </label>
+            </div>
+          </div>
+
+          {/* Unit B 10-column pricing table */}
+          <div className="pricing-calc-scroll-wrapper">
+            <div className="pricing-calc-grid-10" style={{ gap: '6px' }}>
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Besic Price</label>
+                <div style={{ border: '1.5px solid #000000', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                  {unitBBreakdown.basicPrice}
+                </div>
+                <div className="subtext-calc-red">{unitBBreakdown.basicPrice}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>GST %</label>
+                <div style={{ border: '1.5px solid #000000', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                  {unitBBreakdown.gstPercent}
+                </div>
+                <div className="subtext-calc-red">{unitBBreakdown.gstAmt}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>tran%</label>
+                <div style={{ border: '1.5px solid #000000', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                  {unitBBreakdown.tranPercent}
+                </div>
+                <div className="subtext-calc-red">{unitBBreakdown.tranAmt}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>mis%</label>
+                <div style={{ border: '1.5px solid #000000', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                  {unitBBreakdown.misPercent}
+                </div>
+                <div className="subtext-calc-red">{unitBBreakdown.misAmt}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Prof% -S</label>
+                <div style={{ border: '1.5px solid #8B5CF6', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                  {unitBBreakdown.profPercentDeal}
+                </div>
+                <div className="subtext-calc-red">{unitBBreakdown.profDealAmt}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Round-S</label>
+                <div style={{ border: '1.5px solid #8B5CF6', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                  {unitBBreakdown.roundUpSale}
+                </div>
+                <div className="subtext-calc-red">{unitBBreakdown.roundUpSale}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#2563EB' }}>Sale Price</label>
+                <div style={{ border: '2px solid #2563EB', borderRadius: '4px', padding: '4px', fontWeight: 900, fontSize: '0.92rem', background: '#EFF6FF', color: '#1D4ED8', textAlign: 'center' }}>
+                  {unitBBreakdown.salePrice}
+                </div>
+                <div className="subtext-calc-red">{unitBBreakdown.salePrice}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Prof% -M</label>
+                <div style={{ border: '1.5px solid #3B82F6', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                  {unitBBreakdown.profPercentAm}
+                </div>
+                <div className="subtext-calc-red">{unitBBreakdown.profAmAmt}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Round-M</label>
+                <div style={{ border: '1.5px solid #3B82F6', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                  {unitBBreakdown.roundUpMrp}
+                </div>
+                <div className="subtext-calc-red">{unitBBreakdown.roundUpMrp}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#2563EB' }}>mrp</label>
+                <div style={{ border: '2px solid #2563EB', borderRadius: '4px', padding: '4px', fontWeight: 900, fontSize: '0.92rem', background: '#EFF6FF', color: '#1D4ED8', textAlign: 'center' }}>
+                  {unitBBreakdown.mrp}
+                </div>
+                <div className="subtext-calc-red">{unitBBreakdown.mrp}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      {/* 4. 6 SUMMARY CARDS */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px' }}>
+        {/* Card 1: OPP. VALUE */}
+        <div style={{ background: '#FFFFFF', border: '1.5px solid #94A3B8', borderRadius: '6px', padding: '8px 6px', textAlign: 'center' }}>
+          <div style={{ color: '#DC2626', fontWeight: 900, fontSize: '0.76rem', letterSpacing: '0.03em' }}>
+            OPP. VALUE
+          </div>
+          <div style={{ fontWeight: 900, fontSize: '1.1rem', color: '#000000', marginTop: '4px' }}>
+            ₹{activeItemMetrics.oppValue}
+          </div>
+        </div>
+
+        {/* Card 2: PURCHASES VALUE */}
+        <div style={{ background: '#FFFFFF', border: '1.5px solid #94A3B8', borderRadius: '6px', padding: '8px 6px', textAlign: 'center' }}>
+          <div style={{ color: '#DC2626', fontWeight: 900, fontSize: '0.76rem', letterSpacing: '0.03em' }}>
+            PURCHASES VALUE
+          </div>
+          <div style={{ fontWeight: 900, fontSize: '1.1rem', color: '#000000', marginTop: '4px' }}>
+            ₹{activeItemMetrics.purchasesValue}
+          </div>
+        </div>
+
+        {/* Card 3: SALES VALUE */}
+        <div style={{ background: '#FFFFFF', border: '1.5px solid #94A3B8', borderRadius: '6px', padding: '8px 6px', textAlign: 'center' }}>
+          <div style={{ color: '#DC2626', fontWeight: 900, fontSize: '0.76rem', letterSpacing: '0.03em' }}>
+            SALES VALUE
+          </div>
+          <div style={{ fontWeight: 900, fontSize: '1.1rem', color: '#000000', marginTop: '4px' }}>
+            ₹{activeItemMetrics.salesValue}
+          </div>
+        </div>
+
+        {/* Card 4: SALES PROFIT VLAUE & % */}
+        <div style={{ background: '#FFFFFF', border: '1.5px solid #10B981', borderRadius: '6px', padding: '8px 6px', textAlign: 'center' }}>
+          <div style={{ color: '#DC2626', fontWeight: 900, fontSize: '0.76rem', letterSpacing: '0.03em' }}>
+            SALES PROFIT VLAUE & %
+          </div>
+          <div style={{ fontWeight: 900, fontSize: '1.05rem', color: activeItemMetrics.salesProfit >= 0 ? '#15803D' : '#DC2626', marginTop: '4px' }}>
+            ₹{activeItemMetrics.salesProfit} <span style={{ fontSize: '0.78rem', fontWeight: 800 }}>({activeItemMetrics.profitPct}%)</span>
+          </div>
+        </div>
+
+        {/* Card 5: SELF USE */}
+        <div style={{ background: '#FFFFFF', border: '1.5px solid #94A3B8', borderRadius: '6px', padding: '8px 6px', textAlign: 'center' }}>
+          <div style={{ color: '#DC2626', fontWeight: 900, fontSize: '0.76rem', letterSpacing: '0.03em' }}>
+            SELF USE
+          </div>
+          <div style={{ fontWeight: 900, fontSize: '1.1rem', color: '#000000', marginTop: '4px' }}>
+            ₹{activeItemMetrics.selfUseValue}
+          </div>
+        </div>
+
+        {/* Card 6: STOCK VALUE */}
+        <div style={{ background: '#FFFFFF', border: '1.5px solid #10B981', borderRadius: '6px', padding: '8px 6px', textAlign: 'center' }}>
+          <div style={{ color: '#DC2626', fontWeight: 900, fontSize: '0.76rem', letterSpacing: '0.03em' }}>
+            STOCK VALUE
+          </div>
+          <div style={{ fontWeight: 900, fontSize: '1.1rem', color: '#000000', marginTop: '4px' }}>
+            ₹{activeItemMetrics.stockValue}
           </div>
         </div>
       </div>
 
-      {/* CHRONOLOGICAL TRANSACTION LEDGER TABLE */}
-      <div
-        className="glass-card"
-        style={{
-          background: '#FFFFFF',
-          border: '2px solid #000000',
-          borderRadius: '12px',
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column'
-        }}
-      >
-        <div
-          style={{
-            background: '#D2BEF6',
-            padding: '10px 16px',
-            borderBottom: '2px solid #000000',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontWeight: 900, fontSize: '0.98rem', color: '#002B99' }}>
-              Transaction History ({filteredLedger.length} Records)
-            </span>
-            <span style={{ fontSize: '0.78rem', color: '#475569', fontWeight: 700 }}>
-              💡 Click any Voucher / Bill number to view complete line items & breakdown
-            </span>
-          </div>
+      {/* 5. CHECKBOX & OPENING STOCK ROW */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px', marginTop: '4px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontWeight: 800, fontSize: '0.88rem', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={showQty}
+              onChange={e => setShowQty(e.target.checked)}
+              style={{ accentColor: '#2563EB', width: '16px', height: '16px', cursor: 'pointer' }}
+            />
+            Show Qty
+          </label>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontWeight: 800, fontSize: '0.88rem', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={showAmount}
+              onChange={e => setShowAmount(e.target.checked)}
+              style={{ accentColor: '#2563EB', width: '16px', height: '16px', cursor: 'pointer' }}
+            />
+            Show Amount
+          </label>
         </div>
 
-        <div className="table-responsive-wrapper" style={{ maxHeight: '550px' }}>
-          <table className="custom-table" style={{ width: '100%', minWidth: '780px', borderCollapse: 'collapse' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontWeight: 900, fontSize: '0.88rem', color: '#000000' }}>OPP.</span>
+          <span style={{ fontWeight: 800, fontSize: '0.85rem', color: '#374151' }}>Opening Stock</span>
+          <span
+            style={{
+              border: '1.5px solid #000000',
+              padding: '3px 18px',
+              borderRadius: '4px',
+              fontWeight: 900,
+              fontSize: '0.88rem',
+              background: '#FFFFFF',
+              minWidth: '60px',
+              textAlign: 'center'
+            }}
+          >
+            {itemSummary.openingStock}
+          </span>
+        </div>
+      </div>
+
+      {/* 6. CHRONOLOGICAL TRANSACTION LEDGER TABLE */}
+      <div style={{ background: '#FFFFFF', border: '1.5px solid #000000', overflow: 'hidden' }}>
+        <div className="table-responsive-wrapper" style={{ maxHeight: '600px' }}>
+          <table style={{ width: '100%', minWidth: '780px', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
-              <tr style={{ background: '#ECECEC', borderBottom: '2px solid #000000', fontSize: '0.82rem' }}>
-                <th style={{ padding: '8px 10px', textAlign: 'center', width: '40px' }}>#</th>
-                <th style={{ padding: '8px 10px', textAlign: 'center', width: '95px' }}>Date</th>
-                <th style={{ padding: '8px 10px', textAlign: 'left', width: '130px' }}>Type</th>
-                <th style={{ padding: '8px 10px', textAlign: 'left', width: '130px' }}>Voucher / Bill No</th>
-                <th style={{ padding: '8px 10px', textAlign: 'left' }}>Party / Supplier / Purpose</th>
-                <th style={{ padding: '8px 10px', textAlign: 'right', width: '90px' }}>Rate (₹)</th>
-                <th style={{ padding: '8px 10px', textAlign: 'right', width: '95px' }}>Inward (+)</th>
-                <th style={{ padding: '8px 10px', textAlign: 'right', width: '95px' }}>Outward (-)</th>
-                <th style={{ padding: '8px 10px', textAlign: 'right', width: '110px' }}>Running Bal</th>
-                <th style={{ padding: '8px 10px', textAlign: 'right', width: '105px' }}>Amount (₹)</th>
-                <th style={{ padding: '8px 10px', textAlign: 'left', width: '140px' }}>Remarks</th>
-                <th style={{ padding: '8px 10px', textAlign: 'center', width: '75px' }}>Action</th>
+              <tr style={{ background: '#D4C4FB', borderBottom: '1.5px solid #000000' }}>
+                <th style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 900, fontSize: '0.82rem', color: '#000000', borderRight: '1.5px solid #000000', width: '100px' }}>DATE</th>
+                <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 900, fontSize: '0.82rem', color: '#000000', borderRight: '1.5px solid #000000', width: '120px' }}>BILL NO.</th>
+                <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 900, fontSize: '0.82rem', color: '#000000', borderRight: '1.5px solid #000000' }}>SUPPLIER</th>
+                <th style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 900, fontSize: '0.82rem', color: '#000000', borderRight: '1.5px solid #000000', width: '65px' }}>UNIT</th>
+                <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, fontSize: '0.82rem', color: '#000000', borderRight: '1.5px solid #000000', width: '90px' }}>B. PRICE</th>
+                <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, fontSize: '0.82rem', color: '#000000', borderRight: '1.5px solid #000000', width: '85px' }}>PURC.</th>
+                <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, fontSize: '0.82rem', color: '#000000', borderRight: '1.5px solid #000000', width: '85px' }}>SALE</th>
+                <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, fontSize: '0.82rem', color: '#000000', borderRight: '1.5px solid #000000', width: '85px' }}>USE</th>
+                <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, fontSize: '0.82rem', color: '#000000', width: '90px' }}>STOCK</th>
               </tr>
             </thead>
             <tbody>
               {filteredLedger.length === 0 ? (
                 <tr>
-                  <td colSpan={12} style={{ padding: '40px', textAlign: 'center', color: '#64748B', fontWeight: 700 }}>
-                    No stock movements or transactions found for {activeItem?.name || 'this item'} in the selected range.
+                  <td colSpan={9} style={{ padding: '40px', textAlign: 'center', color: '#64748B', fontWeight: 700 }}>
+                    No transactions recorded for {activeItem?.name || 'this item'}.
                   </td>
                 </tr>
               ) : (
-                filteredLedger.map((entry, index) => {
+                filteredLedger.map(entry => {
                   const isSale = entry.type === 'SALE';
-                  const isPurchase = entry.type === 'PURCHASE';
                   const isSelfUse = entry.type === 'SELF_USE';
-                  const isOpening = entry.type === 'OPENING';
-                  const hasDocModal = Boolean(entry.saleDoc || entry.purchaseDoc || entry.selfUseDoc);
+                  const hasDoc = Boolean(entry.saleDoc || entry.purchaseDoc || entry.selfUseDoc);
+
+                  const purcVal = entry.inwardQty > 0
+                    ? (showAmount && !showQty ? `₹${entry.totalAmount}` : (showAmount && showQty ? `${entry.inwardQty} (₹${entry.totalAmount})` : entry.inwardQty))
+                    : '';
+                  const saleVal = isSale && entry.outwardQty > 0
+                    ? (showAmount && !showQty ? `₹${entry.totalAmount}` : (showAmount && showQty ? `${entry.outwardQty} (₹${entry.totalAmount})` : entry.outwardQty))
+                    : '';
+                  const useVal = isSelfUse && entry.outwardQty > 0
+                    ? (showAmount && !showQty ? `₹${entry.totalAmount}` : (showAmount && showQty ? `${entry.outwardQty} (₹${entry.totalAmount})` : entry.outwardQty))
+                    : '';
+                  const baseRate = activeItem?.unitA?.basicPrice ?? activeItem?.purchaseRate ?? entry.rate;
+                  const runningStockVal = Number((entry.runningBalance * baseRate).toFixed(2));
+                  const stockDisplay = showAmount && !showQty
+                    ? `₹${runningStockVal}`
+                    : (showAmount && showQty ? `${entry.runningBalance} (₹${runningStockVal})` : entry.runningBalance);
 
                   return (
-                    <tr
-                      key={entry.id}
-                      style={{
-                        borderBottom: '1px solid #E2E8F0',
-                        background: isSale ? '#EFF6FF' : isPurchase ? '#F0FDF4' : isSelfUse ? '#FAF5FF' : '#FFFFFF'
-                      }}
-                    >
-                      <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700, color: '#64748B' }}>
-                        {index + 1}
-                      </td>
-                      <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700, fontSize: '0.82rem' }}>
+                    <tr key={entry.id} style={{ borderBottom: '1px solid #E2E8F0', height: '36px' }}>
+                      <td style={{ padding: '6px 10px', textAlign: 'center', fontSize: '0.85rem', fontWeight: 700, borderRight: '1px solid #CBD5E1' }}>
                         {formatDateToDisplay(entry.date)}
                       </td>
-                      <td style={{ padding: '8px 10px', textAlign: 'left' }}>
-                        <span
-                          style={{
-                            background: isSale ? '#DBEAFE' : isPurchase ? '#DCFCE7' : isSelfUse ? '#F3E8FF' : '#FEF3C7',
-                            color: isSale ? '#1E40AF' : isPurchase ? '#15803D' : isSelfUse ? '#6B21A8' : '#92400E',
-                            fontSize: '0.75rem',
-                            fontWeight: 900,
-                            padding: '2px 8px',
-                            borderRadius: '4px'
-                          }}
-                        >
-                          {isSale ? '📄 SALE' : isPurchase ? '🛒 PURCHASE' : isSelfUse ? '🏢 SELF USE' : isOpening ? '📌 OPENING' : '⚖️ ADJUSTMENT'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '8px 10px', textAlign: 'left' }}>
-                        {hasDocModal ? (
+                      <td style={{ padding: '6px 10px', textAlign: 'left', fontSize: '0.85rem', fontWeight: 800, borderRight: '1px solid #CBD5E1' }}>
+                        {hasDoc ? (
                           <button
                             type="button"
                             onClick={() => handleOpenDocDetail(entry)}
@@ -928,71 +973,105 @@ export const ItemLedgerReportView: React.FC = () => {
                               border: 'none',
                               color: '#002B99',
                               fontWeight: 900,
-                              fontSize: '0.88rem',
+                              fontSize: '0.85rem',
                               cursor: 'pointer',
+                              textDecoration: 'underline',
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '4px',
-                              textDecoration: 'underline',
                               padding: 0
                             }}
-                            title="Click to view complete itemized bill breakdown"
+                            title="View Document Details"
                           >
                             <span>{entry.refNo}</span>
-                            <ExternalLink size={12} />
+                            <ExternalLink size={11} />
                           </button>
                         ) : (
-                          <span style={{ fontWeight: 800, color: '#334155' }}>{entry.refNo}</span>
+                          entry.refNo
                         )}
                       </td>
-                      <td style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 700, fontSize: '0.85rem' }}>
+                      <td style={{ padding: '6px 10px', textAlign: 'left', fontSize: '0.85rem', fontWeight: 800, borderRight: '1px solid #CBD5E1' }}>
                         {entry.counterparty}
                       </td>
-                      <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, fontSize: '0.85rem' }}>
-                        {entry.rate > 0 ? `₹${entry.rate}` : '-'}
+                      <td style={{ padding: '6px 10px', textAlign: 'center', fontSize: '0.85rem', fontWeight: 700, borderRight: '1px solid #CBD5E1' }}>
+                        {activeItem?.unitA?.unitName || activeItem?.unit || 'PCS'}
                       </td>
-                      <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, color: '#16A34A' }}>
-                        {entry.inwardQty > 0 ? `+${entry.inwardQty}` : '-'}
+                      <td style={{ padding: '6px 10px', textAlign: 'right', fontSize: '0.85rem', fontWeight: 700, borderRight: '1px solid #CBD5E1' }}>
+                        {entry.rate || baseRate || 0}
                       </td>
-                      <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, color: '#DC2626' }}>
-                        {entry.outwardQty > 0 ? `-${entry.outwardQty}` : '-'}
+                      <td style={{ padding: '6px 10px', textAlign: 'right', fontSize: '0.85rem', fontWeight: 800, color: '#047857', borderRight: '1px solid #CBD5E1' }}>
+                        {purcVal}
                       </td>
-                      <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, color: '#002B99' }}>
-                        {entry.runningBalance} <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748B' }}>{activeItem?.unit || ''}</span>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', fontSize: '0.85rem', fontWeight: 800, color: '#1D4ED8', borderRight: '1px solid #CBD5E1' }}>
+                        {saleVal}
                       </td>
-                      <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#1E293B' }}>
-                        {entry.totalAmount > 0 ? `₹${entry.totalAmount}` : '-'}
+                      <td style={{ padding: '6px 10px', textAlign: 'right', fontSize: '0.85rem', fontWeight: 800, color: '#7E22CE', borderRight: '1px solid #CBD5E1' }}>
+                        {useVal}
                       </td>
-                      <td style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.8rem', color: '#64748B' }}>
-                        {entry.notes || '-'}
-                      </td>
-                      <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                        {hasDocModal && (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenDocDetail(entry)}
-                            className="btn-classic"
-                            style={{
-                              padding: '2px 8px',
-                              fontSize: '0.74rem',
-                              fontWeight: 800,
-                              background: '#EFF6FF',
-                              color: '#1D4ED8',
-                              borderColor: '#93C5FD'
-                            }}
-                          >
-                            View
-                          </button>
-                        )}
+                      <td style={{ padding: '6px 10px', textAlign: 'right', fontSize: '0.85rem', fontWeight: 900, color: '#000000' }}>
+                        {stockDisplay}
                       </td>
                     </tr>
                   );
                 })
               )}
             </tbody>
+            <tfoot>
+              <tr style={{ background: '#D4C4FB', borderTop: '1.5px solid #000000', fontWeight: 900, fontSize: '0.92rem' }}>
+                <td colSpan={5} style={{ padding: '10px 14px', textAlign: 'left', borderRight: '1.5px solid #000000', color: '#000000' }}>
+                  TOTAL
+                </td>
+                <td style={{ padding: '10px 10px', textAlign: 'right', borderRight: '1.5px solid #000000', color: '#000000' }}>
+                  {showAmount && !showQty
+                    ? `₹${activeItemMetrics.purchasesValue}`
+                    : (showAmount && showQty ? `${activeItemMetrics.totalPurcQty} (₹${activeItemMetrics.purchasesValue})` : activeItemMetrics.totalPurcQty)}
+                </td>
+                <td style={{ padding: '10px 10px', textAlign: 'right', borderRight: '1.5px solid #000000', color: '#000000' }}>
+                  {showAmount && !showQty
+                    ? `₹${activeItemMetrics.salesValue}`
+                    : (showAmount && showQty ? `${activeItemMetrics.totalSaleQty} (₹${activeItemMetrics.salesValue})` : activeItemMetrics.totalSaleQty)}
+                </td>
+                <td style={{ padding: '10px 10px', textAlign: 'right', borderRight: '1.5px solid #000000', color: '#000000' }}>
+                  {showAmount && !showQty
+                    ? `₹${activeItemMetrics.selfUseValue}`
+                    : (showAmount && showQty ? `${activeItemMetrics.totalUseQty} (₹${activeItemMetrics.selfUseValue})` : activeItemMetrics.totalUseQty)}
+                </td>
+                <td style={{ padding: '10px 10px', textAlign: 'right', color: '#000000' }}>
+                  {showAmount && !showQty
+                    ? `₹${activeItemMetrics.stockValue}`
+                    : (showAmount && showQty ? `${activeItemMetrics.closingStock} (₹${activeItemMetrics.stockValue})` : activeItemMetrics.closingStock)}
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>
+
+      {/* Floating TOP Scroll Button */}
+      <button
+        type="button"
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          background: '#FFFFFF',
+          border: '1.5px solid #000000',
+          borderRadius: '8px',
+          padding: '6px 12px',
+          fontWeight: 900,
+          fontSize: '0.8rem',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
+          boxShadow: '0 4px 10px rgba(0,0,0,0.12)',
+          zIndex: 99
+        }}
+        title="Scroll to Top"
+      >
+        <ChevronUp size={14} /> TOP
+      </button>
 
       {/* SALE INVOICE DETAIL MODAL */}
       {selectedSaleDetail && (
@@ -1085,41 +1164,41 @@ export const ItemLedgerReportView: React.FC = () => {
               <div style={{ border: '1.5px solid #000000', borderRadius: '8px', overflow: 'hidden' }}>
                 <div className="table-responsive-wrapper">
                   <table className="table-clean" style={{ width: '100%', minWidth: '680px', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #CBD5E1', fontSize: '0.82rem' }}>
-                      <th style={{ padding: '8px 10px', textAlign: 'center', width: '40px' }}>#</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'left' }}>Item Name</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'right', width: '85px' }}>Basic (₹)</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'right', width: '70px' }}>GST %</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'right', width: '85px' }}>GST Amt</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'right', width: '85px' }}>Nett (₹)</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'right', width: '90px' }}>Rate (₹)</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'center', width: '70px' }}>Qty</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'right', width: '100px' }}>Amount (₹)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedSaleDetail.items.map((item, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', fontSize: '0.85rem' }}>
-                        <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700 }}>{idx + 1}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800 }}>
-                          {item.itemName} {item.unit ? `(${item.unit})` : ''}
-                        </td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{item.basicPrice}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>{item.gstPercent}%</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{item.gstAmt}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{item.nettPrice}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#002B99' }}>
-                          ₹{item.salePrice || item.mrp}
-                        </td>
-                        <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 900 }}>{item.qty}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, color: '#002B99' }}>
-                          ₹{item.amount}
-                        </td>
+                    <thead>
+                      <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #CBD5E1', fontSize: '0.82rem' }}>
+                        <th style={{ padding: '8px 10px', textAlign: 'center', width: '40px' }}>#</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'left' }}>Item Name</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'right', width: '85px' }}>Basic (₹)</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'right', width: '70px' }}>GST %</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'right', width: '85px' }}>GST Amt</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'right', width: '85px' }}>Nett (₹)</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'right', width: '90px' }}>Rate (₹)</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'center', width: '70px' }}>Qty</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'right', width: '100px' }}>Amount (₹)</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {selectedSaleDetail.items.map((item, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', fontSize: '0.85rem' }}>
+                          <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700 }}>{idx + 1}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800 }}>
+                            {item.itemName} {item.unit ? `(${item.unit})` : ''}
+                          </td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{item.basicPrice}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>{item.gstPercent}%</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{item.gstAmt}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{item.nettPrice}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#002B99' }}>
+                            ₹{item.salePrice || item.mrp}
+                          </td>
+                          <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 900 }}>{item.qty}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, color: '#002B99' }}>
+                            ₹{item.amount}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
@@ -1207,35 +1286,35 @@ export const ItemLedgerReportView: React.FC = () => {
               <div style={{ border: '1.5px solid #000000', borderRadius: '8px', overflow: 'hidden' }}>
                 <div className="table-responsive-wrapper">
                   <table className="table-clean" style={{ width: '100%', minWidth: '680px', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #CBD5E1', fontSize: '0.82rem' }}>
-                      <th style={{ padding: '8px 10px', textAlign: 'center', width: '40px' }}>#</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'left' }}>Item Name</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'right', width: '90px' }}>Basic (₹)</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'right', width: '70px' }}>GST %</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'right', width: '90px' }}>Nett (₹)</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'center', width: '70px' }}>Qty</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'right', width: '100px' }}>Amount (₹)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedPurchaseDetail.items.map((item, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', fontSize: '0.85rem' }}>
-                        <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700 }}>{idx + 1}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800 }}>
-                          {item.itemName} {item.unit ? `(${item.unit})` : ''}
-                        </td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{item.basicPrice}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>{item.gstPercent}%</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{item.nettPrice}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 900 }}>{item.qty}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, color: '#002B99' }}>
-                          ₹{item.amount}
-                        </td>
+                    <thead>
+                      <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #CBD5E1', fontSize: '0.82rem' }}>
+                        <th style={{ padding: '8px 10px', textAlign: 'center', width: '40px' }}>#</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'left' }}>Item Name</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'right', width: '90px' }}>Basic (₹)</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'right', width: '70px' }}>GST %</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'right', width: '90px' }}>Nett (₹)</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'center', width: '70px' }}>Qty</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'right', width: '100px' }}>Amount (₹)</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {selectedPurchaseDetail.items.map((item, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', fontSize: '0.85rem' }}>
+                          <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700 }}>{idx + 1}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800 }}>
+                            {item.itemName} {item.unit ? `(${item.unit})` : ''}
+                          </td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{item.basicPrice}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>{item.gstPercent}%</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{item.nettPrice}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 900 }}>{item.qty}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, color: '#002B99' }}>
+                            ₹{item.amount}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
