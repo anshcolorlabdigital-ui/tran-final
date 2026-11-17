@@ -970,9 +970,9 @@ button, input, select, textarea {
 
 .order-row-grid {
   display: grid;
-  grid-template-columns: 110px 1fr 100px 140px 90px;
+  grid-template-columns: 1fr 110px 100px;
   gap: 10px;
-  align-items: center;
+  align-items: end;
 }
 
 /* ==========================================================================

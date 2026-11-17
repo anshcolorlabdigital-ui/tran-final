@@ -3,6 +3,7 @@ import { db } from '../../db/db';
 import { useApp } from '../../context/AppContext';
 import { Supplier, SupplierLog, Purchase } from '../../types';
 import { formatDateToDisplay, getTodayDateString } from '../../utils/dateUtils';
+import { round2 } from '../../utils/calculations';
 import {
   FileText,
   Search,
@@ -722,13 +723,13 @@ export const SupplierLedgerReportView: React.FC = () => {
                         )}
                       </td>
                       <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 900, color: '#002B99' }}>
-                        {log.totalAmount ? `₹${log.totalAmount}` : '-'}
+                        {log.totalAmount ? `₹${round2(log.totalAmount)}` : '-'}
                       </td>
                       <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 900, color: '#16A34A' }}>
-                        {log.paidAmount ? `₹${log.paidAmount}` : '-'}
+                        {log.paidAmount ? `₹${round2(log.paidAmount)}` : '-'}
                       </td>
                       <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 900, color: displayBalance > 0 ? '#DC2626' : '#16A34A' }}>
-                        ₹{displayBalance}
+                        ₹{round2(displayBalance)}
                       </td>
                       <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, fontSize: '0.82rem' }}>
                         {log.paymentMode || '-'}

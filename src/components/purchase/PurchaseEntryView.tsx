@@ -1123,7 +1123,7 @@ export const PurchaseEntryView: React.FC = () => {
                     <td style={{ fontWeight: 800 }}>{p.billNo}</td>
                     <td>{p.supplierName}</td>
                     <td style={{ textAlign: 'center' }}>{p.items?.length || 0}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 900, color: '#15803D' }}>₹{p.billTotal}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 900, color: '#15803D' }}>₹{Number((Number(p.billTotal) || 0).toFixed(2))}</td>
                     <td style={{ textAlign: 'center' }}>
                       <button
                         type="button"

@@ -71,11 +71,11 @@ export class StockEngine {
 
       return {
         item,
-        openingStock,
-        purchaseQty,
-        saleQty,
-        selfUseQty,
-        adjustmentQty,
+        openingStock: Number(openingStock.toFixed(2)),
+        purchaseQty: Number(purchaseQty.toFixed(2)),
+        saleQty: Number(saleQty.toFixed(2)),
+        selfUseQty: Number(selfUseQty.toFixed(2)),
+        adjustmentQty: Number(adjustmentQty.toFixed(2)),
         closingStock,
         isLowStock,
         activeOrder

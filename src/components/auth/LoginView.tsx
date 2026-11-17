@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { Lock, User, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle, Sparkles } from 'lucide-react';
+import { Lock, User, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle } from 'lucide-react';
 
 export const LoginView: React.FC = () => {
   const { login } = useAuth();
@@ -23,17 +23,6 @@ export const LoginView: React.FC = () => {
         setIsLoading(false);
       }
     }, 200);
-  };
-
-  const handleQuickFill = (userType: 'admin' | 'staff') => {
-    if (userType === 'admin') {
-      setIdentifier('admin');
-      setPassword('admin');
-    } else {
-      setIdentifier('operator');
-      setPassword('operator');
-    }
-    setErrorMessage('');
   };
 
   return (
@@ -123,35 +112,6 @@ export const LoginView: React.FC = () => {
             )}
           </button>
         </form>
-
-        {/* Quick Demo Credentials */}
-        <div className="login-demo-section">
-          <div className="login-demo-label">
-            <Sparkles size={14} color="#6B46C1" />
-            <span>Quick Login Credentials</span>
-          </div>
-          <div className="login-demo-grid">
-            <button
-              type="button"
-              className="login-demo-chip admin-chip"
-              onClick={() => handleQuickFill('admin')}
-              title="Click to fill Admin credentials"
-            >
-              <span className="chip-role">ADMIN</span>
-              <span className="chip-details">admin / admin</span>
-            </button>
-
-            <button
-              type="button"
-              className="login-demo-chip staff-chip"
-              onClick={() => handleQuickFill('staff')}
-              title="Click to fill Staff credentials"
-            >
-              <span className="chip-role">STAFF</span>
-              <span className="chip-details">operator / operator</span>
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );

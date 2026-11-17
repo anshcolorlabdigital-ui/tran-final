@@ -6,6 +6,7 @@ import { Party, PartyLog, Sale } from '../../types';
 import { Search, Plus, CreditCard, CheckCircle, XCircle, FileText, ArrowUpRight, ArrowDownLeft, X, Keyboard, Receipt, ExternalLink } from 'lucide-react';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { getTodayDateString, formatDateToDisplay } from '../../utils/dateUtils';
+import { round2 } from '../../utils/calculations';
 
 export const PartyMasterView: React.FC = () => {
   const { refreshKey, showToast, showAlert, openPartyLedger } = useApp();
@@ -1354,17 +1355,17 @@ export const PartyMasterView: React.FC = () => {
                                 )}
                               </td>
                               <td style={{ textAlign: 'right', fontWeight: 700 }}>
-                                {log.totalAmount ? `₹${log.totalAmount}` : '-'}
+                                {log.totalAmount ? `₹${round2(log.totalAmount)}` : '-'}
                               </td>
                               <td style={{ textAlign: 'right', fontWeight: 800, color: '#16A34A' }}>
-                                ₹{log.paidAmount || 0}
+                                ₹{round2(log.paidAmount || 0)}
                               </td>
                               <td style={{
                                 textAlign: 'right',
                                 fontWeight: 900,
                                 color: log.balanceChange > 0 ? '#DC2626' : log.balanceChange < 0 ? '#16A34A' : '#4B5563'
                               }}>
-                                {log.balanceChange > 0 ? `+₹${log.balanceChange}` : log.balanceChange < 0 ? `-₹${Math.abs(log.balanceChange)}` : '₹0'}
+                                {log.balanceChange > 0 ? `+₹${round2(log.balanceChange)}` : log.balanceChange < 0 ? `-₹${round2(Math.abs(log.balanceChange))}` : '₹0'}
                               </td>
                               <td style={{ fontSize: '0.82rem', color: '#6B7280' }}>
                                 {log.notes || '-'}

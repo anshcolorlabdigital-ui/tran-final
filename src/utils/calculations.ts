@@ -434,10 +434,26 @@ export function calculateBillSummary(
 }
 
 /**
+ * Safely rounds any number to at most 2 decimal places (eliminates floating-point artifacts like 1086.6599999999999)
+ */
+export function round2(value: number | string | undefined | null): number {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return 0;
+  return Number(num.toFixed(2));
+}
+
+/**
+ * Formats any numeric value / quantity with at most 2 decimal places (no floating point noise)
+ */
+export function formatDecimal(value: number | string | undefined | null): string {
+  return String(round2(value));
+}
+
+/**
  * Format currency with Indian standard notation (e.g. ₹ 1,50,000.00)
  */
 export function formatCurrency(amount: number, showSymbol: boolean = true): string {
-  const safeAmount = Number(amount) || 0;
+  const safeAmount = round2(amount);
   const formatted = new Intl.NumberFormat('en-IN', {
     maximumFractionDigits: 2,
     minimumFractionDigits: 0

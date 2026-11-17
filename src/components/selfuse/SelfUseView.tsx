@@ -204,7 +204,7 @@ export const SelfUseView: React.FC = () => {
     const rate = Number(unitBRate) || 0;
     const amount = Number((rate * numQty).toFixed(2));
     const unitName = selectedItemObj.unitB.unitName || 'Unit B';
-    const baseQty = Number((numQty / convFactor).toFixed(4));
+    const baseQty = Number((numQty / convFactor).toFixed(2));
 
     const newItem: SelfUseItem = {
       id: `su-item-${Date.now()}-${Math.random()}`,
@@ -1061,7 +1061,7 @@ export const SelfUseView: React.FC = () => {
                     <td>{su.billDate}</td>
                     <td style={{ fontWeight: 800 }}>{su.billNo}</td>
                     <td style={{ textAlign: 'center' }}>{su.items?.length || 0}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 900, color: '#EA3943' }}>₹{su.totalAmount}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 900, color: '#EA3943' }}>₹{Number((Number(su.totalAmount) || 0).toFixed(2))}</td>
                     <td style={{ textAlign: 'center' }}>
                       <button
                         type="button"

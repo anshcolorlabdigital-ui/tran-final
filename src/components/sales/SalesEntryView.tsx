@@ -396,7 +396,7 @@ export const SalesEntryView: React.FC = () => {
     if (!itemObj || !itemObj.unitB) return;
 
     const convFactor = Number(itemObj.unitB.conversionFactor) || 1;
-    const baseQty = Number((numQty / convFactor).toFixed(3));
+    const baseQty = Number((numQty / convFactor).toFixed(2));
     const unitLabel = itemObj.unitB.unitName || 'Mt.';
 
     const newSaleItem: SaleItem = {

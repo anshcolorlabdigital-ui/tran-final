@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { db } from '../../db/db';
 import { useApp } from '../../context/AppContext';
 import { formatDateToDisplay, getTodayDateString } from '../../utils/dateUtils';
-import { formatCurrency } from '../../utils/calculations';
+import { formatCurrency, round2 } from '../../utils/calculations';
 import { Search, Printer, Download, Filter } from 'lucide-react';
 
 export const SalesReportView: React.FC = () => {
@@ -53,12 +53,12 @@ export const SalesReportView: React.FC = () => {
 
     return {
       count: filteredSales.length,
-      totalQty,
-      totalBasic,
-      totalGst,
-      totalBillAmount,
-      totalCash,
-      totalUpi
+      totalQty: round2(totalQty),
+      totalBasic: round2(totalBasic),
+      totalGst: round2(totalGst),
+      totalBillAmount: round2(totalBillAmount),
+      totalCash: round2(totalCash),
+      totalUpi: round2(totalUpi)
     };
   }, [filteredSales]);
 
@@ -72,13 +72,13 @@ export const SalesReportView: React.FC = () => {
       s.billNo,
       s.billDate,
       `"${s.partyName}"`,
-      `"${s.items.map(i => `${i.itemName} (${i.qty})`).join(', ')}"`,
-      s.items.reduce((a, b) => a + b.qty, 0),
-      s.basicTotal,
-      s.gstTotal,
-      s.billTotal,
-      s.recdCash,
-      s.recdUpi
+      `"${s.items.map(i => `${i.itemName} (${round2(i.qty)})`).join(', ')}"`,
+      round2(s.items.reduce((a, b) => a + (Number(b.qty) || 0), 0)),
+      round2(s.basicTotal),
+      round2(s.gstTotal),
+      round2(s.billTotal),
+      round2(s.recdCash),
+      round2(s.recdUpi)
     ]);
 
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
@@ -248,12 +248,12 @@ export const SalesReportView: React.FC = () => {
                     <td style={{ fontSize: '0.85rem' }}>
                       {s.items.map((i, idx) => (
                         <div key={idx}>
-                          {i.itemName} <span style={{ color: '#EA3943', fontWeight: 800 }}>x{i.qty}</span>
+                          {i.itemName} <span style={{ color: '#EA3943', fontWeight: 800 }}>x{round2(i.qty)}</span>
                         </div>
                       ))}
                     </td>
                     <td style={{ textAlign: 'center', fontWeight: 800, color: '#EA3943' }}>
-                      {s.items.reduce((a, b) => a + b.qty, 0)}
+                      {round2(s.items.reduce((a, b) => a + (Number(b.qty) || 0), 0))}
                     </td>
                     <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatCurrency(s.basicTotal, false)}</td>
                     <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatCurrency(s.gstTotal, false)}</td>

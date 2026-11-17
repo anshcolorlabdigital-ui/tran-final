@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { db } from '../../db/db';
 import { useApp } from '../../context/AppContext';
 import { formatDateToDisplay, getTodayDateString } from '../../utils/dateUtils';
-import { formatCurrency } from '../../utils/calculations';
+import { formatCurrency, round2 } from '../../utils/calculations';
 import { Download, Printer } from 'lucide-react';
 
 export const SelfUseReportView: React.FC = () => {
@@ -37,8 +37,8 @@ export const SelfUseReportView: React.FC = () => {
 
     return {
       count: filteredSelfUses.length,
-      totalQty,
-      totalValue
+      totalQty: round2(totalQty),
+      totalValue: round2(totalValue)
     };
   }, [filteredSelfUses]);
 
@@ -51,9 +51,9 @@ export const SelfUseReportView: React.FC = () => {
     const rows = filteredSelfUses.map(su => [
       su.billNo,
       su.billDate,
-      `"${su.items.map(i => `${i.itemName} (${i.qty})`).join(', ')}"`,
-      su.items.reduce((a, b) => a + b.qty, 0),
-      su.totalAmount,
+      `"${su.items.map(i => `${i.itemName} (${round2(i.qty)})`).join(', ')}"`,
+      round2(su.items.reduce((a, b) => a + (Number(b.qty) || 0), 0)),
+      round2(su.totalAmount),
       `"${su.remarks || ''}"`
     ]);
 
@@ -184,12 +184,12 @@ export const SelfUseReportView: React.FC = () => {
                     <td style={{ fontSize: '0.88rem' }}>
                       {su.items.map((i, idx) => (
                         <div key={idx}>
-                          {i.itemName} <span style={{ color: '#EA3943', fontWeight: 800 }}>x{i.qty}</span>
+                          {i.itemName} <span style={{ color: '#EA3943', fontWeight: 800 }}>x{round2(i.qty)}</span>
                         </div>
                       ))}
                     </td>
                     <td style={{ textAlign: 'center', fontWeight: 800, color: '#EA3943' }}>
-                      {su.items.reduce((a, b) => a + b.qty, 0)}
+                      {round2(su.items.reduce((a, b) => a + (Number(b.qty) || 0), 0))}
                     </td>
                     <td style={{ textAlign: 'right', fontWeight: 800 }}>
                       {formatCurrency(su.totalAmount, false)}

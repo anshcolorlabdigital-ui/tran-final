@@ -256,7 +256,7 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
 
           {/* Footer note */}
           <div style={{ textAlign: 'center', fontSize: '0.75rem', color: '#6B7280', paddingTop: '10px', marginTop: '12px', borderTop: '1px dashed #9CA3AF' }}>
-            Total Items: {receiptData.items.length} | Total Quantity: {receiptData.items.reduce((a, b) => a + Number(b.qty || 0), 0)}
+            Total Items: {receiptData.items.length} | Total Quantity: {Number(receiptData.items.reduce((a, b) => a + Number(b.qty || 0), 0).toFixed(2))}
           </div>
         </div>
       </div>

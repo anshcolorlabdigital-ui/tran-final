@@ -275,7 +275,7 @@ export const ItemStockReportView: React.FC = () => {
   };
 
   const renderTableRow = (s: typeof filteredSummaries[0]) => {
-    const baseRate = Number(s.item.unitA?.basicPrice ?? s.item.purchaseRate ?? 0);
+    const baseRate = Number((Number(s.item.unitA?.basicPrice ?? s.item.purchaseRate ?? 0)).toFixed(2));
     const opVal = Number((s.openingStock * baseRate).toFixed(2));
     const purVal = Number((s.purchaseQty * baseRate).toFixed(2));
     const salVal = Number((s.saleQty * (s.item.unitA?.salePrice || baseRate)).toFixed(2));

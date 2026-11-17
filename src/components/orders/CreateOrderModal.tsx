@@ -164,7 +164,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Create New Supplier Order" maxWidth="700px">
+    <Modal isOpen={isOpen} onClose={onClose} title="Create New Supplier Order" maxWidth="850px">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {/* Top order info */}
         <div className="form-grid-2col">

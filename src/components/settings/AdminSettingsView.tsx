@@ -153,6 +153,13 @@ export const AdminSettingsView: React.FC = () => {
   // Dates
   const todayStr = getTodayDateString();
   const firstOfMonthStr = `${todayStr.slice(0, 7)}-01`;
+  const currentYear = Number(todayStr.slice(0, 4));
+  const currentMonth = Number(todayStr.slice(5, 7));
+  const fyStartYear = currentMonth >= 4 ? currentYear : currentYear - 1;
+  const fyEndYear = fyStartYear + 1;
+  const fyStartStr = `${fyStartYear}-04-01`;
+  const fyEndStr = `${fyEndYear}-03-31`;
+  const fyLabel = `FY ${fyStartYear}-${String(fyEndYear).slice(2)}`;
 
   // --- LIVE COUNTS MATCHING SIDEBAR ---
   const lowStockSummaries = useMemo(() => StockEngine.getLowStockItems(), [refreshKey]);
@@ -168,7 +175,7 @@ export const AdminSettingsView: React.FC = () => {
   const itemStockCount = useMemo(() => lowStockSummaries.length, [lowStockSummaries]);
 
   // --- BACKUP STATE ---
-  const [backupDateMode, setBackupDateMode] = useState<'THIS_MONTH' | 'CUSTOM'>('THIS_MONTH');
+  const [backupDateMode, setBackupDateMode] = useState<'ALL_TIME' | 'FINANCIAL_YEAR' | 'THIS_MONTH' | 'CUSTOM'>('ALL_TIME');
   const [backupFromDate, setBackupFromDate] = useState(firstOfMonthStr);
   const [backupToDate, setBackupToDate] = useState(todayStr);
 
@@ -552,22 +559,39 @@ export const AdminSettingsView: React.FC = () => {
   };
 
   // Backup Export Options Builder
-  const getExportOptions = (): ExportFilterOptions => ({
-    fromDate: backupDateMode === 'THIS_MONTH' ? firstOfMonthStr : backupFromDate,
-    toDate: backupDateMode === 'THIS_MONTH' ? todayStr : backupToDate,
-    isFullHistory: false,
-    modules: {
-      orders: Boolean(backupModules.order || backupModules.orderedSection),
-      purchases: Boolean(backupModules.purchase || backupModules.reportPurchases),
-      sales: Boolean(backupModules.sale || backupModules.reportSales),
-      selfUse: Boolean(backupModules.selfUse || backupModules.reportSelfUse),
-      parties: Boolean(backupModules.party),
-      suppliers: Boolean(backupModules.supplier),
-      items: Boolean(backupModules.item),
-      adjustments: Boolean(backupModules.reportItemStock),
-      settings: true
+  const getExportOptions = (): ExportFilterOptions => {
+    const isAllTime = backupDateMode === 'ALL_TIME';
+    let fromDate = backupFromDate;
+    let toDate = backupToDate;
+
+    if (backupDateMode === 'ALL_TIME') {
+      fromDate = '2000-01-01';
+      toDate = todayStr;
+    } else if (backupDateMode === 'FINANCIAL_YEAR') {
+      fromDate = fyStartStr;
+      toDate = fyEndStr;
+    } else if (backupDateMode === 'THIS_MONTH') {
+      fromDate = firstOfMonthStr;
+      toDate = todayStr;
     }
-  });
+
+    return {
+      fromDate,
+      toDate,
+      isFullHistory: isAllTime,
+      modules: {
+        orders: Boolean(backupModules.order || backupModules.orderedSection),
+        purchases: Boolean(backupModules.purchase || backupModules.reportPurchases),
+        sales: Boolean(backupModules.sale || backupModules.reportSales),
+        selfUse: Boolean(backupModules.selfUse || backupModules.reportSelfUse),
+        parties: Boolean(backupModules.party),
+        suppliers: Boolean(backupModules.supplier),
+        items: Boolean(backupModules.item),
+        adjustments: Boolean(backupModules.reportItemStock),
+        settings: true
+      }
+    };
+  };
 
   const handleDownloadExcelOnly = () => {
     const hasAny = Object.values(backupModules).some(Boolean);
@@ -1395,7 +1419,41 @@ export const AdminSettingsView: React.FC = () => {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setBackupDateMode('ALL_TIME')}
+                  style={{
+                    padding: '5px 16px',
+                    borderRadius: '20px',
+                    fontWeight: 800,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    border: backupDateMode === 'ALL_TIME' ? '1.5px solid #002B99' : '1px solid #D1D5DB',
+                    background: backupDateMode === 'ALL_TIME' ? '#002B99' : '#FFFFFF',
+                    color: backupDateMode === 'ALL_TIME' ? '#FFFFFF' : '#374151'
+                  }}
+                >
+                  All Time
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setBackupDateMode('FINANCIAL_YEAR')}
+                  style={{
+                    padding: '5px 16px',
+                    borderRadius: '20px',
+                    fontWeight: 800,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    border: backupDateMode === 'FINANCIAL_YEAR' ? '1.5px solid #002B99' : '1px solid #D1D5DB',
+                    background: backupDateMode === 'FINANCIAL_YEAR' ? '#002B99' : '#FFFFFF',
+                    color: backupDateMode === 'FINANCIAL_YEAR' ? '#FFFFFF' : '#374151'
+                  }}
+                >
+                  Financial Year ({fyLabel}: {formatDateToDisplay(fyStartStr)} to {formatDateToDisplay(fyEndStr)})
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setBackupDateMode('THIS_MONTH')}

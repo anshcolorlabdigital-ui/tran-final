@@ -844,13 +844,13 @@ export function restoreDatabaseFromExcel(
             partyName,
             isCreditSale,
             items: saleItems,
-            basicTotal: saleItems.reduce((acc, it) => acc + (it.basicPrice * it.qty), 0),
-            gstTotal: saleItems.reduce((acc, it) => acc + (it.gstAmt * it.qty), 0),
+            basicTotal: Number(saleItems.reduce((acc, it) => acc + (it.basicPrice * it.qty), 0).toFixed(2)),
+            gstTotal: Number(saleItems.reduce((acc, it) => acc + (it.gstAmt * it.qty), 0).toFixed(2)),
             roundUp: 0,
-            billTotal: grandTotal || saleItems.reduce((acc, it) => acc + it.amount, 0),
-            recdCash,
-            recdUpi,
-            balanceDue: isCreditSale ? Math.max(0, grandTotal - (recdCash + recdUpi)) : 0,
+            billTotal: Number((grandTotal || saleItems.reduce((acc, it) => acc + it.amount, 0)).toFixed(2)),
+            recdCash: Number(recdCash.toFixed(2)),
+            recdUpi: Number(recdUpi.toFixed(2)),
+            balanceDue: isCreditSale ? Number(Math.max(0, grandTotal - (recdCash + recdUpi)).toFixed(2)) : 0,
             createdAt: new Date().toISOString()
           };
           db.saveSale(sale);
@@ -909,10 +909,10 @@ export function restoreDatabaseFromExcel(
             supplierName,
             orderId: orderId || undefined,
             items: purItems,
-            basicTotal: purItems.reduce((acc, it) => acc + (it.basicPrice * it.qty), 0),
-            gstTotal: purItems.reduce((acc, it) => acc + (it.gstAmt * it.qty), 0),
+            basicTotal: Number(purItems.reduce((acc, it) => acc + (it.basicPrice * it.qty), 0).toFixed(2)),
+            gstTotal: Number(purItems.reduce((acc, it) => acc + (it.gstAmt * it.qty), 0).toFixed(2)),
             roundUp: 0,
-            billTotal: grandTotal || purItems.reduce((acc, it) => acc + it.amount, 0),
+            billTotal: Number((grandTotal || purItems.reduce((acc, it) => acc + it.amount, 0)).toFixed(2)),
             recdCash: 0,
             recdUpi: 0,
             createdAt: new Date().toISOString()
@@ -997,7 +997,7 @@ export function restoreDatabaseFromExcel(
             billDate,
             category,
             items: suItems,
-            totalAmount: suItems.reduce((acc, it) => acc + it.amount, 0),
+            totalAmount: Number(suItems.reduce((acc, it) => acc + it.amount, 0).toFixed(2)),
             remarks,
             createdAt: new Date().toISOString()
           };
@@ -1052,10 +1052,10 @@ export function restoreDatabaseFromExcel(
             auditDate,
             notes: notes || undefined,
             items: auditItems,
-            totalSystemQty: auditItems.reduce((acc, it) => acc + it.systemStock, 0),
-            totalPhysicalQty: auditItems.reduce((acc, it) => acc + it.physicalStock, 0),
-            totalDiffQty: auditItems.reduce((acc, it) => acc + it.diffQty, 0),
-            totalDiffValue: auditItems.reduce((acc, it) => acc + it.diffValue, 0),
+            totalSystemQty: Number(auditItems.reduce((acc, it) => acc + it.systemStock, 0).toFixed(2)),
+            totalPhysicalQty: Number(auditItems.reduce((acc, it) => acc + it.physicalStock, 0).toFixed(2)),
+            totalDiffQty: Number(auditItems.reduce((acc, it) => acc + it.diffQty, 0).toFixed(2)),
+            totalDiffValue: Number(auditItems.reduce((acc, it) => acc + it.diffValue, 0).toFixed(2)),
             createdAt: new Date().toISOString()
           };
           db.savePhysicalStockAudit(auditRecord);

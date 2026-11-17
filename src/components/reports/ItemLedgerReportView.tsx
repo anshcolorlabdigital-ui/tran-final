@@ -4,7 +4,7 @@ import { StockEngine } from '../../db/stockEngine';
 import { useApp } from '../../context/AppContext';
 import { Item, Sale, Purchase, SelfUse } from '../../types';
 import { formatDateToDisplay, getTodayDateString } from '../../utils/dateUtils';
-import { calculateItemUnitBreakdown, calculateUnitBFromUnitA } from '../../utils/calculations';
+import { calculateItemUnitBreakdown, calculateUnitBFromUnitA, round2 } from '../../utils/calculations';
 import {
   FileSpreadsheet,
   Printer,
@@ -252,9 +252,10 @@ export const ItemLedgerReportView: React.FC = () => {
     return entries;
   }, [activeItem, stockMovements, purchases, sales, selfUses, refreshKey]);
 
-  // Filtered ledger entries based on search
+  // Filtered ledger entries based on search (excludes OPENING row since Opening Stock is shown at top)
   const filteredLedger = useMemo<ItemLedgerEntry[]>(() => {
     return rawLedgerEntries.filter(entry => {
+      if (entry.type === 'OPENING') return false;
       if (searchTerm.trim()) {
         const query = searchTerm.toLowerCase();
         const refMatch = (entry.refNo || '').toLowerCase().includes(query);
@@ -306,14 +307,14 @@ export const ItemLedgerReportView: React.FC = () => {
     });
 
     return {
-      currentStock,
-      openingStock,
-      totalPurchasedQty: Number(totalPurchasedQty.toFixed(2)),
-      totalPurchasedValue: Number(totalPurchasedValue.toFixed(2)),
-      totalSoldQty: Number(totalSoldQty.toFixed(2)),
-      totalSoldValue: Number(totalSoldValue.toFixed(2)),
-      totalSelfUseQty: Number(totalSelfUseQty.toFixed(2)),
-      totalSelfUseValue: Number(totalSelfUseValue.toFixed(2))
+      currentStock: round2(currentStock),
+      openingStock: round2(openingStock),
+      totalPurchasedQty: round2(totalPurchasedQty),
+      totalPurchasedValue: round2(totalPurchasedValue),
+      totalSoldQty: round2(totalSoldQty),
+      totalSoldValue: round2(totalSoldValue),
+      totalSelfUseQty: round2(totalSelfUseQty),
+      totalSelfUseValue: round2(totalSelfUseValue)
     };
   }, [activeItem, rawLedgerEntries]);
 
@@ -399,11 +400,11 @@ export const ItemLedgerReportView: React.FC = () => {
       'Bill No': entry.refNo,
       'Supplier / Party': entry.counterparty,
       'Unit': activeItem.unitA?.unitName || activeItem.unit || 'PCS',
-      'B. Price': entry.rate || baseRate || 0,
-      'Purc.': entry.inwardQty > 0 ? entry.inwardQty : 0,
-      'Sale': entry.type === 'SALE' && entry.outwardQty > 0 ? entry.outwardQty : 0,
-      'Use': entry.type === 'SELF_USE' && entry.outwardQty > 0 ? entry.outwardQty : 0,
-      'Stock': entry.runningBalance
+      'B. Price': round2(entry.rate || baseRate || 0),
+      'Purc.': entry.inwardQty > 0 ? round2(entry.inwardQty) : 0,
+      'Sale': entry.type === 'SALE' && entry.outwardQty > 0 ? round2(entry.outwardQty) : 0,
+      'Use': entry.type === 'SELF_USE' && entry.outwardQty > 0 ? round2(entry.outwardQty) : 0,
+      'Stock': round2(entry.runningBalance)
     }));
 
     exportRows.push({
@@ -943,20 +944,25 @@ export const ItemLedgerReportView: React.FC = () => {
                   const isSelfUse = entry.type === 'SELF_USE';
                   const hasDoc = Boolean(entry.saleDoc || entry.purchaseDoc || entry.selfUseDoc);
 
-                  const purcVal = entry.inwardQty > 0
-                    ? (showAmount && !showQty ? `₹${entry.totalAmount}` : (showAmount && showQty ? `${entry.inwardQty} (₹${entry.totalAmount})` : entry.inwardQty))
+                  const inQty = round2(entry.inwardQty);
+                  const outQty = round2(entry.outwardQty);
+                  const totalAmt = round2(entry.totalAmount);
+                  const runBal = round2(entry.runningBalance);
+
+                  const purcVal = inQty > 0
+                    ? (showAmount && !showQty ? `₹${totalAmt}` : (showAmount && showQty ? `${inQty} (₹${totalAmt})` : inQty))
                     : '';
-                  const saleVal = isSale && entry.outwardQty > 0
-                    ? (showAmount && !showQty ? `₹${entry.totalAmount}` : (showAmount && showQty ? `${entry.outwardQty} (₹${entry.totalAmount})` : entry.outwardQty))
+                  const saleVal = isSale && outQty > 0
+                    ? (showAmount && !showQty ? `₹${totalAmt}` : (showAmount && showQty ? `${outQty} (₹${totalAmt})` : outQty))
                     : '';
-                  const useVal = isSelfUse && entry.outwardQty > 0
-                    ? (showAmount && !showQty ? `₹${entry.totalAmount}` : (showAmount && showQty ? `${entry.outwardQty} (₹${entry.totalAmount})` : entry.outwardQty))
+                  const useVal = isSelfUse && outQty > 0
+                    ? (showAmount && !showQty ? `₹${totalAmt}` : (showAmount && showQty ? `${outQty} (₹${totalAmt})` : outQty))
                     : '';
-                  const baseRate = activeItem?.unitA?.basicPrice ?? activeItem?.purchaseRate ?? entry.rate;
-                  const runningStockVal = Number((entry.runningBalance * baseRate).toFixed(2));
+                  const baseRate = round2(activeItem?.unitA?.basicPrice ?? activeItem?.purchaseRate ?? entry.rate);
+                  const runningStockVal = round2(runBal * baseRate);
                   const stockDisplay = showAmount && !showQty
                     ? `₹${runningStockVal}`
-                    : (showAmount && showQty ? `${entry.runningBalance} (₹${runningStockVal})` : entry.runningBalance);
+                    : (showAmount && showQty ? `${runBal} (₹${runningStockVal})` : runBal);
 
                   return (
                     <tr key={entry.id} style={{ borderBottom: '1px solid #E2E8F0', height: '36px' }}>
@@ -997,7 +1003,7 @@ export const ItemLedgerReportView: React.FC = () => {
                         {activeItem?.unitA?.unitName || activeItem?.unit || 'PCS'}
                       </td>
                       <td style={{ padding: '6px 10px', textAlign: 'right', fontSize: '0.85rem', fontWeight: 700, borderRight: '1px solid #CBD5E1' }}>
-                        {entry.rate || baseRate || 0}
+                        {round2(entry.rate || baseRate || 0)}
                       </td>
                       <td style={{ padding: '6px 10px', textAlign: 'right', fontSize: '0.85rem', fontWeight: 800, color: '#047857', borderRight: '1px solid #CBD5E1' }}>
                         {purcVal}
@@ -1138,23 +1144,23 @@ export const ItemLedgerReportView: React.FC = () => {
               <div className="stat-grid-auto" style={{ gap: '10px' }}>
                 <div style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '8px', padding: '10px 12px' }}>
                   <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748B' }}>Basic Total</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#002B99' }}>₹{selectedSaleDetail.basicTotal}</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#002B99' }}>₹{round2(selectedSaleDetail.basicTotal)}</div>
                 </div>
                 <div style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '8px', padding: '10px 12px' }}>
                   <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748B' }}>GST Total</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#002B99' }}>₹{selectedSaleDetail.gstTotal}</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#002B99' }}>₹{round2(selectedSaleDetail.gstTotal)}</div>
                 </div>
                 <div style={{ background: '#EFF6FF', border: '1.5px solid #BFDBFE', borderRadius: '8px', padding: '10px 12px' }}>
                   <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#1E40AF' }}>Bill Total</div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#1E40AF' }}>₹{selectedSaleDetail.billTotal}</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#1E40AF' }}>₹{round2(selectedSaleDetail.billTotal)}</div>
                 </div>
                 <div style={{ background: '#F0FDF4', border: '1.5px solid #BBF7D0', borderRadius: '8px', padding: '10px 12px' }}>
                   <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#166534' }}>Paid / Balance</div>
                   <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#16A34A' }}>
-                    ₹{(selectedSaleDetail.recdCash || 0) + (selectedSaleDetail.recdUpi || 0)}
+                    ₹{round2((selectedSaleDetail.recdCash || 0) + (selectedSaleDetail.recdUpi || 0))}
                     {selectedSaleDetail.balanceDue ? (
                       <span style={{ fontSize: '0.8rem', color: '#DC2626', marginLeft: '6px' }}>
-                        (Due: ₹{selectedSaleDetail.balanceDue})
+                        (Due: ₹{round2(selectedSaleDetail.balanceDue)})
                       </span>
                     ) : ''}
                   </div>
@@ -1184,16 +1190,16 @@ export const ItemLedgerReportView: React.FC = () => {
                           <td style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800 }}>
                             {item.itemName} {item.unit ? `(${item.unit})` : ''}
                           </td>
-                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{item.basicPrice}</td>
-                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>{item.gstPercent}%</td>
-                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{item.gstAmt}</td>
-                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{item.nettPrice}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{round2(item.basicPrice)}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>{round2(item.gstPercent)}%</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{round2(item.gstAmt)}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{round2(item.nettPrice)}</td>
                           <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#002B99' }}>
-                            ₹{item.salePrice || item.mrp}
+                            ₹{round2(item.salePrice || item.mrp)}
                           </td>
-                          <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 900 }}>{item.qty}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 900 }}>{round2(item.qty)}</td>
                           <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, color: '#002B99' }}>
-                            ₹{item.amount}
+                            ₹{round2(item.amount)}
                           </td>
                         </tr>
                       ))}
@@ -1271,15 +1277,15 @@ export const ItemLedgerReportView: React.FC = () => {
               <div className="stat-grid-auto" style={{ gap: '10px' }}>
                 <div style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '8px', padding: '10px 12px' }}>
                   <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748B' }}>Basic Total</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#002B99' }}>₹{selectedPurchaseDetail.basicTotal}</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#002B99' }}>₹{round2(selectedPurchaseDetail.basicTotal)}</div>
                 </div>
                 <div style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '8px', padding: '10px 12px' }}>
                   <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748B' }}>GST Total</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#002B99' }}>₹{selectedPurchaseDetail.gstTotal}</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#002B99' }}>₹{round2(selectedPurchaseDetail.gstTotal)}</div>
                 </div>
                 <div style={{ background: '#F0FDF4', border: '1.5px solid #BBF7D0', borderRadius: '8px', padding: '10px 12px' }}>
                   <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#166534' }}>Purchase Bill Total</div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#16A34A' }}>₹{selectedPurchaseDetail.billTotal}</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#16A34A' }}>₹{round2(selectedPurchaseDetail.billTotal)}</div>
                 </div>
               </div>
 
@@ -1304,12 +1310,12 @@ export const ItemLedgerReportView: React.FC = () => {
                           <td style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800 }}>
                             {item.itemName} {item.unit ? `(${item.unit})` : ''}
                           </td>
-                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{item.basicPrice}</td>
-                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>{item.gstPercent}%</td>
-                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{item.nettPrice}</td>
-                          <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 900 }}>{item.qty}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{round2(item.basicPrice)}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>{round2(item.gstPercent)}%</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{round2(item.nettPrice)}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 900 }}>{round2(item.qty)}</td>
                           <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, color: '#002B99' }}>
-                            ₹{item.amount}
+                            ₹{round2(item.amount)}
                           </td>
                         </tr>
                       ))}
@@ -1402,10 +1408,10 @@ export const ItemLedgerReportView: React.FC = () => {
                         <td style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800 }}>
                           {item.itemName} {item.unit ? `(${item.unit})` : ''}
                         </td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{item.rate}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 900 }}>{item.qty}</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{round2(item.rate)}</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 900 }}>{round2(item.qty)}</td>
                         <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, color: '#002B99' }}>
-                          ₹{item.amount}
+                          ₹{round2(item.amount)}
                         </td>
                       </tr>
                     ))}
@@ -1418,7 +1424,7 @@ export const ItemLedgerReportView: React.FC = () => {
                   <strong>Remarks / Reason: </strong> {selectedSelfUseDetail.remarks || selectedSelfUseDetail.reason || 'None'}
                 </div>
                 <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#002B99' }}>
-                  Total Value: ₹{selectedSelfUseDetail.totalAmount}
+                  Total Value: ₹{round2(selectedSelfUseDetail.totalAmount)}
                 </div>
               </div>
             </div>

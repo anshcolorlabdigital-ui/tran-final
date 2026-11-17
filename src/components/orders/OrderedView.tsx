@@ -230,8 +230,8 @@ export const OrderedView: React.FC = () => {
           {filteredOrders.map(order => {
             const isCompleted = order.status === 'RECEIVED';
             const isPartial = order.status === 'PARTIALLY_RECEIVED';
-            const totalQty = order.items.reduce((sum, it) => sum + Number(it.orderedQty || 0), 0);
-            const recdQty = order.items.reduce((sum, it) => sum + Number(it.receivedQty || 0), 0);
+            const totalQty = Number(order.items.reduce((sum, it) => sum + Number(it.orderedQty || 0), 0).toFixed(2));
+            const recdQty = Number(order.items.reduce((sum, it) => sum + Number(it.receivedQty || 0), 0).toFixed(2));
 
             return (
               <div

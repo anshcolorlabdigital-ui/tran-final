@@ -1084,7 +1084,7 @@ class DatabaseService {
         id: `mov-sale-${sale.id}-${item.id}-${Date.now()}`,
         itemId: item.itemId,
         type: 'SALE_OUT',
-        qtyChange: Number(qtyChange.toFixed(3)),
+        qtyChange: Number(qtyChange.toFixed(2)),
         refType: 'SALE',
         refId: sale.id,
         refNo: sale.billNo,
@@ -1169,7 +1169,7 @@ class DatabaseService {
         id: `mov-pur-${purchase.id}-${item.id}-${Date.now()}`,
         itemId: item.itemId,
         type: 'PURCHASE_IN',
-        qtyChange: Number(qtyChange.toFixed(3)),
+        qtyChange: Number(qtyChange.toFixed(2)),
         refType: 'PURCHASE',
         refId: purchase.id,
         refNo: purchase.billNo,
@@ -1275,7 +1275,7 @@ class DatabaseService {
         id: `mov-su-${selfUse.id}-${item.id}-${Date.now()}`,
         itemId: item.itemId,
         type: 'SELF_USE_OUT',
-        qtyChange: Number(qtyChange.toFixed(3)),
+        qtyChange: Number(qtyChange.toFixed(2)),
         refType: 'SELF_USE',
         refId: selfUse.id,
         refNo: selfUse.billNo,
@@ -1791,7 +1791,7 @@ class DatabaseService {
       allItems.forEach(item => {
         const itemMovements = allMovements.filter(m => m.itemId === item.id);
         const total = itemMovements.reduce((acc, m) => acc + (Number(m.qtyChange) || 0), 0);
-        closingStocksByItem[item.id] = Number(total.toFixed(3));
+        closingStocksByItem[item.id] = Number(total.toFixed(2));
       });
     }
 
@@ -1964,7 +1964,7 @@ class DatabaseService {
         id: `mov-init-${item.id}-${Date.now()}`,
         itemId: item.id,
         type: 'OPENING',
-        qtyChange: Number((item.openingStock || 0).toFixed(3)),
+        qtyChange: Number((item.openingStock || 0).toFixed(2)),
         refType: 'OPENING',
         refId: item.id,
         refNo: 'OPENING',
