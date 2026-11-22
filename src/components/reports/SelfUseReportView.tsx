@@ -47,15 +47,23 @@ export const SelfUseReportView: React.FC = () => {
   };
 
   const handleExportCSV = () => {
-    const headers = ['Voucher No', 'Date', 'Items Used', 'Total Qty', 'Total Cost', 'Remarks'];
-    const rows = filteredSelfUses.map(su => [
-      su.billNo,
-      su.billDate,
-      `"${su.items.map(i => `${i.itemName} (${round2(i.qty)})`).join(', ')}"`,
-      round2(su.items.reduce((a, b) => a + (Number(b.qty) || 0), 0)),
-      round2(su.totalAmount),
-      `"${su.remarks || ''}"`
-    ]);
+    const headers = ['Voucher No', 'Date', 'Items Used In-House', 'Qty', 'Purchase Price', 'Amount'];
+    const rows: (string | number)[][] = [];
+
+    filteredSelfUses.forEach(su => {
+      su.items.forEach((item, idx) => {
+        const itemPrice = item.rate || (item.qty ? round2(item.amount / item.qty) : 0);
+        rows.push([
+          idx === 0 ? su.billNo : '',
+          idx === 0 ? formatDateToDisplay(su.billDate) : '',
+          item.itemName,
+          round2(item.qty),
+          round2(itemPrice),
+          round2(item.amount || (item.qty * itemPrice))
+        ]);
+      });
+      rows.push(['SUB TOTAL', '', '', '', '', round2(su.totalAmount)]);
+    });
 
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
@@ -69,19 +77,44 @@ export const SelfUseReportView: React.FC = () => {
 
   return (
     <div className="content-panel-grey">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-        <div className="pill-header-lime" style={{ padding: '8px 28px', fontSize: '1.2rem' }}>
+      {/* Top Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+        <div className="pill-header-lime" style={{ padding: '8px 28px', fontSize: '1.2rem', fontWeight: 900 }}>
           SELF USE CONSUMPTION REPORT
         </div>
 
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button onClick={handleExportCSV} className="btn-lime-action" style={{ fontSize: '0.85rem' }}>
+          <button
+            onClick={handleExportCSV}
+            className="btn-lime-action"
+            style={{
+              fontSize: '0.85rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              border: '1.5px solid #000000',
+              fontWeight: 800,
+              cursor: 'pointer'
+            }}
+          >
             <Download size={15} />
-            Export CSV
+            EXPORT CSV
           </button>
-          <button onClick={handlePrint} className="btn-red-action" style={{ fontSize: '0.85rem' }}>
+          <button
+            onClick={handlePrint}
+            className="btn-red-action"
+            style={{
+              fontSize: '0.85rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              border: '1.5px solid #000000',
+              fontWeight: 800,
+              cursor: 'pointer'
+            }}
+          >
             <Printer size={15} />
-            Print Report
+            PRINT REPORT
           </button>
         </div>
       </div>
@@ -92,11 +125,11 @@ export const SelfUseReportView: React.FC = () => {
           background: '#FFFFFF',
           border: '2px solid #000000',
           borderRadius: '10px',
-          padding: '16px',
+          padding: '14px 18px',
           marginBottom: '20px',
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-          gap: '12px',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '16px',
           alignItems: 'flex-end'
         }}
       >
@@ -107,6 +140,7 @@ export const SelfUseReportView: React.FC = () => {
             className="input-text-clean"
             value={fromDate}
             onChange={e => setFromDate(e.target.value)}
+            style={{ width: '100%' }}
           />
         </div>
 
@@ -117,6 +151,7 @@ export const SelfUseReportView: React.FC = () => {
             className="input-text-clean"
             value={toDate}
             onChange={e => setToDate(e.target.value)}
+            style={{ width: '100%' }}
           />
         </div>
 
@@ -126,6 +161,7 @@ export const SelfUseReportView: React.FC = () => {
             className="input-text-clean"
             value={selectedItemId}
             onChange={e => setSelectedItemId(e.target.value)}
+            style={{ width: '100%' }}
           >
             <option value="">All Items</option>
             {items.map(i => (
@@ -137,80 +173,154 @@ export const SelfUseReportView: React.FC = () => {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="stat-grid-auto" style={{ marginBottom: '20px' }}>
-        <div style={{ background: '#FFFFFF', border: '1px solid #000000', borderRadius: '8px', padding: '12px 16px' }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#6B7280' }}>CONSUMPTION VOUCHERS</div>
-          <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#111827' }}>{totals.count}</div>
-        </div>
-
-        <div style={{ background: '#FFFFFF', border: '1px solid #000000', borderRadius: '8px', padding: '12px 16px' }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#6B7280' }}>TOTAL UNITS CONSUMED</div>
-          <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#EA3943' }}>{totals.totalQty}</div>
-        </div>
-
-        <div style={{ background: '#FFFFFF', border: '1px solid #000000', borderRadius: '8px', padding: '12px 16px' }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#6B7280' }}>TOTAL ESTIMATED COST</div>
-          <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#111827' }}>{formatCurrency(totals.totalValue)}</div>
+      {/* Single Centered KPI Card matching mockup */}
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '22px' }}>
+        <div
+          style={{
+            background: '#FFFFFF',
+            border: '2px solid #000000',
+            borderRadius: '6px',
+            padding: '10px 48px',
+            minWidth: '320px',
+            textAlign: 'center',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+          }}
+        >
+          <div
+            style={{
+              fontSize: '0.82rem',
+              fontWeight: 900,
+              color: '#DC2626',
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+              marginBottom: '4px'
+            }}
+          >
+            TOTALCONSUMTION VALUE
+          </div>
+          <div style={{ fontSize: '1.9rem', fontWeight: 900, color: '#000000', fontFamily: 'monospace' }}>
+            {totals.totalValue.toFixed(2)}
+          </div>
         </div>
       </div>
 
-      {/* Table */}
-      <div style={{ background: '#FFFFFF', border: '2px solid #000000', borderRadius: '10px', padding: '16px' }}>
-        <div className="custom-table-container table-responsive-wrapper">
-          <table className="custom-table">
+      {/* Grouped Table */}
+      <div style={{ background: '#FFFFFF', border: '2px solid #000000', borderRadius: '10px', overflow: 'hidden' }}>
+        <div className="table-responsive-wrapper">
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
-              <tr>
-                <th style={{ width: '100px' }}>Voucher No</th>
-                <th style={{ width: '110px' }}>Date</th>
-                <th>Items Used In-House</th>
-                <th style={{ textAlign: 'center', width: '90px' }}>Qty</th>
-                <th style={{ textAlign: 'right', width: '130px' }}>Total Cost</th>
-                <th>Remarks / Dept</th>
+              <tr style={{ background: '#D4C4FB', borderBottom: '2px solid #000000' }}>
+                <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', width: '120px', fontWeight: 900, fontSize: '0.9rem' }}>Voucher No</th>
+                <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', width: '120px', fontWeight: 900, fontSize: '0.9rem' }}>Date</th>
+                <th style={{ padding: '10px 14px', borderRight: '1px solid #000000', fontWeight: 900, fontSize: '0.9rem' }}>Items Used In-House</th>
+                <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', width: '80px', textAlign: 'center', fontWeight: 900, fontSize: '0.9rem' }}>Qty</th>
+                <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', width: '140px', textAlign: 'right', fontWeight: 900, fontSize: '0.9rem' }}>
+                  PURCHESH PRICE
+                </th>
+                <th style={{ padding: '10px 14px', width: '130px', textAlign: 'right', fontWeight: 900, fontSize: '0.9rem' }}>AMOUNT</th>
               </tr>
             </thead>
             <tbody>
               {filteredSelfUses.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: '#9CA3AF' }}>
-                    No self-use transactions recorded for this period.
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '36px', color: '#9CA3AF', fontWeight: 700 }}>
+                    No self use consumption records found for this period.
                   </td>
                 </tr>
               ) : (
-                filteredSelfUses.map(su => (
-                  <tr key={su.id}>
-                    <td style={{ fontWeight: 800, fontFamily: 'monospace' }}>{su.billNo}</td>
-                    <td>{formatDateToDisplay(su.billDate)}</td>
-                    <td style={{ fontSize: '0.88rem' }}>
-                      {su.items.map((i, idx) => (
-                        <div key={idx}>
-                          {i.itemName} <span style={{ color: '#EA3943', fontWeight: 800 }}>x{round2(i.qty)}</span>
-                        </div>
-                      ))}
-                    </td>
-                    <td style={{ textAlign: 'center', fontWeight: 800, color: '#EA3943' }}>
-                      {round2(su.items.reduce((a, b) => a + (Number(b.qty) || 0), 0))}
-                    </td>
-                    <td style={{ textAlign: 'right', fontWeight: 800 }}>
-                      {formatCurrency(su.totalAmount, false)}
-                    </td>
-                    <td style={{ color: '#4B5563', fontSize: '0.85rem' }}>{su.remarks || 'Production'}</td>
-                  </tr>
-                ))
+                filteredSelfUses.map(su => {
+                  const billTotal = Number(su.totalAmount) || 0;
+                  return (
+                    <React.Fragment key={su.id}>
+                      {su.items.map((item, idx) => {
+                        const itemPrice = item.rate || (item.qty ? round2(item.amount / item.qty) : 0);
+                        const itemAmt = item.amount || round2(item.qty * itemPrice);
+                        return (
+                          <tr
+                            key={`${su.id}-${item.id || idx}`}
+                            style={{
+                              borderBottom: '1px solid #D1D5DB',
+                              background: '#FFFFFF'
+                            }}
+                          >
+                            {/* Voucher No & Date spanning the bill rows */}
+                            {idx === 0 ? (
+                              <>
+                                <td
+                                  rowSpan={su.items.length}
+                                  style={{
+                                    padding: '10px 12px',
+                                    borderRight: '1px solid #000000',
+                                    fontWeight: 900,
+                                    verticalAlign: 'top',
+                                    fontFamily: 'monospace'
+                                  }}
+                                >
+                                  {su.billNo}
+                                </td>
+                                <td
+                                  rowSpan={su.items.length}
+                                  style={{
+                                    padding: '10px 12px',
+                                    borderRight: '1px solid #000000',
+                                    fontWeight: 800,
+                                    verticalAlign: 'top'
+                                  }}
+                                >
+                                  {formatDateToDisplay(su.billDate)}
+                                </td>
+                              </>
+                            ) : null}
+
+                            {/* Item details */}
+                            <td style={{ padding: '8px 14px', borderRight: '1px solid #000000', fontWeight: 700 }}>
+                              {item.itemName}
+                            </td>
+                            <td style={{ padding: '8px 12px', borderRight: '1px solid #000000', textAlign: 'center', fontWeight: 900 }}>
+                              {round2(item.qty)}
+                            </td>
+                            <td style={{ padding: '8px 12px', borderRight: '1px solid #000000', textAlign: 'right', fontWeight: 800 }}>
+                              {round2(itemPrice)}
+                            </td>
+                            <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 800 }}>
+                              {formatCurrency(itemAmt, false)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+
+                      {/* Yellow SUB TOTAL row under each voucher */}
+                      <tr style={{ background: '#FFFF00', borderTop: '1px solid #000000', borderBottom: '2px solid #000000' }}>
+                        <td
+                          colSpan={5}
+                          style={{
+                            padding: '8px 14px',
+                            fontWeight: 900,
+                            fontSize: '0.92rem',
+                            color: '#DC2626',
+                            borderRight: '1px solid #000000',
+                            letterSpacing: '0.04em'
+                          }}
+                        >
+                          SUB TOTAL
+                        </td>
+                        <td
+                          style={{
+                            padding: '8px 14px',
+                            textAlign: 'right',
+                            fontWeight: 900,
+                            fontSize: '1rem',
+                            color: '#DC2626'
+                          }}
+                        >
+                          {formatCurrency(billTotal, false)}
+                        </td>
+                      </tr>
+                    </React.Fragment>
+                  );
+                })
               )}
             </tbody>
-            <tfoot>
-              <tr style={{ background: 'var(--color-lavender-table-head)', borderTop: '2px solid #000000' }}>
-                <td colSpan={3} style={{ padding: '10px 12px', fontWeight: 900, textAlign: 'right' }}>
-                  TOTALS:
-                </td>
-                <td style={{ textAlign: 'center', fontWeight: 900, color: '#EA3943' }}>{totals.totalQty}</td>
-                <td style={{ textAlign: 'right', fontWeight: 900, fontSize: '1.05rem' }}>
-                  {formatCurrency(totals.totalValue, false)}
-                </td>
-                <td></td>
-              </tr>
-            </tfoot>
           </table>
         </div>
       </div>

@@ -3,22 +3,14 @@ import { db } from '../../db/db';
 import { useApp } from '../../context/AppContext';
 import { Party, PartyLog, Sale } from '../../types';
 import { formatDateToDisplay, getTodayDateString } from '../../utils/dateUtils';
-import { formatCurrency, round2 } from '../../utils/calculations';
+import { round2, formatCurrency } from '../../utils/calculations';
 import {
   FileText,
-  Search,
   Printer,
   Download,
-  Calendar,
-  DollarSign,
   PlusCircle,
   X,
-  CreditCard,
-  User,
-  ArrowRight,
-  ExternalLink,
-  Receipt,
-  CheckCircle2
+  ExternalLink
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { PaymentCollectModal } from '../common/PaymentCollectModal';
@@ -29,8 +21,7 @@ export const PartyLedgerReportView: React.FC = () => {
     selectedLedgerPartyId,
     setSelectedLedgerPartyId,
     showToast,
-    showAlert,
-    setActiveTab
+    showAlert
   } = useApp();
 
   const parties = useMemo(() => db.getParties(), [refreshKey]);
@@ -55,7 +46,6 @@ export const PartyLedgerReportView: React.FC = () => {
   const [fromDate, setFromDate] = useState<string>('2026-04-01');
   const [toDate, setToDate] = useState<string>(getTodayDateString());
   const [isAllTime, setIsAllTime] = useState<boolean>(true);
-  const [searchTerm, setSearchTerm] = useState<string>('');
 
   // Payment Receipt Modal State
   const [showPaymentForm, setShowPaymentForm] = useState<boolean>(false);
@@ -74,84 +64,6 @@ export const PartyLedgerReportView: React.FC = () => {
     return db.getPartyLogsByPartyId(currentPartyId);
   }, [currentPartyId, refreshKey]);
 
-  // Filtered logs with continuous running balance and period opening balance calculation
-  const filteredLogs = useMemo<PartyLog[]>(() => {
-    if (!currentPartyId || !activeParty) return [];
-
-    let processedLogs: PartyLog[] = [];
-
-    if (isAllTime) {
-      processedLogs = [...rawLogs];
-    } else {
-      // Calculate pre-period opening balance brought forward
-      const openingBal = Number(activeParty.openingBalance) || 0;
-      const openingDate = activeParty.openingBalanceDate || (activeParty.createdAt ? activeParty.createdAt.split('T')[0] : '2026-04-01');
-      let preBalance = 0;
-
-      if (openingDate < fromDate) {
-        preBalance += openingBal;
-      }
-
-      const allDbLogs = db.getPartyLogs().filter(l => l.partyId === currentPartyId);
-      allDbLogs.forEach(l => {
-        if (l.date < fromDate) {
-          preBalance += (Number(l.balanceChange) || 0);
-        }
-      });
-
-      // Synthetic Period Opening Balance row
-      const periodOpeningLog: PartyLog = {
-        id: `period-open-${currentPartyId}-${fromDate}`,
-        partyId: currentPartyId,
-        partyName: activeParty.name,
-        date: fromDate,
-        type: 'OPENING_BALANCE',
-        refNo: 'OPENING-BF',
-        totalAmount: preBalance > 0 ? preBalance : 0,
-        paidAmount: preBalance < 0 ? Math.abs(preBalance) : 0,
-        balanceChange: preBalance,
-        runningBalance: Number(preBalance.toFixed(2)),
-        notes: `Opening Balance B/F as of ${formatDateToDisplay(fromDate)}`,
-        createdAt: fromDate
-      };
-
-      processedLogs.push(periodOpeningLog);
-
-      // Period transactions
-      const periodLogs = rawLogs.filter(l => {
-        if (l.type === 'OPENING_BALANCE') {
-          // If the original opening balance falls within the period, keep it if not already included in preBalance
-          return openingDate >= fromDate && openingDate <= toDate;
-        }
-        return l.date >= fromDate && l.date <= toDate;
-      });
-
-      let currentRunning = preBalance;
-      periodLogs.forEach(log => {
-        if (log.type !== 'OPENING_BALANCE') {
-          currentRunning += (Number(log.balanceChange) || 0);
-          processedLogs.push({
-            ...log,
-            runningBalance: Number(currentRunning.toFixed(2))
-          });
-        }
-      });
-    }
-
-    if (searchTerm.trim()) {
-      const query = searchTerm.toLowerCase();
-      return processedLogs.filter(log => {
-        const refMatch = (log.refNo || '').toLowerCase().includes(query);
-        const notesMatch = (log.notes || '').toLowerCase().includes(query);
-        const modeMatch = (log.paymentMode || '').toLowerCase().includes(query);
-        const particularsMatch = (log.type || '').toLowerCase().includes(query);
-        return refMatch || notesMatch || modeMatch || particularsMatch;
-      });
-    }
-
-    return processedLogs;
-  }, [rawLogs, isAllTime, fromDate, toDate, searchTerm, currentPartyId, activeParty]);
-
   // Financial summary
   const summary = useMemo(() => {
     if (!activeParty) {
@@ -166,9 +78,25 @@ export const PartyLedgerReportView: React.FC = () => {
     const balanceSummary = db.getPartyBalanceSummary(activeParty.id);
     return {
       ...balanceSummary,
-      logsCount: filteredLogs.length
+      openingBalance: Number(activeParty.openingBalance) || 0,
+      logsCount: rawLogs.length
     };
-  }, [activeParty, filteredLogs, refreshKey]);
+  }, [activeParty, rawLogs, refreshKey]);
+
+  // Filtered transactions (excluding synthetic opening balance so it displays in Row 1)
+  const transactionLogs = useMemo<PartyLog[]>(() => {
+    if (!currentPartyId || !activeParty) return [];
+
+    const nonOpeningLogs = rawLogs.filter(l => l.type !== 'OPENING_BALANCE');
+
+    if (isAllTime) {
+      return nonOpeningLogs;
+    }
+
+    return nonOpeningLogs.filter(l => {
+      return l.date >= fromDate && l.date <= toDate;
+    });
+  }, [rawLogs, isAllTime, fromDate, toDate, currentPartyId, activeParty]);
 
   // Handle party change from dropdown
   const handleSelectParty = (partyId: string) => {
@@ -178,7 +106,7 @@ export const PartyLedgerReportView: React.FC = () => {
   };
 
   // Quick preset filters
-  const setQuickFilter = (type: 'ALL' | 'TODAY' | 'MONTH' | 'YEAR') => {
+  const setQuickFilter = (type: 'ALL' | 'TODAY' | 'MONTH') => {
     const today = getTodayDateString();
     if (type === 'ALL') {
       setIsAllTime(true);
@@ -191,14 +119,8 @@ export const PartyLedgerReportView: React.FC = () => {
       const parts = today.split('-');
       setFromDate(`${parts[0]}-${parts[1]}-01`);
       setToDate(today);
-    } else if (type === 'YEAR') {
-      setIsAllTime(false);
-      const parts = today.split('-');
-      setFromDate(`${parts[0]}-04-01`); // Indian Financial Year Apr 1
-      setToDate(today);
     }
   };
-
 
   // Open full detail log when clicking any bill
   const handleOpenBillDetail = (refNo?: string) => {
@@ -207,24 +129,36 @@ export const PartyLedgerReportView: React.FC = () => {
     if (sale) {
       setSelectedSaleDetail(sale);
     } else {
-      showAlert(`Invoice detail log for "${refNo}" not found in current sales database.`, 'Invoice Not Found', 'info');
+      showAlert(`Invoice detail log for "${refNo}" not found.`, 'Invoice Not Found', 'info');
     }
   };
 
   // Export ledger to Excel
   const handleExportExcel = () => {
     if (!activeParty) return;
-    const exportRows = filteredLogs.map((log, idx) => ({
-      '#': idx + 1,
-      'Date': formatDateToDisplay(log.date),
-      'Particulars': log.type === 'SALE' ? 'Sale Invoice' : log.type === 'PAYMENT' ? 'Payment Receipt' : 'Opening Balance',
-      'Voucher / Bill No': log.refNo || '-',
-      'Debit (Billed ₹)': log.totalAmount || 0,
-      'Credit (Paid ₹)': log.paidAmount || 0,
-      'Running Balance (₹)': log.runningBalance !== undefined ? log.runningBalance : log.balanceChange,
-      'Payment Mode': log.paymentMode || '-',
-      'Notes / Remarks': log.notes || ''
-    }));
+    const exportRows: Record<string, any>[] = [
+      {
+        'Date': '',
+        'Bill No.': 'OPP. BALANCE',
+        'Debit (Billed ₹)': '',
+        'Credit (Paid ₹)': '',
+        'Balance (₹)': summary.openingBalance,
+        'Mode': '',
+        'Remarks': 'Opening Balance'
+      }
+    ];
+
+    transactionLogs.forEach(log => {
+      exportRows.push({
+        'Date': formatDateToDisplay(log.date),
+        'Bill No.': log.refNo || '-',
+        'Debit (Billed ₹)': log.totalAmount || '',
+        'Credit (Paid ₹)': log.paidAmount || '',
+        'Balance (₹)': log.runningBalance !== undefined ? log.runningBalance : log.balanceChange,
+        'Mode': log.paymentMode || '',
+        'Remarks': log.notes || ''
+      });
+    });
 
     const ws = XLSX.utils.json_to_sheet(exportRows);
     const wb = XLSX.utils.book_new();
@@ -233,46 +167,44 @@ export const PartyLedgerReportView: React.FC = () => {
     showToast('Party statement ledger exported to Excel!', 'success');
   };
 
-  // Print statement
   const handlePrint = () => {
     window.print();
   };
 
   return (
     <div className="party-ledger-view" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {/* TOP HEADER & ACTION BAR */}
+      {/* TOP HEADER & ACTION BAR matching mockup */}
       <div
-        className="glass-card"
         style={{
           background: '#FFFFFF',
           border: '2px solid #000000',
-          borderRadius: '12px',
-          padding: '16px 20px',
+          borderRadius: '10px',
+          padding: '14px 18px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '14px'
+          gap: '12px'
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div
               style={{
                 background: '#002B99',
                 color: '#FFFFFF',
-                padding: '8px',
-                borderRadius: '8px',
+                padding: '6px',
+                borderRadius: '6px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center'
               }}
             >
-              <FileText size={24} />
+              <FileText size={20} />
             </div>
             <div>
-              <h2 style={{ margin: 0, fontWeight: 900, fontSize: '1.4rem', color: '#002B99', letterSpacing: '-0.3px' }}>
-                PARTY STATEMENT & CUSTOMER LEDGER
+              <h2 style={{ margin: 0, fontWeight: 900, fontSize: '1.25rem', color: '#002B99', letterSpacing: '-0.3px' }}>
+                PARTY LEDGER
               </h2>
-              <div style={{ fontSize: '0.82rem', color: '#6B7280', fontWeight: 600 }}>
+              <div style={{ fontSize: '0.78rem', color: '#6B7280', fontWeight: 600 }}>
                 Comprehensive financial ledger, payment collections, and interactive bill logs
               </div>
             </div>
@@ -282,14 +214,13 @@ export const PartyLedgerReportView: React.FC = () => {
             <button
               type="button"
               onClick={() => setShowPaymentForm(true)}
-              className="btn-classic"
               style={{
                 background: '#16A34A',
                 color: '#FFFFFF',
                 border: '1.5px solid #000000',
-                fontWeight: 800,
-                fontSize: '0.88rem',
-                padding: '8px 14px',
+                fontWeight: 900,
+                fontSize: '0.85rem',
+                padding: '7px 14px',
                 borderRadius: '6px',
                 display: 'flex',
                 alignItems: 'center',
@@ -297,21 +228,20 @@ export const PartyLedgerReportView: React.FC = () => {
                 cursor: 'pointer'
               }}
             >
-              <PlusCircle size={17} />
+              <PlusCircle size={16} />
               <span>Money Receive</span>
             </button>
 
             <button
               type="button"
               onClick={handleExportExcel}
-              className="btn-classic"
               style={{
-                background: '#F1F5F9',
-                color: '#0F172A',
+                background: '#FFFFFF',
+                color: '#000000',
                 border: '1.5px solid #000000',
                 fontWeight: 800,
-                fontSize: '0.88rem',
-                padding: '8px 12px',
+                fontSize: '0.85rem',
+                padding: '7px 12px',
                 borderRadius: '6px',
                 display: 'flex',
                 alignItems: 'center',
@@ -319,21 +249,20 @@ export const PartyLedgerReportView: React.FC = () => {
                 cursor: 'pointer'
               }}
             >
-              <Download size={16} />
+              <Download size={15} />
               <span>Excel</span>
             </button>
 
             <button
               type="button"
               onClick={handlePrint}
-              className="btn-classic"
               style={{
-                background: '#F1F5F9',
-                color: '#0F172A',
+                background: '#FFFFFF',
+                color: '#000000',
                 border: '1.5px solid #000000',
                 fontWeight: 800,
-                fontSize: '0.88rem',
-                padding: '8px 12px',
+                fontSize: '0.85rem',
+                padding: '7px 12px',
                 borderRadius: '6px',
                 display: 'flex',
                 alignItems: 'center',
@@ -341,56 +270,43 @@ export const PartyLedgerReportView: React.FC = () => {
                 cursor: 'pointer'
               }}
             >
-              <Printer size={16} />
+              <Printer size={15} />
               <span>Print</span>
             </button>
           </div>
         </div>
 
-        {/* DYNAMIC PARTY SELECTOR & DATE CONTROLS */}
+        {/* Filter controls row */}
         <div
           style={{
-            background: '#F8FAFC',
-            border: '1.5px solid #E2E8F0',
-            borderRadius: '10px',
-            padding: '12px 14px',
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
             gap: '12px',
-            alignItems: 'center'
+            alignItems: 'flex-end',
+            paddingTop: '8px',
+            borderTop: '1px solid #E5E7EB'
           }}
         >
-          {/* Party Switcher Dropdown */}
           <div>
-            <label style={{ display: 'block', fontWeight: 800, fontSize: '0.78rem', color: '#475569', marginBottom: '3px' }}>
+            <label style={{ display: 'block', fontWeight: 800, fontSize: '0.75rem', color: '#4B5563', marginBottom: '3px' }}>
               Select Customer / Party
             </label>
             <select
               className="input-text-clean"
               value={currentPartyId}
               onChange={e => handleSelectParty(e.target.value)}
-              style={{
-                width: '100%',
-                fontWeight: 800,
-                fontSize: '0.92rem',
-                background: '#FFFFFF',
-                borderColor: '#002B99'
-              }}
+              style={{ width: '100%', fontWeight: 800, fontSize: '0.9rem' }}
             >
-              {parties.map(p => {
-                const bal = db.getPartyBalanceSummary(p.id).outstandingBalance;
-                return (
-                  <option key={p.id} value={p.id}>
-                    {p.name} {p.city ? `(${p.city})` : ''} {bal > 0 ? `— Due: ₹${bal}` : '— Settled'}
-                  </option>
-                );
-              })}
+              {parties.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
             </select>
           </div>
 
-          {/* Date Range: From Date */}
           <div>
-            <label style={{ display: 'block', fontWeight: 800, fontSize: '0.78rem', color: '#475569', marginBottom: '3px' }}>
+            <label style={{ display: 'block', fontWeight: 800, fontSize: '0.75rem', color: '#4B5563', marginBottom: '3px' }}>
               From Date
             </label>
             <input
@@ -403,9 +319,8 @@ export const PartyLedgerReportView: React.FC = () => {
             />
           </div>
 
-          {/* Date Range: To Date */}
           <div>
-            <label style={{ display: 'block', fontWeight: 800, fontSize: '0.78rem', color: '#475569', marginBottom: '3px' }}>
+            <label style={{ display: 'block', fontWeight: 800, fontSize: '0.75rem', color: '#4B5563', marginBottom: '3px' }}>
               To Date
             </label>
             <input
@@ -418,19 +333,19 @@ export const PartyLedgerReportView: React.FC = () => {
             />
           </div>
 
-          {/* Quick Preset Buttons */}
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-end', paddingTop: '16px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
             <button
               type="button"
               onClick={() => setQuickFilter('ALL')}
-              className="btn-classic"
               style={{
-                padding: '6px 10px',
+                padding: '6px 12px',
                 fontSize: '0.75rem',
-                fontWeight: 800,
+                fontWeight: 900,
+                borderRadius: '4px',
+                border: '1.5px solid #000000',
                 background: isAllTime ? '#002B99' : '#FFFFFF',
-                color: isAllTime ? '#FFFFFF' : '#002B99',
-                borderColor: '#002B99'
+                color: isAllTime ? '#FFFFFF' : '#000000',
+                cursor: 'pointer'
               }}
             >
               All Time
@@ -438,12 +353,15 @@ export const PartyLedgerReportView: React.FC = () => {
             <button
               type="button"
               onClick={() => setQuickFilter('MONTH')}
-              className="btn-classic"
               style={{
-                padding: '6px 10px',
+                padding: '6px 12px',
                 fontSize: '0.75rem',
-                fontWeight: 800,
-                background: !isAllTime ? '#FFFFFF' : '#F1F5F9'
+                fontWeight: 900,
+                borderRadius: '4px',
+                border: '1.5px solid #000000',
+                background: !isAllTime ? '#002B99' : '#FFFFFF',
+                color: !isAllTime ? '#FFFFFF' : '#000000',
+                cursor: 'pointer'
               }}
             >
               This Month
@@ -451,12 +369,15 @@ export const PartyLedgerReportView: React.FC = () => {
             <button
               type="button"
               onClick={() => setQuickFilter('TODAY')}
-              className="btn-classic"
               style={{
-                padding: '6px 10px',
+                padding: '6px 12px',
                 fontSize: '0.75rem',
-                fontWeight: 800,
-                background: '#FFFFFF'
+                fontWeight: 900,
+                borderRadius: '4px',
+                border: '1.5px solid #000000',
+                background: '#FFFFFF',
+                color: '#000000',
+                cursor: 'pointer'
               }}
             >
               Today
@@ -465,312 +386,298 @@ export const PartyLedgerReportView: React.FC = () => {
         </div>
       </div>
 
-      {/* PARTY PROFILE & KPI SUMMARY RIBBON */}
-      {activeParty && (
-        <div className="stat-grid-auto" style={{ gap: '14px' }}>
-          {/* Party Metadata Card */}
-          <div
-            style={{
-              background: '#FFFFFF',
-              border: '2px solid #000000',
-              borderRadius: '10px',
-              padding: '14px 16px',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between'
-            }}
-          >
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span
-                  style={{
-                    background: activeParty.partyType === 'DEALER' ? '#DBEAFE' : '#FEF3C7',
-                    color: activeParty.partyType === 'DEALER' ? '#1E40AF' : '#92400E',
-                    fontSize: '0.72rem',
-                    fontWeight: 900,
-                    padding: '2px 8px',
-                    borderRadius: '4px'
-                  }}
-                >
-                  {activeParty.partyType === 'DEALER' ? '🏢 DEALER (Wholesale)' : '👤 AMATEUR (Retail)'}
-                </span>
-                <span
-                  style={{
-                    background: activeParty.allowCredit ? '#DCFCE7' : '#F1F5F9',
-                    color: activeParty.allowCredit ? '#15803D' : '#475569',
-                    fontSize: '0.72rem',
-                    fontWeight: 800,
-                    padding: '2px 8px',
-                    borderRadius: '4px'
-                  }}
-                >
-                  {activeParty.allowCredit ? '✓ Credit Allowed' : 'Cash Only'}
-                </span>
-              </div>
-              <h3 style={{ margin: '8px 0 4px', fontWeight: 900, fontSize: '1.15rem', color: '#002B99' }}>
-                {activeParty.name}
-              </h3>
-              <div style={{ fontSize: '0.8rem', color: '#4B5563', lineHeight: 1.4 }}>
-                {activeParty.phone && <div>📞 {activeParty.phone} {activeParty.phone2 ? `| ${activeParty.phone2}` : ''}</div>}
-                {activeParty.address && <div>📍 {activeParty.address} {activeParty.city ? `, ${activeParty.city}` : ''}</div>}
-                {activeParty.gstin && <div>GST: <code style={{ fontWeight: 800 }}>{activeParty.gstin}</code></div>}
-              </div>
-            </div>
-          </div>
+      {/* FULL-WIDTH MAGENTA PARTY BANNER matching mockup */}
+      <div
+        style={{
+          background: '#F5A3E0',
+          border: '2px solid #000000',
+          borderRadius: '8px',
+          padding: '8px 16px',
+          textAlign: 'left'
+        }}
+      >
+        <span
+          style={{
+            fontWeight: 900,
+            fontSize: '1.25rem',
+            color: '#000000',
+            letterSpacing: '0.02em',
+            textTransform: 'uppercase'
+          }}
+        >
+          {activeParty?.name || 'SELECT CUSTOMER / PARTY'}
+        </span>
+      </div>
 
-          {/* KPI 1: Total Billed */}
+      {/* 4 KPI SUMMARY CARDS matching mockup */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: '12px'
+        }}
+      >
+        {/* Card 1: Opp. Balance */}
+        <div
+          style={{
+            background: '#FFFFFF',
+            border: '2px solid #000000',
+            borderRadius: '8px',
+            padding: '10px 14px',
+            textAlign: 'center'
+          }}
+        >
           <div
             style={{
-              background: '#FFFFFF',
-              border: '2px solid #000000',
-              borderRadius: '10px',
-              padding: '14px 16px',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center'
+              fontSize: '0.85rem',
+              fontWeight: 800,
+              color: '#000000',
+              marginBottom: '4px'
             }}
           >
-            <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>
-              Total Sales Billed
-            </div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#002B99', marginTop: '4px' }}>
-              ₹{summary.totalBilled}
-            </div>
-            <div style={{ fontSize: '0.75rem', color: '#94A3B8', fontWeight: 600 }}>
-              All invoices issued
-            </div>
+            Opp. Balance
           </div>
-
-          {/* KPI 2: Total Payments Received */}
-          <div
-            style={{
-              background: '#FFFFFF',
-              border: '2px solid #000000',
-              borderRadius: '10px',
-              padding: '14px 16px',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center'
-            }}
-          >
-            <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#166534', textTransform: 'uppercase' }}>
-              Total Paid / Collected
-            </div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#16A34A', marginTop: '4px' }}>
-              ₹{summary.totalPaid}
-            </div>
-            <div style={{ fontSize: '0.75rem', color: '#15803D', fontWeight: 600 }}>
-              Cash + UPI + Receipts
-            </div>
-          </div>
-
-          {/* KPI 3: Outstanding Balance Due */}
-          <div
-            style={{
-              background: summary.outstandingBalance > 0 ? '#FEF2F2' : '#F0FDF4',
-              border: '2px solid #000000',
-              borderRadius: '10px',
-              padding: '14px 16px',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center'
-            }}
-          >
-            <div
-              style={{
-                fontSize: '0.8rem',
-                fontWeight: 800,
-                color: summary.outstandingBalance > 0 ? '#991B1B' : '#166534',
-                textTransform: 'uppercase'
-              }}
-            >
-              Outstanding Balance Due
-            </div>
-            <div
-              style={{
-                fontSize: '1.6rem',
-                fontWeight: 900,
-                color: summary.outstandingBalance > 0 ? '#DC2626' : '#16A34A',
-                marginTop: '4px'
-              }}
-            >
-              ₹{summary.outstandingBalance}
-            </div>
-            <div
-              style={{
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                color: summary.outstandingBalance > 0 ? '#B91C1C' : '#15803D'
-              }}
-            >
-              {summary.outstandingBalance > 0 ? '⚠️ Payment Pending' : '✓ Fully Settled'}
-            </div>
+          <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#000000' }}>
+            {summary.openingBalance}
           </div>
         </div>
-      )}
 
-      {/* DETAILED TRANSACTION LEDGER TABLE */}
+        {/* Card 2: Debit */}
+        <div
+          style={{
+            background: '#FFFFFF',
+            border: '2px solid #000000',
+            borderRadius: '8px',
+            padding: '10px 14px',
+            textAlign: 'center'
+          }}
+        >
+          <div
+            style={{
+              fontSize: '0.85rem',
+              fontWeight: 800,
+              color: '#000000',
+              marginBottom: '4px'
+            }}
+          >
+            Debit
+          </div>
+          <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#000000' }}>
+            {summary.totalBilled}
+          </div>
+        </div>
+
+        {/* Card 3: Credit */}
+        <div
+          style={{
+            background: '#FFFFFF',
+            border: '2px solid #000000',
+            borderRadius: '8px',
+            padding: '10px 14px',
+            textAlign: 'center'
+          }}
+        >
+          <div
+            style={{
+              fontSize: '0.85rem',
+              fontWeight: 800,
+              color: '#000000',
+              marginBottom: '4px'
+            }}
+          >
+            Credit
+          </div>
+          <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#000000' }}>
+            {summary.totalPaid}
+          </div>
+        </div>
+
+        {/* Card 4: Closing Balance */}
+        <div
+          style={{
+            background: '#FFFFFF',
+            border: '2px solid #000000',
+            borderRadius: '8px',
+            padding: '10px 14px',
+            textAlign: 'center'
+          }}
+        >
+          <div
+            style={{
+              fontSize: '0.85rem',
+              fontWeight: 800,
+              color: '#000000',
+              marginBottom: '4px'
+            }}
+          >
+            Closing Balance
+          </div>
+          <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#000000' }}>
+            {summary.outstandingBalance}
+          </div>
+        </div>
+      </div>
+
+      {/* DETAILED TRANSACTION LEDGER TABLE matching mockup */}
       <div
-        className="glass-card"
         style={{
           background: '#FFFFFF',
           border: '2px solid #000000',
-          borderRadius: '12px',
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column'
+          borderRadius: '10px',
+          overflow: 'hidden'
         }}
       >
-        <div
-          style={{
-            background: '#D2BEF6',
-            padding: '12px 18px',
-            borderBottom: '2px solid #000000',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between'
-          }}
-        >
-          <div style={{ fontWeight: 900, fontSize: '1rem', color: '#002B99' }}>
-            LEDGER TRANSACTION LOGS ({filteredLogs.length} Records)
-          </div>
-          <div style={{ fontSize: '0.8rem', color: '#4B5563', fontWeight: 700 }}>
-            💡 Tip: Click on any Voucher / Bill Number to view detailed item breakdown
-          </div>
-        </div>
-
         <div className="table-responsive-wrapper">
-          <table className="table-clean" style={{ width: '100%', minWidth: '780px', borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
             <thead>
-              <tr style={{ background: '#ECECEC', borderBottom: '2px solid #000000' }}>
-                <th style={{ padding: '10px 12px', textAlign: 'center', width: '50px' }}>#</th>
-                <th style={{ padding: '10px 12px', textAlign: 'center', width: '110px' }}>Date</th>
-                <th style={{ padding: '10px 12px', textAlign: 'left', width: '140px' }}>Type</th>
-                <th style={{ padding: '10px 12px', textAlign: 'left', width: '150px' }}>Voucher / Bill No.</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right', width: '130px', color: '#002B99' }}>Debit (Billed ₹)</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right', width: '130px', color: '#16A34A' }}>Credit (Paid ₹)</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right', width: '130px', color: '#DC2626' }}>Balance (₹)</th>
-                <th style={{ padding: '10px 12px', textAlign: 'center', width: '110px' }}>Mode</th>
-                <th style={{ padding: '10px 12px', textAlign: 'left' }}>Notes / Remarks</th>
-                <th style={{ padding: '10px 12px', textAlign: 'center', width: '90px' }}>Action</th>
+              <tr style={{ background: '#D4C4FB', borderBottom: '2px solid #000000' }}>
+                <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', width: '130px', fontWeight: 900, fontSize: '0.95rem' }}>
+                  Date
+                </th>
+                <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', width: '150px', fontWeight: 900, fontSize: '0.95rem' }}>
+                  Bill No.
+                </th>
+                <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', width: '140px', fontWeight: 900, fontSize: '0.95rem', color: '#002B99' }}>
+                  Debit (Billed ₹)
+                </th>
+                <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', width: '140px', fontWeight: 900, fontSize: '0.95rem', color: '#16A34A' }}>
+                  Credit (Paid ₹)
+                </th>
+                <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', width: '150px', fontWeight: 900, fontSize: '0.95rem', color: '#DC2626' }}>
+                  Balance (₹)
+                </th>
+                <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', width: '100px', fontWeight: 900, fontSize: '0.95rem' }}>
+                  Mode
+                </th>
+                <th style={{ padding: '10px 12px', fontWeight: 900, fontSize: '0.95rem', textAlign: 'left' }}>
+                  Remarks
+                </th>
               </tr>
             </thead>
             <tbody>
-              {filteredLogs.length === 0 ? (
-                <tr>
-                  <td colSpan={10} style={{ padding: '40px', textAlign: 'center', color: '#64748B', fontWeight: 700 }}>
-                    No transactions found for {activeParty?.name || 'this party'} in the selected date range.
-                  </td>
-                </tr>
-              ) : (
-                filteredLogs.map((log, index) => {
-                  const isInvoice = log.type === 'SALE';
-                  const displayBalance = log.runningBalance !== undefined ? log.runningBalance : log.balanceChange;
-                  return (
-                    <tr
-                      key={log.id}
-                      style={{
-                        borderBottom: '1px solid #E2E8F0',
-                        background: isInvoice ? '#FFFFFF' : '#F0FDF4'
-                      }}
-                    >
-                      <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: '#64748B' }}>
-                        {index + 1}
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700 }}>
-                        {formatDateToDisplay(log.date)}
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'left' }}>
-                        <span
+              {/* Row 1: Light cyan OPP. BALANCE ROW matching mockup */}
+              <tr style={{ background: '#CFF4FC', borderBottom: '1px solid #000000', height: '48px' }}>
+                <td style={{ borderRight: '1px solid #000000' }}></td>
+                <td style={{ borderRight: '1px solid #000000' }}></td>
+                <td style={{ borderRight: '1px solid #000000' }}></td>
+                <td style={{ borderRight: '1px solid #000000' }}></td>
+                <td style={{ borderRight: '1px solid #000000', padding: '6px 10px', lineHeight: 1.2 }}>
+                  <div style={{ fontWeight: 900, fontSize: '0.85rem', color: '#000000' }}>OPP. BALACE</div>
+                  <div style={{ fontWeight: 900, fontSize: '1rem', color: '#000000' }}>{summary.openingBalance}</div>
+                </td>
+                <td style={{ borderRight: '1px solid #000000' }}></td>
+                <td></td>
+              </tr>
+
+              {/* Transactions */}
+              {transactionLogs.map(log => {
+                const isInvoice = log.type === 'SALE';
+                const displayBalance = log.runningBalance !== undefined ? log.runningBalance : log.balanceChange;
+                return (
+                  <tr
+                    key={log.id}
+                    style={{
+                      borderBottom: '1px solid #000000',
+                      background: '#FFFFFF',
+                      height: '38px'
+                    }}
+                  >
+                    <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
+                      {formatDateToDisplay(log.date)}
+                    </td>
+                    <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
+                      {isInvoice ? (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenBillDetail(log.refNo)}
                           style={{
-                            background: isInvoice ? '#DBEAFE' : '#DCFCE7',
-                            color: isInvoice ? '#1E40AF' : '#15803D',
-                            fontSize: '0.75rem',
-                            fontWeight: 900,
-                            padding: '3px 8px',
-                            borderRadius: '4px'
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#000000',
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            textDecoration: 'underline'
                           }}
                         >
-                          {isInvoice ? '📄 SALE INVOICE' : log.type === 'PAYMENT' ? '💰 RECEIPT' : '📌 OPENING'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'left' }}>
-                        {isInvoice ? (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenBillDetail(log.refNo)}
-                            style={{
-                              background: 'transparent',
-                              border: 'none',
-                              color: '#002B99',
-                              fontWeight: 900,
-                              fontSize: '0.92rem',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              textDecoration: 'underline'
-                            }}
-                            title="Click to view detailed item breakdown"
-                          >
-                            <span>{log.refNo}</span>
-                            <ExternalLink size={13} />
-                          </button>
-                        ) : (
-                          <span style={{ fontWeight: 800, color: '#475569' }}>{log.refNo || '-'}</span>
-                        )}
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 900, color: '#002B99' }}>
-                        {log.totalAmount ? `₹${round2(log.totalAmount)}` : '-'}
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 900, color: '#16A34A' }}>
-                        {log.paidAmount ? `₹${round2(log.paidAmount)}` : '-'}
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 900, color: displayBalance > 0 ? '#DC2626' : '#16A34A' }}>
-                        ₹{round2(displayBalance)}
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, fontSize: '0.82rem' }}>
-                        {log.paymentMode || '-'}
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.85rem', color: '#4B5563' }}>
-                        {log.notes || '-'}
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                        {isInvoice && (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenBillDetail(log.refNo)}
-                            className="btn-classic"
-                            style={{
-                              padding: '4px 8px',
-                              fontSize: '0.75rem',
-                              fontWeight: 800,
-                              background: '#EFF6FF',
-                              color: '#1D4ED8',
-                              borderColor: '#93C5FD'
-                            }}
-                          >
-                            View
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
+                          {log.refNo}
+                        </button>
+                      ) : (
+                        <span>{log.refNo || '-'}</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
+                      {log.totalAmount ? round2(log.totalAmount) : ''}
+                    </td>
+                    <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
+                      {log.paidAmount ? round2(log.paidAmount) : ''}
+                    </td>
+                    <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
+                      {round2(displayBalance)}
+                    </td>
+                    <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
+                      {log.paymentMode || ''}
+                    </td>
+                    <td style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 700 }}>
+                      {log.notes || ''}
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {/* Pad with empty rows if fewer than 5 transactions */}
+              {Array.from({ length: Math.max(0, 5 - transactionLogs.length) }).map((_, i) => (
+                <tr key={`empty-${i}`} style={{ borderBottom: '1px solid #000000', height: '34px' }}>
+                  <td style={{ borderRight: '1px solid #000000' }}></td>
+                  <td style={{ borderRight: '1px solid #000000' }}></td>
+                  <td style={{ borderRight: '1px solid #000000' }}></td>
+                  <td style={{ borderRight: '1px solid #000000' }}></td>
+                  <td style={{ borderRight: '1px solid #000000' }}></td>
+                  <td style={{ borderRight: '1px solid #000000' }}></td>
+                  <td></td>
+                </tr>
+              ))}
             </tbody>
+
+            {/* Bottom Total Row matching mockup */}
+            <tfoot>
+              <tr style={{ background: '#FFFFFF', borderTop: '2px solid #000000', height: '42px' }}>
+                <td
+                  colSpan={2}
+                  style={{
+                    padding: '8px 12px',
+                    fontWeight: 900,
+                    fontSize: '1.1rem',
+                    textAlign: 'center',
+                    borderRight: '1px solid #000000'
+                  }}
+                >
+                  Total
+                </td>
+                <td style={{ padding: '8px 10px', fontWeight: 900, fontSize: '1rem', borderRight: '1px solid #000000' }}>
+                  {summary.totalBilled}
+                </td>
+                <td style={{ padding: '8px 10px', fontWeight: 900, fontSize: '1rem', borderRight: '1px solid #000000' }}>
+                  {summary.totalPaid}
+                </td>
+                <td style={{ padding: '8px 10px', fontWeight: 900, fontSize: '1rem', borderRight: '1px solid #000000' }}>
+                  {summary.outstandingBalance}
+                </td>
+                <td style={{ borderRight: '1px solid #000000' }}></td>
+                <td></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>
 
-      {/* PAYMENT COLLECTION MODAL */}
+      {/* Payment Receipt Modal */}
       <PaymentCollectModal
         isOpen={showPaymentForm}
         onClose={() => setShowPaymentForm(false)}
         initialPartyId={activeParty?.id}
       />
 
-      {/* DETAILED BILL LOG POPUP MODAL */}
+      {/* Detailed Bill Log Modal */}
       {selectedSaleDetail && (
         <div
           style={{
@@ -791,144 +698,61 @@ export const PartyLedgerReportView: React.FC = () => {
             style={{
               background: '#FFFFFF',
               border: '2px solid #000000',
-              borderRadius: '16px',
+              borderRadius: '12px',
               width: '100%',
-              maxWidth: '900px',
+              maxWidth: '800px',
               maxHeight: '90vh',
               display: 'flex',
               flexDirection: 'column',
-              boxShadow: '0 25px 30px -5px rgba(0, 0, 0, 0.4)',
               overflow: 'hidden'
             }}
           >
-            {/* Modal Header */}
             <div
               style={{
-                background: '#D2BEF6',
-                padding: '16px 22px',
+                background: '#D4C4FB',
+                padding: '12px 18px',
                 borderBottom: '2px solid #000000',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <Receipt size={24} color="#002B99" />
-                <div>
-                  <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.25rem', color: '#002B99' }}>
-                    Sale Invoice Detail Log: {selectedSaleDetail.billNo}
-                  </h3>
-                  <div style={{ fontSize: '0.82rem', color: '#4B5563', fontWeight: 700 }}>
-                    Date: {formatDateToDisplay(selectedSaleDetail.billDate)} | Customer: {selectedSaleDetail.partyName}
-                  </div>
-                </div>
+              <div style={{ fontWeight: 900, fontSize: '1.1rem' }}>
+                Sale Invoice: {selectedSaleDetail.billNo} ({formatDateToDisplay(selectedSaleDetail.billDate)})
               </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => setSelectedSaleDetail(null)}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: '4px',
-                    borderRadius: '50%'
-                  }}
-                >
-                  <X size={22} />
-                </button>
-              </div>
+              <button
+                onClick={() => setSelectedSaleDetail(null)}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
             </div>
-
-            {/* Modal Body */}
-            <div style={{ padding: '20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {/* Key Invoice Summary Cards */}
-              <div className="stat-grid-auto" style={{ gap: '10px' }}>
-                <div style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '8px', padding: '10px 12px' }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748B' }}>Basic Total</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#002B99' }}>₹{selectedSaleDetail.basicTotal}</div>
-                </div>
-                <div style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '8px', padding: '10px 12px' }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748B' }}>GST Total</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#002B99' }}>₹{selectedSaleDetail.gstTotal}</div>
-                </div>
-                <div style={{ background: '#EFF6FF', border: '1.5px solid #BFDBFE', borderRadius: '8px', padding: '10px 12px' }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#1E40AF' }}>Bill Total</div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#1E40AF' }}>₹{selectedSaleDetail.billTotal}</div>
-                </div>
-                <div style={{ background: '#F0FDF4', border: '1.5px solid #BBF7D0', borderRadius: '8px', padding: '10px 12px' }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#166534' }}>Paid / Balance</div>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#16A34A' }}>
-                    ₹{(selectedSaleDetail.recdCash || 0) + (selectedSaleDetail.recdUpi || 0)}
-                    {selectedSaleDetail.balanceDue ? (
-                      <span style={{ fontSize: '0.8rem', color: '#DC2626', marginLeft: '6px' }}>
-                        (Due: ₹{selectedSaleDetail.balanceDue})
-                      </span>
-                    ) : ''}
-                  </div>
-                </div>
+            <div style={{ padding: '16px', overflowY: 'auto' }}>
+              <div style={{ marginBottom: '12px', fontWeight: 800 }}>
+                Customer / Party: {selectedSaleDetail.partyName}
               </div>
-
-              {/* Items Breakdown Table */}
-              <div style={{ border: '1.5px solid #000000', borderRadius: '8px', overflow: 'hidden' }}>
-                <div style={{ background: '#ECECEC', padding: '8px 12px', fontWeight: 800, fontSize: '0.88rem', borderBottom: '1px solid #000000' }}>
-                  Billed Items & Rate Breakdown
-                </div>
-                <div className="table-responsive-wrapper">
-                  <table className="table-clean" style={{ width: '100%', minWidth: '680px', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #CBD5E1', fontSize: '0.82rem' }}>
-                      <th style={{ padding: '8px 10px', textAlign: 'center', width: '40px' }}>#</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'left' }}>Item Name</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'right', width: '85px' }}>Basic (₹)</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'right', width: '70px' }}>GST %</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'right', width: '85px' }}>GST Amt</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'right', width: '85px' }}>Nett (₹)</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'right', width: '90px' }}>Rate (₹)</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'center', width: '70px' }}>Qty</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'right', width: '100px' }}>Amount (₹)</th>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ background: '#ECECEC', borderBottom: '1px solid #000000' }}>
+                    <th style={{ padding: '8px' }}>Item</th>
+                    <th style={{ padding: '8px', textAlign: 'center' }}>Qty</th>
+                    <th style={{ padding: '8px', textAlign: 'right' }}>Rate</th>
+                    <th style={{ padding: '8px', textAlign: 'right' }}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedSaleDetail.items.map((it, idx) => (
+                    <tr key={idx} style={{ borderBottom: '1px solid #E5E7EB' }}>
+                      <td style={{ padding: '8px', fontWeight: 700 }}>{it.itemName}</td>
+                      <td style={{ padding: '8px', textAlign: 'center', fontWeight: 800 }}>{it.qty}</td>
+                      <td style={{ padding: '8px', textAlign: 'right' }}>₹{it.salePrice || (it as any).saleRate || 0}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', fontWeight: 800 }}>₹{it.amount}</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {selectedSaleDetail.items.map((item, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', fontSize: '0.85rem' }}>
-                        <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700 }}>{idx + 1}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 800 }}>
-                          {item.itemName} {item.unit ? `(${item.unit})` : ''}
-                        </td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{item.basicPrice}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>{item.gstPercent}%</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{item.gstAmt}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>₹{item.nettPrice}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#002B99' }}>
-                          ₹{item.salePrice || item.mrp}
-                        </td>
-                        <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 900 }}>{item.qty}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 900, color: '#002B99' }}>
-                          ₹{item.amount}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                </div>
-              </div>
-
-              {/* Payment Details Footer */}
-              <div style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '8px', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
-                <div>
-                  <span style={{ fontWeight: 800, color: '#475569' }}>Payment Mode: </span>
-                  <span style={{ fontWeight: 700 }}>
-                    Cash: ₹{selectedSaleDetail.recdCash || 0} | UPI/Online: ₹{selectedSaleDetail.recdUpi || 0}
-                  </span>
-                </div>
-                {selectedSaleDetail.notes && (
-                  <div>
-                    <span style={{ fontWeight: 800, color: '#475569' }}>Remarks: </span>
-                    <span>{selectedSaleDetail.notes}</span>
-                  </div>
-                )}
+                  ))}
+                </tbody>
+              </table>
+              <div style={{ textAlign: 'right', marginTop: '16px', fontWeight: 900, fontSize: '1.1rem' }}>
+                Bill Total: ₹{selectedSaleDetail.billTotal}
               </div>
             </div>
           </div>

@@ -1,606 +1,573 @@
 import React, { useState, useMemo } from 'react';
+import { db } from '../../db/db';
 import { useApp } from '../../context/AppContext';
 import { StockEngine } from '../../db/stockEngine';
 import { formatDateToDisplay, getTodayDateString } from '../../utils/dateUtils';
-import { formatCurrency } from '../../utils/calculations';
-import { AlertCircle, ShoppingCart, ArrowRight, CreditCard, ChevronLeft, ChevronRight, Calendar, RotateCcw } from 'lucide-react';
-import { PaymentCollectModal } from '../common/PaymentCollectModal';
+import { formatCurrency, round2 } from '../../utils/calculations';
 
 export const DashboardView: React.FC = () => {
-  const { selectedDate, refreshKey, setActiveTab } = useApp();
-  const [isCollectPaymentOpen, setIsCollectPaymentOpen] = useState(false);
-  
-  // Date selection state
-  const [dateMode, setDateMode] = useState<'SINGLE' | 'RANGE'>('SINGLE');
-  const [currentDate, setCurrentDate] = useState<string>(selectedDate || getTodayDateString());
-  const [rangeFrom, setRangeFrom] = useState<string>(selectedDate || getTodayDateString());
-  const [rangeTo, setRangeTo] = useState<string>(selectedDate || getTodayDateString());
+  const { refreshKey } = useApp();
 
-  const todayStr = getTodayDateString();
-  const isToday = dateMode === 'SINGLE' && currentDate === todayStr;
+  const items = useMemo(() => db.getItems(), [refreshKey]);
+  const purchases = useMemo(() => db.getPurchases(), [refreshKey]);
+  const sales = useMemo(() => db.getSales(), [refreshKey]);
+  const selfUses = useMemo(() => db.getSelfUses(), [refreshKey]);
 
-  const handlePrevDay = () => {
-    const d = new Date(currentDate);
-    d.setDate(d.getDate() - 1);
-    const prev = d.toISOString().split('T')[0];
-    setCurrentDate(prev);
-  };
+  // Categories list
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    items.forEach(i => {
+      if (i.category && i.category.trim()) set.add(i.category.trim());
+    });
+    return Array.from(set).sort();
+  }, [items]);
 
-  const handleNextDay = () => {
-    const d = new Date(currentDate);
-    d.setDate(d.getDate() + 1);
-    const next = d.toISOString().split('T')[0];
-    setCurrentDate(next);
-  };
+  // Filter state for dashboard center search
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [selectedItemId, setSelectedItemId] = useState<string>(() => {
+    return items.length > 0 ? items[0].id : '';
+  });
 
-  const handleResetToday = () => {
-    setCurrentDate(todayStr);
-    setRangeFrom(todayStr);
-    setRangeTo(todayStr);
-  };
+  const [showQty, setShowQty] = useState<boolean>(true);
+  const [showAmount, setShowAmount] = useState<boolean>(false);
 
-  // Quick Range Presets
-  const handleSetPreset = (preset: 'TODAY' | 'YESTERDAY' | 'LAST7' | 'THIS_MONTH') => {
-    const now = new Date();
-    if (preset === 'TODAY') {
-      setRangeFrom(todayStr);
-      setRangeTo(todayStr);
-    } else if (preset === 'YESTERDAY') {
-      const y = new Date();
-      y.setDate(y.getDate() - 1);
-      const yStr = y.toISOString().split('T')[0];
-      setRangeFrom(yStr);
-      setRangeTo(yStr);
-    } else if (preset === 'LAST7') {
-      const past = new Date();
-      past.setDate(past.getDate() - 6);
-      setRangeFrom(past.toISOString().split('T')[0]);
-      setRangeTo(todayStr);
-    } else if (preset === 'THIS_MONTH') {
-      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-      setRangeFrom(firstDay);
-      setRangeTo(todayStr);
-    }
-  };
+  // Filtered items based on selected category
+  const filteredItemsByCategory = useMemo(() => {
+    if (!selectedCategory) return items;
+    return items.filter(i => (i.category || '').toLowerCase() === selectedCategory.toLowerCase());
+  }, [items, selectedCategory]);
 
-  // Calculate live sales numbers for the selected date or date range
-  const salesMetrics = useMemo(() => {
-    if (dateMode === 'RANGE') {
-      return StockEngine.getDashboardSalesMetrics(rangeFrom, rangeTo);
-    }
-    return StockEngine.getDashboardSalesMetrics(currentDate);
-  }, [dateMode, currentDate, rangeFrom, rangeTo, refreshKey]);
+  // Selected item entity
+  const selectedItem = useMemo(() => {
+    const found = items.find(i => i.id === selectedItemId);
+    return found || (items.length > 0 ? items[0] : null);
+  }, [items, selectedItemId]);
 
-  // Retrieve low-stock items with active order statuses
-  const lowStockItems = useMemo(() => {
-    return StockEngine.getLowStockItems();
-  }, [refreshKey]);
+  // Compute live stock value for selected item
+  const itemClosingStock = useMemo(() => {
+    if (!selectedItem) return 0;
+    return StockEngine.getItemCurrentStock(selectedItem.id);
+  }, [selectedItem, refreshKey]);
+
+  const itemStockValue = useMemo(() => {
+    if (!selectedItem) return 0;
+    const rate = selectedItem.purchaseRate || (selectedItem.unitA?.basicPrice ?? 0);
+    return round2(itemClosingStock * rate);
+  }, [selectedItem, itemClosingStock]);
+
+  // Transactions list for selected item
+  const itemLedgerRows = useMemo(() => {
+    if (!selectedItem) return [];
+
+    const rows: Array<{
+      date: string;
+      billNo: string;
+      supplier: string;
+      unit: string;
+      basicPrice: number;
+      purcQty: number;
+      saleQty: number;
+      useQty: number;
+      stockAfter: number;
+    }> = [];
+
+    let currentStock = Number(selectedItem.openingStock) || 0;
+
+    // Collect all transactions
+    const rawEvents: Array<{
+      date: string;
+      billNo: string;
+      supplierOrParty: string;
+      unit: string;
+      basicPrice: number;
+      purc: number;
+      sale: number;
+      use: number;
+    }> = [];
+
+    // Purchases
+    purchases.forEach(p => {
+      const match = p.items.find(it => it.itemId === selectedItem.id);
+      if (match) {
+        rawEvents.push({
+          date: p.billDate,
+          billNo: p.billNo,
+          supplierOrParty: p.supplierName,
+          unit: selectedItem.unit || 'PCS',
+          basicPrice: match.purchaseRate || match.basicPrice || selectedItem.purchaseRate || 0,
+          purc: Number(match.qty) || 0,
+          sale: 0,
+          use: 0
+        });
+      }
+    });
+
+    // Sales
+    sales.forEach(s => {
+      const match = s.items.find(it => it.itemId === selectedItem.id);
+      if (match) {
+        rawEvents.push({
+          date: s.billDate,
+          billNo: s.billNo,
+          supplierOrParty: s.partyName,
+          unit: selectedItem.unit || 'PCS',
+          basicPrice: match.salePrice || selectedItem.saleRate || 0,
+          purc: 0,
+          sale: Number(match.qty) || 0,
+          use: 0
+        });
+      }
+    });
+
+    // Self Use
+    selfUses.forEach(su => {
+      const match = su.items.find(it => it.itemId === selectedItem.id);
+      if (match) {
+        rawEvents.push({
+          date: su.billDate,
+          billNo: su.billNo,
+          supplierOrParty: su.remarks || 'Self-Use',
+          unit: selectedItem.unit || 'PCS',
+          basicPrice: match.rate || selectedItem.purchaseRate || 0,
+          purc: 0,
+          sale: 0,
+          use: Number(match.qty) || 0
+        });
+      }
+    });
+
+    // Sort chronologically
+    rawEvents.sort((a, b) => a.date.localeCompare(b.date));
+
+    rawEvents.forEach(ev => {
+      currentStock += ev.purc - ev.sale - ev.use;
+      rows.push({
+        date: ev.date,
+        billNo: ev.billNo,
+        supplier: ev.supplierOrParty,
+        unit: ev.unit,
+        basicPrice: ev.basicPrice,
+        purcQty: ev.purc,
+        saleQty: ev.sale,
+        useQty: ev.use,
+        stockAfter: round2(currentStock)
+      });
+    });
+
+    return rows;
+  }, [selectedItem, purchases, sales, selfUses]);
+
+  // Aggregate totals for the preview table
+  const ledgerTotals = useMemo(() => {
+    let purc = 0;
+    let sale = 0;
+    let use = 0;
+    itemLedgerRows.forEach(r => {
+      purc += r.purcQty;
+      sale += r.saleQty;
+      use += r.useQty;
+    });
+    return {
+      purc: round2(purc),
+      sale: round2(sale),
+      use: round2(use),
+      closingStock: itemClosingStock
+    };
+  }, [itemLedgerRows, itemClosingStock]);
 
   return (
-    <div className="content-panel-grey">
-      {/* Date Navigation & Range Selector Header Strip */}
+    <div className="content-panel-grey" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* WELCOME HEADER matching mockup */}
+      <div style={{ textAlign: 'center', marginTop: '4px' }}>
+        <h1
+          style={{
+            fontFamily: 'Outfit, sans-serif',
+            fontSize: '2rem',
+            fontWeight: 900,
+            margin: '0 0 2px',
+            color: '#000000',
+            letterSpacing: '0.04em'
+          }}
+        >
+          WELCOME
+        </h1>
+        <h2
+          style={{
+            fontFamily: 'Outfit, sans-serif',
+            fontSize: '1.75rem',
+            fontWeight: 900,
+            margin: '0 0 4px',
+            color: '#000000',
+            letterSpacing: '0.03em'
+          }}
+        >
+          RAW MATERIAL MANAGEMENT SYSTEM
+        </h2>
+        <div style={{ fontSize: '0.78rem', color: '#DC2626', fontWeight: 800, lineHeight: 1.2 }}>
+          Devloped by evodebs<br />
+          Ansh Rajput
+        </div>
+      </div>
+
+      {/* CENTER SEARCH SECTION matching mockup */}
       <div
-        className="date-selector-strip"
         style={{
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           gap: '12px',
-          marginBottom: '20px'
+          maxWidth: '560px',
+          margin: '0 auto',
+          width: '100%'
         }}
       >
-        {dateMode === 'SINGLE' ? (
-          /* Single Date Navigation with Prev/Next Arrows */
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button
-              type="button"
-              onClick={handlePrevDay}
-              className="btn-classic"
-              style={{
-                padding: '7px 14px',
-                borderRadius: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                background: '#FFFFFF',
-                fontWeight: 800,
-                fontSize: '0.88rem'
-              }}
-              title="Previous Day (View yesterday's sales)"
-            >
-              <ChevronLeft size={18} />
-              <span>Prev</span>
-            </button>
-
-            {/* Today Badge & Interactive Date Picker */}
-            <div
-              className="today-date-badge"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '6px 16px',
-                border: isToday ? '2px solid #002B99' : '2px solid #000000',
-                borderRadius: '10px',
-                background: isToday ? '#DCFCE7' : '#FFFFFF',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.06)'
-              }}
-            >
-              {isToday && (
-                <span className="label" style={{ background: '#16A34A', color: '#FFFFFF', padding: '2px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 900 }}>
-                  TODAY
-                </span>
-              )}
-              <input
-                type="date"
-                value={currentDate}
-                onChange={e => setCurrentDate(e.target.value)}
-                style={{
-                  border: 'none',
-                  background: 'transparent',
-                  fontFamily: 'Outfit, sans-serif',
-                  fontWeight: 900,
-                  fontSize: '1.05rem',
-                  color: '#002B99',
-                  cursor: 'pointer',
-                  outline: 'none'
-                }}
-                title="Click to select any custom date"
-              />
-            </div>
-
-            <button
-              type="button"
-              onClick={handleNextDay}
-              className="btn-classic"
-              style={{
-                padding: '7px 14px',
-                borderRadius: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                background: '#FFFFFF',
-                fontWeight: 800,
-                fontSize: '0.88rem'
-              }}
-              title="Next Day (View next day's sales)"
-            >
-              <span>Next</span>
-              <ChevronRight size={18} />
-            </button>
-
-            {!isToday && (
-              <button
-                type="button"
-                onClick={handleResetToday}
-                className="btn-classic"
-                style={{
-                  padding: '7px 14px',
-                  borderRadius: '8px',
-                  background: '#FEF3C7',
-                  color: '#92400E',
-                  border: '1.5px solid #F59E0B',
-                  fontWeight: 800,
-                  fontSize: '0.85rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}
-                title="Reset to today's date"
-              >
-                <RotateCcw size={14} />
-                <span>Today</span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() => setDateMode('RANGE')}
-              className="btn-classic"
-              style={{
-                padding: '7px 14px',
-                borderRadius: '8px',
-                background: '#EEF2FF',
-                color: '#3730A3',
-                border: '1.5px solid #818CF8',
-                fontWeight: 800,
-                fontSize: '0.85rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-              title="Switch to Date Range Filter"
-            >
-              <Calendar size={15} />
-              <span>Date Range</span>
-            </button>
-          </div>
-        ) : (
-          /* Date Range Mode */
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#FFFFFF', padding: '6px 12px', border: '1.5px solid #000000', borderRadius: '8px' }}>
-                <span style={{ fontWeight: 800, fontSize: '0.82rem', color: '#4B5563' }}>From:</span>
-                <input
-                  type="date"
-                  value={rangeFrom}
-                  onChange={e => setRangeFrom(e.target.value)}
-                  style={{ border: 'none', fontWeight: 800, fontSize: '0.92rem', color: '#002B99', outline: 'none' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#FFFFFF', padding: '6px 12px', border: '1.5px solid #000000', borderRadius: '8px' }}>
-                <span style={{ fontWeight: 800, fontSize: '0.82rem', color: '#4B5563' }}>To:</span>
-                <input
-                  type="date"
-                  value={rangeTo}
-                  onChange={e => setRangeTo(e.target.value)}
-                  style={{ border: 'none', fontWeight: 800, fontSize: '0.92rem', color: '#002B99', outline: 'none' }}
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setDateMode('SINGLE')}
-                className="btn-classic"
-                style={{
-                  padding: '7px 14px',
-                  borderRadius: '8px',
-                  background: '#FFFFFF',
-                  fontWeight: 800,
-                  fontSize: '0.85rem'
-                }}
-              >
-                Single Day Mode
-              </button>
-            </div>
-
-            {/* Quick Presets for Date Range */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
-              <button
-                type="button"
-                onClick={() => handleSetPreset('TODAY')}
-                style={{ background: '#FFFFFF', border: '1px solid #D1D5DB', borderRadius: '14px', padding: '3px 10px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}
-              >
-                Today
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSetPreset('YESTERDAY')}
-                style={{ background: '#FFFFFF', border: '1px solid #D1D5DB', borderRadius: '14px', padding: '3px 10px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}
-              >
-                Yesterday
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSetPreset('LAST7')}
-                style={{ background: '#FFFFFF', border: '1px solid #D1D5DB', borderRadius: '14px', padding: '3px 10px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}
-              >
-                Last 7 Days
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSetPreset('THIS_MONTH')}
-                style={{ background: '#FFFFFF', border: '1px solid #D1D5DB', borderRadius: '14px', padding: '3px 10px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}
-              >
-                This Month
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* SALES SUMMARY SECTION */}
-      <div
-        style={{
-          border: '2px solid #000000',
-          borderRadius: '12px',
-          overflow: 'hidden',
-          backgroundColor: '#D9D9D9',
-          marginBottom: '24px'
-        }}
-      >
-        <div
+        {/* Search Category */}
+        <select
+          value={selectedCategory}
+          onChange={e => {
+            setSelectedCategory(e.target.value);
+            // Optionally select first item in this category
+            const match = items.find(i => !e.target.value || (i.category || '').toLowerCase() === e.target.value.toLowerCase());
+            if (match) setSelectedItemId(match.id);
+          }}
           style={{
-            backgroundColor: '#D9D9D9',
-            padding: '10px 16px',
+            width: '100%',
+            maxWidth: '380px',
+            padding: '8px 14px',
+            border: '1.5px solid #000000',
+            borderRadius: '4px',
+            fontSize: '0.95rem',
+            fontWeight: 700,
             textAlign: 'center',
-            borderBottom: '2px solid #000000'
+            background: '#FFFFFF',
+            outline: 'none',
+            cursor: 'pointer'
           }}
         >
-          <h2
+          <option value="">Search Category (All Categories)</option>
+          {categories.map(c => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+
+        {/* Search Item */}
+        <select
+          value={selectedItem?.id || ''}
+          onChange={e => setSelectedItemId(e.target.value)}
+          style={{
+            width: '100%',
+            maxWidth: '480px',
+            padding: '8px 14px',
+            border: '1.5px solid #000000',
+            borderRadius: '4px',
+            fontSize: '0.95rem',
+            fontWeight: 800,
+            textAlign: 'center',
+            background: '#FFFFFF',
+            outline: 'none',
+            cursor: 'pointer'
+          }}
+        >
+          {filteredItemsByCategory.map(i => (
+            <option key={i.id} value={i.id}>
+              {i.name}
+            </option>
+          ))}
+        </select>
+
+        {/* UNIT-A & UNIT-B PARALLEL BOXES matching mockup */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '24px',
+            width: '100%',
+            maxWidth: '560px',
+            marginTop: '6px'
+          }}
+        >
+          {/* Unit-A */}
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontWeight: 800, fontSize: '0.92rem', marginBottom: '4px' }}>
+              Unit-A : {selectedItem?.unitA?.unitName || selectedItem?.unit || 'Box'}
+            </div>
+            <div
+              style={{
+                border: '1.5px solid #000000',
+                height: '38px',
+                background: '#FFFFFF',
+                borderRadius: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 900,
+                fontSize: '1rem'
+              }}
+            >
+              {selectedItem?.unitA?.unitName || selectedItem?.unit || ''}
+            </div>
+
+            <div style={{ fontWeight: 900, fontSize: '0.9rem', color: '#15803D', margin: '8px 0 4px' }}>
+              SALE PRICE
+            </div>
+            <div
+              style={{
+                border: '1.5px solid #000000',
+                height: '48px',
+                background: '#FFFFFF',
+                borderRadius: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 900,
+                fontSize: '1.3rem',
+                color: '#002B99'
+              }}
+            >
+              {selectedItem?.unitA?.salePrice ?? selectedItem?.saleRate ?? 0}
+            </div>
+          </div>
+
+          {/* Unit-B */}
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontWeight: 800, fontSize: '0.92rem', marginBottom: '4px' }}>
+              Unit-B : {selectedItem?.unitB?.unitName || 'Box'}
+            </div>
+            <div
+              style={{
+                border: '1.5px solid #000000',
+                height: '38px',
+                background: '#FFFFFF',
+                borderRadius: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 900,
+                fontSize: '1rem'
+              }}
+            >
+              {selectedItem?.unitB?.unitName || ''}
+            </div>
+
+            <div style={{ fontWeight: 900, fontSize: '0.9rem', color: '#15803D', margin: '8px 0 4px' }}>
+              SALE PRICE
+            </div>
+            <div
+              style={{
+                border: '1.5px solid #000000',
+                height: '48px',
+                background: '#FFFFFF',
+                borderRadius: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 900,
+                fontSize: '1.3rem',
+                color: '#002B99'
+              }}
+            >
+              {selectedItem?.unitB?.salePrice ?? 0}
+            </div>
+          </div>
+        </div>
+
+        {/* Current Stock Value matching mockup */}
+        <div style={{ textAlign: 'center', marginTop: '6px', width: '100%', maxWidth: '240px' }}>
+          <div style={{ fontWeight: 900, fontSize: '0.92rem', color: '#15803D', marginBottom: '4px' }}>
+            Curent Stock Value
+          </div>
+          <div
             style={{
-              fontFamily: 'Outfit, sans-serif',
+              border: '1.5px solid #000000',
+              height: '42px',
+              background: '#FFFFFF',
+              borderRadius: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               fontWeight: 900,
-              fontSize: '1.35rem',
-              color: '#002B99',
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              margin: 0
+              fontSize: '1.25rem',
+              color: '#000000'
             }}
           >
-            SALES {dateMode === 'SINGLE' ? `(${formatDateToDisplay(currentDate)})` : `(${formatDateToDisplay(rangeFrom)} - ${formatDateToDisplay(rangeTo)})`}
-          </h2>
-          <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#4B5563' }}>
-            {salesMetrics.salesCount} {salesMetrics.salesCount === 1 ? 'Sale Invoice' : 'Sale Invoices'} Total
-          </span>
-        </div>
-
-        {/* 3 Circle Metric Cards */}
-        <div
-          className="sales-metric-row"
-          style={{
-            padding: '24px 20px',
-            background: '#D9D9D9'
-          }}
-        >
-          {/* CASH */}
-          <div className="metric-circle-card">
-            <div className="metric-title">CASH</div>
-            <div className="metric-value">
-              {formatCurrency(salesMetrics.cash, false)}
-            </div>
-          </div>
-
-          {/* ONLINE */}
-          <div className="metric-circle-card">
-            <div className="metric-title">ONLINE</div>
-            <div className="metric-value">
-              {formatCurrency(salesMetrics.online, false)}
-            </div>
-          </div>
-
-          {/* TOTAL */}
-          <div className="metric-circle-card">
-            <div className="metric-title">TOTAL</div>
-            <div className="metric-value">
-              {formatCurrency(salesMetrics.total, false)}
-            </div>
+            {itemStockValue}
           </div>
         </div>
       </div>
 
-      {/* STOCK / LOW STOCK SECTION */}
-      <div
-        style={{
-          border: '2px solid #000000',
-          borderRadius: '12px',
-          overflow: 'hidden',
-          backgroundColor: '#D9D9D9'
-        }}
-      >
+      {/* ITEM LEADGER SECTION matching mockup */}
+      <div style={{ marginTop: '10px' }}>
         <div
           style={{
-            backgroundColor: 'var(--color-lime)',
-            padding: '10px 16px',
-            borderBottom: '2px solid #000000',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             flexWrap: 'wrap',
-            gap: '8px'
+            gap: '12px',
+            marginBottom: '8px'
           }}
         >
-          <h2
+          <h3
             style={{
-              fontFamily: 'Outfit, sans-serif',
+              margin: 0,
               fontWeight: 900,
-              fontSize: '1.35rem',
-              color: '#002B99',
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase'
+              fontSize: '1.2rem',
+              color: '#000000',
+              letterSpacing: '0.04em'
             }}
           >
-            STOCK
-          </h2>
+            ITEM LEADGER
+          </h3>
 
-          <button
-            onClick={() => setActiveTab('ORDER')}
-            style={{
-              background: '#FFFFFF',
-              border: '1px solid #000000',
-              borderRadius: '20px',
-              padding: '4px 12px',
-              fontSize: '0.8rem',
-              fontWeight: 800,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}
-          >
-            <ShoppingCart size={14} />
-            Manage Orders
-            <ArrowRight size={14} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={showQty}
+                onChange={e => setShowQty(e.target.checked)}
+                style={{ width: '16px', height: '16px' }}
+              />
+              Show Qty
+            </label>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={showAmount}
+                onChange={e => setShowAmount(e.target.checked)}
+                style={{ width: '16px', height: '16px' }}
+              />
+              Show Amount
+            </label>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>OPP. Opening Stock</span>
+              <div
+                style={{
+                  border: '1.5px solid #000000',
+                  padding: '4px 14px',
+                  background: '#FFFFFF',
+                  borderRadius: '4px',
+                  fontWeight: 900,
+                  fontSize: '0.9rem',
+                  minWidth: '50px',
+                  textAlign: 'center'
+                }}
+              >
+                {selectedItem?.openingStock ?? 0}
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Stock Table */}
-        <div style={{ padding: '16px', backgroundColor: '#D9D9D9' }} className="table-responsive-wrapper">
-          <table
-            style={{
-              width: '100%',
-              minWidth: '500px',
-              borderCollapse: 'separate',
-              borderSpacing: '0 8px'
-            }}
-          >
-            <thead>
-              <tr style={{ background: 'transparent' }}>
-                <th
-                  style={{
-                    padding: '8px 12px',
-                    textAlign: 'left',
-                    fontFamily: 'Outfit, sans-serif',
-                    fontWeight: 800,
-                    fontSize: '1rem',
-                    color: '#000000',
-                    textTransform: 'uppercase'
-                  }}
-                >
-                  ITEM
-                </th>
-                <th
-                  style={{
-                    padding: '8px 12px',
-                    textAlign: 'center',
-                    fontFamily: 'Outfit, sans-serif',
-                    fontWeight: 800,
-                    fontSize: '1rem',
-                    color: '#EA3943',
-                    textTransform: 'uppercase',
-                    width: '120px'
-                  }}
-                >
-                  STOCK
-                </th>
-                <th
-                  style={{
-                    padding: '8px 12px',
-                    textAlign: 'center',
-                    fontFamily: 'Outfit, sans-serif',
-                    fontWeight: 800,
-                    fontSize: '1rem',
-                    color: '#000000',
-                    textTransform: 'uppercase',
-                    width: '160px'
-                  }}
-                >
-                  ORDER
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {lowStockItems.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={3}
-                    style={{
-                      background: '#FFFFFF',
-                      border: '1px solid #000000',
-                      borderRadius: '8px',
-                      padding: '24px',
-                      textAlign: 'center',
-                      fontWeight: 700,
-                      color: '#15803D'
-                    }}
-                  >
-                    ✓ All inventory items are adequately stocked above their reorder levels.
-                  </td>
+        {/* Ledger Table */}
+        <div
+          style={{
+            background: '#FFFFFF',
+            border: '2px solid #000000',
+            borderRadius: '6px',
+            overflow: 'hidden'
+          }}
+        >
+          <div className="table-responsive-wrapper">
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
+              <thead>
+                <tr style={{ background: '#D4C4FB', borderBottom: '2px solid #000000' }}>
+                  <th style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 900, fontSize: '0.88rem', width: '110px' }}>
+                    DATE
+                  </th>
+                  <th style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 900, fontSize: '0.88rem', width: '110px' }}>
+                    BILL NO.
+                  </th>
+                  <th style={{ padding: '8px 12px', borderRight: '1px solid #000000', fontWeight: 900, fontSize: '0.88rem', textAlign: 'left' }}>
+                    SUPPLIER
+                  </th>
+                  <th style={{ padding: '8px 8px', borderRight: '1px solid #000000', fontWeight: 900, fontSize: '0.88rem', width: '70px' }}>
+                    UNIT
+                  </th>
+                  <th style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 900, fontSize: '0.88rem', width: '90px' }}>
+                    B.PRICE
+                  </th>
+                  <th style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 900, fontSize: '0.88rem', width: '80px' }}>
+                    PURC.
+                  </th>
+                  <th style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 900, fontSize: '0.88rem', width: '80px' }}>
+                    SALE
+                  </th>
+                  <th style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 900, fontSize: '0.88rem', width: '80px' }}>
+                    USE
+                  </th>
+                  <th style={{ padding: '8px 10px', fontWeight: 900, fontSize: '0.88rem', width: '90px' }}>
+                    STOCK
+                  </th>
                 </tr>
-              ) : (
-                lowStockItems.map(summary => {
-                  const hasOrder = !!summary.activeOrder;
-                  return (
-                    <tr key={summary.item.id}>
-                      {/* ITEM NAME */}
-                      <td
-                        style={{
-                          background: '#E0E0E0',
-                          border: '1px solid #000000',
-                          borderTopLeftRadius: '4px',
-                          borderBottomLeftRadius: '4px',
-                          padding: '10px 14px',
-                          fontWeight: 800,
-                          fontSize: '0.95rem',
-                          color: '#000000'
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span>{summary.item.name}</span>
-                          <span style={{ fontSize: '0.75rem', color: '#6B7280', fontWeight: 600 }}>
-                            (Min: {summary.item.minStock})
-                          </span>
-                        </div>
+              </thead>
+              <tbody>
+                {itemLedgerRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} style={{ textAlign: 'center', padding: '36px', color: '#4B5563', fontWeight: 700 }}>
+                      No transactions recorded for {selectedItem?.name || 'this item'}.
+                    </td>
+                  </tr>
+                ) : (
+                  itemLedgerRows.map((r, idx) => (
+                    <tr key={idx} style={{ borderBottom: '1px solid #000000', background: '#FFFFFF' }}>
+                      <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 700 }}>
+                        {formatDateToDisplay(r.date)}
                       </td>
-
-                      {/* STOCK */}
-                      <td
-                        style={{
-                          background: '#FFFFFF',
-                          borderTop: '1px solid #000000',
-                          borderBottom: '1px solid #000000',
-                          padding: '10px 14px',
-                          textAlign: 'center',
-                          fontFamily: 'Outfit, sans-serif',
-                          fontWeight: 900,
-                          fontSize: '1.2rem',
-                          color: '#EA3943'
-                        }}
-                      >
-                        {summary.closingStock}
+                      <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800, fontFamily: 'monospace' }}>
+                        {r.billNo}
                       </td>
-
-                      {/* ORDER STATUS */}
-                      <td
-                        style={{
-                          background: '#FFFFFF',
-                          border: '1px solid #000000',
-                          borderTopRightRadius: '4px',
-                          borderBottomRightRadius: '4px',
-                          padding: '8px 12px',
-                          textAlign: 'center'
-                        }}
-                      >
-                        {hasOrder ? (
-                          <div
-                            style={{
-                              display: 'flex',
-                              flexDirection: 'column',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              lineHeight: 1.2
-                            }}
-                          >
-                            <span
-                              style={{
-                                color: '#059669',
-                                fontWeight: 900,
-                                fontSize: '0.85rem',
-                                letterSpacing: '0.03em',
-                                textTransform: 'uppercase'
-                              }}
-                            >
-                              {summary.activeOrder?.supplierName}
-                            </span>
-                            <span
-                              style={{
-                                color: '#059669',
-                                fontSize: '0.75rem',
-                                fontWeight: 700
-                              }}
-                            >
-                              {formatDateToDisplay(summary.activeOrder?.orderDate)}
-                            </span>
-                          </div>
-                        ) : (
-                          <span
-                            style={{
-                              color: '#EA3943',
-                              fontWeight: 900,
-                              fontSize: '0.9rem',
-                              letterSpacing: '0.05em',
-                              textTransform: 'uppercase'
-                            }}
-                          >
-                            PENDING
-                          </span>
-                        )}
+                      <td style={{ padding: '8px 12px', borderRight: '1px solid #000000', textAlign: 'left', fontWeight: 700 }}>
+                        {r.supplier}
+                      </td>
+                      <td style={{ padding: '8px 8px', borderRight: '1px solid #000000', fontWeight: 700 }}>
+                        {r.unit}
+                      </td>
+                      <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
+                        {r.basicPrice}
+                      </td>
+                      <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 900 }}>
+                        {r.purcQty || ''}
+                      </td>
+                      <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 900 }}>
+                        {r.saleQty || ''}
+                      </td>
+                      <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 900 }}>
+                        {r.useQty || ''}
+                      </td>
+                      <td style={{ padding: '8px 10px', fontWeight: 900, color: '#002B99' }}>
+                        {r.stockAfter}
                       </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                  ))
+                )}
+              </tbody>
+              <tfoot>
+                <tr style={{ background: '#D4C4FB', borderTop: '2px solid #000000' }}>
+                  <td colSpan={5} style={{ padding: '8px 14px', fontWeight: 900, textAlign: 'left', borderRight: '1px solid #000000' }}>
+                    TOTAL
+                  </td>
+                  <td style={{ padding: '8px 10px', fontWeight: 900, borderRight: '1px solid #000000' }}>
+                    {ledgerTotals.purc}
+                  </td>
+                  <td style={{ padding: '8px 10px', fontWeight: 900, borderRight: '1px solid #000000' }}>
+                    {ledgerTotals.sale}
+                  </td>
+                  <td style={{ padding: '8px 10px', fontWeight: 900, borderRight: '1px solid #000000' }}>
+                    {ledgerTotals.use}
+                  </td>
+                  <td style={{ padding: '8px 10px', fontWeight: 900 }}>
+                    {ledgerTotals.closingStock}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         </div>
       </div>
-
-      {/* Reusable Collect Payment Modal */}
-      <PaymentCollectModal
-        isOpen={isCollectPaymentOpen}
-        onClose={() => setIsCollectPaymentOpen(false)}
-      />
     </div>
   );
 };

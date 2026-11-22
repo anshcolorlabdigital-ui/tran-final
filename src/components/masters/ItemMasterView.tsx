@@ -14,14 +14,34 @@ export const ItemMasterView: React.FC = () => {
   const { hasPermission } = useAuth();
 
   const items = useMemo(() => db.getItems(), [refreshKey]);
-  const suppliers = useMemo(() => db.getSuppliers().filter(s => s.isActive !== false), [refreshKey]);
+  // Sort suppliers alphabetically A-Z matching Hindi note: "Supplier Alfaber areng karna hai"
+  const suppliers = useMemo(() => {
+    return db
+      .getSuppliers()
+      .filter(s => s.isActive !== false)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [refreshKey]);
+
+  // Unique categories for suggestion dropdown
+  const existingCategories = useMemo(() => {
+    const set = new Set<string>();
+    items.forEach(i => {
+      if (i.category && i.category.trim()) set.add(i.category.trim());
+    });
+    return Array.from(set).sort();
+  }, [items]);
+
   const stockSummaries = useMemo(() => StockEngine.getAllItemsStockSummary(), [refreshKey]);
 
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [isTouched, setIsTouched] = useState(false);
   const [isJustSaved, setIsJustSaved] = useState(false);
-  const [hasSecondaryUnit, setHasSecondaryUnit] = useState(false);
-  const [search, setSearch] = useState('');
+  const [hasSecondaryUnit, setHasSecondaryUnit] = useState(true);
+
+  // Table filters matching mockup
+  const [showCategoryWise, setShowCategoryWise] = useState(false);
+  const [filterCategory, setFilterCategory] = useState('ALL');
+  const [filterItem, setFilterItem] = useState('ALL');
 
   const itemNameInputRef = useRef<HTMLInputElement>(null);
 
@@ -33,7 +53,7 @@ export const ItemMasterView: React.FC = () => {
     return () => clearTimeout(timer);
   }, [selectedItemId]);
 
-  // Form Fields matching customer screenshot item.jpg
+  // Form Fields
   const [sno, setSno] = useState('');
   const [name, setName] = useState('');
   const [hsn, setHsn] = useState('');
@@ -43,8 +63,8 @@ export const ItemMasterView: React.FC = () => {
   const [isActive, setIsActive] = useState(true);
   const [disableRestockNotification, setDisableRestockNotification] = useState(false);
 
-  // Unit A State
-  const [unitAName, setUnitAName] = useState('Roll');
+  // Unit A State (On Add New item, Unit A & B must be BLANK matching Hindi note)
+  const [unitAName, setUnitAName] = useState('');
   const [unitABasicPrice, setUnitABasicPrice] = useState('0');
   const [unitAGstPercent, setUnitAGstPercent] = useState('0');
   const [unitATranPercent, setUnitATranPercent] = useState('0');
@@ -58,7 +78,7 @@ export const ItemMasterView: React.FC = () => {
   const [unitAActive, setUnitAActive] = useState(true);
 
   // Unit B State
-  const [unitBName, setUnitBName] = useState('Mt.');
+  const [unitBName, setUnitBName] = useState('');
   const [unitBConversion, setUnitBConversion] = useState('40');
   const [unitBBasicPrice, setUnitBBasicPrice] = useState('0');
   const [unitBGstPercent, setUnitBGstPercent] = useState('0');
@@ -108,7 +128,7 @@ export const ItemMasterView: React.FC = () => {
     );
   }, [unitBBasicPrice, unitBGstPercent, unitBTranPercent, unitBProfAm, unitBProfDeal, unitBMisPercent, unitBRoundUpSale, unitBRoundUpMrp]);
 
-  // Auto-sync sale price and mrp when inputs change
+  // Sync sale price and mrp when inputs change
   useEffect(() => {
     if (isTouched) {
       setUnitASalePrice(String(unitABreakdown.salePrice));
@@ -123,6 +143,28 @@ export const ItemMasterView: React.FC = () => {
     }
   }, [unitBBreakdown.salePrice, unitBBreakdown.mrp, isTouched, hasSecondaryUnit]);
 
+  // Sync Unit A's percentages to Unit B automatically matching Hindi note:
+  // "UNIT B ka gst% tran% mis% prof% prof%-M by defalt unit A copy ho jaye chainj karne par cheng ho jaye"
+  const handleUnitAChange = (field: 'gst' | 'tran' | 'mis' | 'profDeal' | 'profAm', value: string) => {
+    setIsTouched(true);
+    if (field === 'gst') {
+      setUnitAGstPercent(value);
+      setUnitBGstPercent(value);
+    } else if (field === 'tran') {
+      setUnitATranPercent(value);
+      setUnitBTranPercent(value);
+    } else if (field === 'mis') {
+      setUnitAMisPercent(value);
+      setUnitBMisPercent(value);
+    } else if (field === 'profDeal') {
+      setUnitAProfDeal(value);
+      setUnitBProfDeal(value);
+    } else if (field === 'profAm') {
+      setUnitAProfAm(value);
+      setUnitBProfAm(value);
+    }
+  };
+
   // Delete dialog
   const [deleteDialog, setDeleteDialog] = useState<{ isOpen: boolean; id: string; name: string }>({
     isOpen: false,
@@ -130,14 +172,12 @@ export const ItemMasterView: React.FC = () => {
     name: ''
   });
 
-  const isFormActive = Boolean(isTouched || selectedItemId || name.trim() !== '');
-
   const loadItemIntoForm = (item: Item, viewOnly: boolean = false) => {
     setSelectedItemId(item.id);
     setIsTouched(false);
     setIsJustSaved(false);
     setIsViewOnly(viewOnly);
-    setHasSecondaryUnit(Boolean(item.hasSecondaryUnit || (item.unitB && item.unitB.isActive !== false && item.unitB.unitName && item.unitB.unitName !== item.unitA?.unitName)));
+    setHasSecondaryUnit(Boolean(item.hasSecondaryUnit || (item.unitB && item.unitB.isActive !== false)));
     setSno(item.sno || '');
     setName(item.name);
     setHsn(item.hsn || '');
@@ -148,10 +188,10 @@ export const ItemMasterView: React.FC = () => {
 
     // Unit A
     if (item.unitA) {
-      setUnitAName(item.unitA.unitName || 'Roll');
+      setUnitAName(item.unitA.unitName || '');
       setUnitABasicPrice(String(item.unitA.basicPrice ?? 0));
-      setUnitAGstPercent(String(item.unitA.gstPercent ?? 18));
-      setUnitATranPercent(String(item.unitA.tranPercent ?? 10));
+      setUnitAGstPercent(String(item.unitA.gstPercent ?? 0));
+      setUnitATranPercent(String(item.unitA.tranPercent ?? 0));
       setUnitAProfAm(String(item.unitA.profPercentAm ?? item.profPercentAm ?? 0));
       setUnitAProfDeal(String(item.unitA.profPercentDeal ?? item.unitA.profPercent ?? item.profPercentDeal ?? 0));
       setUnitAMisPercent(String(item.unitA.misPercent ?? 0));
@@ -161,10 +201,10 @@ export const ItemMasterView: React.FC = () => {
       setUnitAMrp(String(item.unitA.mrp ?? item.mrp ?? 0));
       setUnitAActive(item.unitA.isActive !== false);
     } else {
-      setUnitAName(item.unit || 'Roll');
+      setUnitAName(item.unit || '');
       setUnitABasicPrice(String(item.purchaseRate || 0));
-      setUnitAGstPercent(String(item.gstPercent || 18));
-      setUnitATranPercent('10');
+      setUnitAGstPercent(String(item.gstPercent || 0));
+      setUnitATranPercent('0');
       setUnitAProfAm(String(item.profPercentAm ?? 0));
       setUnitAProfDeal(String(item.profPercentDeal ?? 0));
       setUnitAMisPercent('0');
@@ -177,11 +217,11 @@ export const ItemMasterView: React.FC = () => {
 
     // Unit B
     if (item.unitB) {
-      setUnitBName(item.unitB.unitName || 'Mt.');
+      setUnitBName(item.unitB.unitName || '');
       setUnitBConversion(String(item.unitB.conversionFactor ?? 40));
       setUnitBBasicPrice(String(item.unitB.basicPrice ?? 0));
-      setUnitBGstPercent(String(item.unitB.gstPercent ?? 18));
-      setUnitBTranPercent(String(item.unitB.tranPercent ?? 10));
+      setUnitBGstPercent(String(item.unitB.gstPercent ?? 0));
+      setUnitBTranPercent(String(item.unitB.tranPercent ?? 0));
       setUnitBProfAm(String(item.unitB.profPercentAm ?? 0));
       setUnitBProfDeal(String(item.unitB.profPercentDeal ?? item.unitB.profPercent ?? 0));
       setUnitBMisPercent(String(item.unitB.misPercent ?? 0));
@@ -191,11 +231,11 @@ export const ItemMasterView: React.FC = () => {
       setUnitBMrp(String(item.unitB.mrp ?? 0));
       setUnitBActive(item.unitB.isActive !== false);
     } else {
-      setUnitBName('Mt.');
+      setUnitBName('');
       setUnitBConversion('40');
       setUnitBBasicPrice(String(item.purchaseRate || 0));
-      setUnitBGstPercent(String(item.gstPercent || 18));
-      setUnitBTranPercent('10');
+      setUnitBGstPercent(String(item.gstPercent || 0));
+      setUnitBTranPercent('0');
       setUnitBProfAm('0');
       setUnitBProfDeal('0');
       setUnitBMisPercent('0');
@@ -213,22 +253,24 @@ export const ItemMasterView: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Add new item: Unit A & B blank matching Hindi note!
   const handleCreateNew = () => {
     setSelectedItemId(null);
     setIsTouched(false);
     setIsJustSaved(false);
     setIsViewOnly(false);
-    setHasSecondaryUnit(false);
+    setHasSecondaryUnit(true);
     setSno(StockEngine.getNextItemSno());
     setName('');
     setHsn('');
     setDescription('');
-    setCategory('Paper & Sheets');
+    setCategory('');
     if (suppliers.length > 0) setSupplierId(suppliers[0].id);
     setIsActive(true);
     setDisableRestockNotification(false);
 
-    setUnitAName('Roll');
+    // Keep Unit A & B unit names BLANK on Add New!
+    setUnitAName('');
     setUnitABasicPrice('0');
     setUnitAGstPercent('0');
     setUnitATranPercent('0');
@@ -241,7 +283,7 @@ export const ItemMasterView: React.FC = () => {
     setUnitAMrp('0');
     setUnitAActive(true);
 
-    setUnitBName('Mt.');
+    setUnitBName('');
     setUnitBConversion('40');
     setUnitBBasicPrice('0');
     setUnitBGstPercent('0');
@@ -257,7 +299,21 @@ export const ItemMasterView: React.FC = () => {
 
     setMinStock('0');
     setOpeningStock('0');
-    showToast('Ready to create new item', 'info');
+    showToast('Ready to create new item (Units blank)', 'info');
+  };
+
+  // Repeat / Clone Item
+  const handleRepeat = () => {
+    if (!name.trim()) {
+      showToast('No item loaded to repeat', 'error');
+      return;
+    }
+    setSelectedItemId(null);
+    setSno(StockEngine.getNextItemSno());
+    setName(`${name} (COPY)`);
+    setIsTouched(true);
+    setIsViewOnly(false);
+    showToast('Item duplicated. Modify and click Save.', 'info');
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -271,9 +327,7 @@ export const ItemMasterView: React.FC = () => {
       return;
     }
 
-    // Auto-generate S.No if not provided
     const finalSno = sno.trim() || StockEngine.getNextItemSno();
-
     const existing = db.getItemBySno(finalSno);
     if (existing && existing.id !== selectedItemId) {
       showAlert(`Item Code / S.No. "${finalSno}" is already used by "${existing.name}"`, 'Duplicate Code', 'error');
@@ -298,14 +352,14 @@ export const ItemMasterView: React.FC = () => {
       purchaseRate: Number(unitABasicPrice) || 0,
       saleRate: Number(unitASalePrice) || unitABreakdown.salePrice,
       mrp: Number(unitAMrp) || unitABreakdown.mrp,
-      gstPercent: Number(unitAGstPercent) || 18,
+      gstPercent: Number(unitAGstPercent) || 0,
       roundUp: Number(unitARoundUpSale) || 0,
       roundUpSale: Number(unitARoundUpSale) || 0,
       roundUpMrp: Number(unitARoundUpMrp) || 0,
       profPercentAm: Number(unitAProfAm) || 0,
       profPercentDeal: Number(unitAProfDeal) || 0,
       unitA: {
-        unitName: unitAName.trim() || 'Roll',
+        unitName: unitAName.trim() || 'Unit A',
         basicPrice: Number(unitABasicPrice) || 0,
         gstPercent: Number(unitAGstPercent) || 0,
         tranPercent: Number(unitATranPercent) || 0,
@@ -322,7 +376,7 @@ export const ItemMasterView: React.FC = () => {
         isActive: unitAActive
       },
       unitB: hasSecondaryUnit ? {
-        unitName: unitBName.trim() || 'Mt.',
+        unitName: unitBName.trim() || 'Unit B',
         conversionFactor: Number(unitBConversion) || 1,
         basicPrice: Number(unitBBasicPrice) || 0,
         gstPercent: Number(unitBGstPercent) || 0,
@@ -374,7 +428,7 @@ export const ItemMasterView: React.FC = () => {
   const confirmDelete = async () => {
     if (deleteDialog.id) {
       await db.deleteItem(deleteDialog.id);
-      showToast(`Item "${deleteDialog.name}" deleted from master and Firestore.`, 'info');
+      showToast(`Item "${deleteDialog.name}" deleted.`, 'info');
       setDeleteDialog({ isOpen: false, id: '', name: '' });
       handleCreateNew();
     }
@@ -384,105 +438,33 @@ export const ItemMasterView: React.FC = () => {
     window.print();
   };
 
-  // Keyboard Shortcuts (Ctrl+S to save, Alt+N for new, Alt+P to print)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey || e.altKey) && e.key.toLowerCase() === 's') {
-        e.preventDefault();
-        handleSave({ preventDefault: () => { } } as any);
-      } else if (e.altKey && e.key.toLowerCase() === 'n') {
-        e.preventDefault();
-        handleCreateNew();
-      } else if (e.altKey && e.key.toLowerCase() === 'p') {
-        e.preventDefault();
-        handlePrint();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedItemId, sno, name, hsn, description, category, supplierId, unitAName, unitABasicPrice, unitAGstPercent, unitATranPercent, unitAProfAm, unitAProfDeal, unitAMisPercent, unitASalePrice, unitAMrp, unitAActive, unitBName, unitBConversion, unitBBasicPrice, unitBGstPercent, unitBTranPercent, unitBProfAm, unitBProfDeal, unitBMisPercent, unitBSalePrice, unitBMrp, unitBActive, minStock, openingStock, hasSecondaryUnit, isActive, disableRestockNotification, isViewOnly]);
-
+  // Filtered summaries for bottom table matching mockup filters
   const filteredSummaries = useMemo(() => {
-    const q = search.toLowerCase().trim();
-    if (!q) return stockSummaries;
-    return stockSummaries.filter(
-      s =>
-        s.item.name.toLowerCase().includes(q) ||
-        s.item.sno.toLowerCase().includes(q) ||
-        (s.item.category && s.item.category.toLowerCase().includes(q)) ||
-        (s.item.supplierName && s.item.supplierName.toLowerCase().includes(q))
-    );
-  }, [stockSummaries, search]);
-
-  const isEditing = Boolean(selectedItemId && !isViewOnly);
-  const isViewing = Boolean(selectedItemId && isViewOnly);
-  const isCreating = Boolean(!selectedItemId && !isJustSaved && (isTouched || name.trim() !== ''));
-
-  const cardStateClass = isJustSaved
-    ? 'is-saved-yellow'
-    : isViewing
-      ? 'is-initial-blue'
-      : isEditing
-        ? 'is-editing-pink'
-        : isCreating
-          ? 'is-creating-green'
-          : 'is-initial-blue';
-
-  const handleFormKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
-    if (e.key === 'Enter') {
-      const target = e.target as HTMLElement;
-      if (target.tagName !== 'BUTTON' && target.tagName !== 'TEXTAREA') {
-        e.preventDefault();
-        const form = e.currentTarget;
-        const focusable = Array.from(
-          form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement | HTMLTextAreaElement>(
-            'input:not([disabled]):not([type="hidden"]):not([type="checkbox"]), select:not([disabled]), textarea:not([disabled]), button[type="submit"]'
-          )
-        );
-        const index = focusable.indexOf(target as any);
-        if (index > -1 && index < focusable.length - 1) {
-          focusable[index + 1]?.focus();
-          if ('select' in focusable[index + 1]) {
-            (focusable[index + 1] as HTMLInputElement).select?.();
-          }
-        }
+    return stockSummaries.filter(s => {
+      if (filterCategory !== 'ALL' && s.item.category && s.item.category.toLowerCase() !== filterCategory.toLowerCase()) {
+        return false;
       }
-    }
-  };
+      if (filterItem !== 'ALL' && s.item.name.toLowerCase() !== filterItem.toLowerCase()) {
+        return false;
+      }
+      return true;
+    });
+  }, [stockSummaries, filterCategory, filterItem]);
 
   return (
     <div className="content-panel-grey">
-      {/* Top Header Strip matching item.jpg */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '10px' }}>
+      {/* Top Header Strip */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '8px 48px', minWidth: '160px', textAlign: 'center' }}>
+          <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '6px 36px', fontWeight: 900 }}>
             ITEM
           </div>
-          {isJustSaved ? (
-            <span className="active-mode-indicator is-saved">
-              ● Saved / Updated Just Now ({name})
-            </span>
-          ) : isViewing ? (
-            <span className="active-mode-indicator is-initial" style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #F59E0B' }}>
-              ● Viewing Item: {name || 'Saved Item'} (Read Only — Double-Click to Edit)
-            </span>
-          ) : isEditing ? (
-            <span className="active-mode-indicator is-editing">
-              ● Editing Item ({name || 'Saved Item'})
-            </span>
-          ) : isCreating ? (
-            <span className="active-mode-indicator is-creating">
-              ● Creating New Item
-            </span>
-          ) : (
-            <span className="active-mode-indicator is-initial">
-              ● Ready for New Item
-            </span>
-          )}
+          <span className="active-mode-indicator is-creating" style={{ padding: '4px 12px', borderRadius: '16px', background: '#DCFCE7', color: '#166534', fontWeight: 800, fontSize: '0.82rem' }}>
+            ● Creating New Item
+          </span>
         </div>
 
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* Shortcuts indicator */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.78rem', color: '#4B5563', background: '#FFFFFF', padding: '5px 12px', borderRadius: '8px', border: '1px solid #E5E7EB' }}>
             <span><b>Ctrl+S:</b> Save Item</span>
             <span style={{ color: '#D1D5DB' }}>|</span>
@@ -491,7 +473,6 @@ export const ItemMasterView: React.FC = () => {
             <span><b>Alt+P:</b> Print</span>
           </div>
 
-          {/* Bulk Excel Import Button */}
           <button
             type="button"
             onClick={() => setIsExcelImportOpen(true)}
@@ -506,8 +487,7 @@ export const ItemMasterView: React.FC = () => {
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+              gap: '6px'
             }}
           >
             <FileSpreadsheet size={15} color="#16A34A" />
@@ -516,412 +496,320 @@ export const ItemMasterView: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Form Container: Light Blue on Initial, Light Green on Creating, Light Pink on Editing */}
+      {/* Main Form Container */}
       <div
-        className={`dynamic-entry-card ${cardStateClass}`}
         style={{
-          padding: '28px',
-          maxWidth: '980px',
-          margin: '0 auto',
-          position: 'relative'
+          background: '#FFFFFF',
+          border: '2px solid #000000',
+          borderRadius: '12px',
+          padding: '20px',
+          maxWidth: '960px',
+          margin: '0 auto 24px'
         }}
       >
-        {isViewOnly && (
-          <div
-            onClick={() => setIsEditPromptOpen(true)}
-            style={{
-              marginBottom: '18px',
-              padding: '10px 16px',
-              background: '#FEF3C7',
-              border: '1.5px solid #F59E0B',
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              cursor: 'pointer'
-            }}
-          >
-            <span style={{ fontWeight: 800, color: '#92400E', fontSize: '0.88rem' }}>
-              🔒 View-Only Mode: Item record is locked against accidental edits. Click anywhere or press button to edit.
-            </span>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsEditPromptOpen(true);
-              }}
-              style={{
-                background: '#D97706',
-                color: '#FFFFFF',
-                border: 'none',
-                borderRadius: '6px',
-                padding: '5px 14px',
-                fontWeight: 800,
-                fontSize: '0.82rem',
-                cursor: 'pointer'
-              }}
-            >
-              Unlock / Edit
-            </button>
-          </div>
-        )}
-
-        <form
-          onSubmit={handleSave}
-          onKeyDown={handleFormKeyDown}
-          onClickCapture={isViewOnly ? (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setIsEditPromptOpen(true);
-          } : undefined}
-          style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
-        >
-
-          {/* Unified Item Options Bar: Active, Disable Restock Alert, and Secondary Unit (Unit B) on the same line */}
+        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* Top Toggles Bar matching mockup */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '12px',
-              flexWrap: 'wrap',
-              padding: '10px 14px',
-              background: '#FFFFFF',
-              borderRadius: '8px',
+              padding: '8px 12px',
               border: '1.5px solid #000000',
-              marginBottom: '4px'
+              borderRadius: '8px',
+              background: '#FFFFFF'
             }}
           >
-            {/* 1. Active Item Toggle */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: isActive ? '#DCFCE7' : '#F3F4F6', padding: '5px 12px', borderRadius: '16px', border: `1.5px solid ${isActive ? '#16A34A' : '#D1D5DB'}` }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 800, fontSize: '0.85rem' }}>
               <input
                 type="checkbox"
-                id="activeItemCheckbox"
                 checked={isActive}
-                onChange={e => {
-                  setIsTouched(true);
-                  setIsActive(e.target.checked);
-                }}
-                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                onChange={e => { setIsTouched(true); setIsActive(e.target.checked); }}
+                style={{ width: '16px', height: '16px' }}
               />
-              <label htmlFor="activeItemCheckbox" style={{ fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', color: isActive ? '#166534' : '#6B7280' }}>
-                Active Item
-              </label>
-            </div>
+              Active Item
+            </label>
 
-            {/* 2. Disable Restock Alert Toggle */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: disableRestockNotification ? '#FEF3C7' : '#FFFFFF', padding: '5px 12px', borderRadius: '16px', border: `1.5px solid ${disableRestockNotification ? '#D97706' : '#D1D5DB'}` }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 800, fontSize: '0.85rem' }}>
               <input
                 type="checkbox"
-                id="disableRestockCheckbox"
                 checked={disableRestockNotification}
-                onChange={e => {
-                  setIsTouched(true);
-                  setDisableRestockNotification(e.target.checked);
-                }}
-                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                onChange={e => { setIsTouched(true); setDisableRestockNotification(e.target.checked); }}
+                style={{ width: '16px', height: '16px' }}
               />
-              <label htmlFor="disableRestockCheckbox" style={{ fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', color: disableRestockNotification ? '#92400E' : '#374151' }}>
-                Disable Restock Alert
-              </label>
-            </div>
+              Disable Restock Alert
+            </label>
 
-            {/* 3. Secondary Unit (Unit B) Toggle */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: hasSecondaryUnit ? '#DCFCE7' : '#FFFFFF', padding: '5px 12px', borderRadius: '16px', border: `1.5px solid ${hasSecondaryUnit ? '#16A34A' : '#D1D5DB'}` }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 800, fontSize: '0.85rem' }}>
               <input
                 type="checkbox"
-                id="hasSecondaryUnitCheckbox"
                 checked={hasSecondaryUnit}
-                onChange={e => {
-                  setIsTouched(true);
-                  setHasSecondaryUnit(e.target.checked);
-                }}
-                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                onChange={e => { setIsTouched(true); setHasSecondaryUnit(e.target.checked); }}
+                style={{ width: '16px', height: '16px' }}
               />
-              <label htmlFor="hasSecondaryUnitCheckbox" style={{ fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', color: hasSecondaryUnit ? '#166534' : '#4B5563' }}>
-                Secondary Unit (Unit B) {hasSecondaryUnit ? 'ON' : 'OFF'}
-              </label>
-            </div>
+              Secondary Unit (Unit B) ON
+            </label>
           </div>
 
-          {/* Row 1: Item Name, HSN Code */}
-          <div className="form-grid-2col">
+          {/* Row 1: Item Name (with datalist) and HSN */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
             <div>
-              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '3px' }}>
                 Item Name *
               </label>
               <input
                 ref={itemNameInputRef}
                 type="text"
+                list="item-name-suggestions"
                 className="input-text-clean"
                 value={name}
                 onChange={e => {
                   setIsTouched(true);
                   setName(e.target.value);
+                  // If matching existing item, offer to load
+                  const matched = items.find(it => it.name.toUpperCase() === e.target.value.trim().toUpperCase());
+                  if (matched) {
+                    loadItemIntoForm(matched, false);
+                  }
                 }}
                 placeholder="e.g. ASTER / PRINTING SHEET 70 GSM"
                 required
-                style={{ fontWeight: 800 }}
+                style={{ width: '100%', fontWeight: 800 }}
               />
+              {/* Datalist for Item Name Suggestions matching Hindi note */}
+              <datalist id="item-name-suggestions">
+                {items.map(it => (
+                  <option key={it.id} value={it.name} />
+                ))}
+              </datalist>
             </div>
+
             <div>
-              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '3px' }}>
                 HSN Code (Optional)
               </label>
               <input
                 type="text"
                 className="input-text-clean"
                 value={hsn}
-                onChange={e => {
-                  setIsTouched(true);
-                  setHsn(e.target.value);
-                }}
+                onChange={e => { setIsTouched(true); setHsn(e.target.value); }}
                 placeholder="e.g. 4802"
-                style={{ fontFamily: 'monospace' }}
+                style={{ width: '100%', fontFamily: 'monospace' }}
               />
             </div>
           </div>
 
-          {/* Row 2: Description, Category, Supplier */}
-          <div className="form-grid-3col">
+          {/* Row 2: Description, Category (with datalist), Supplier (sorted A-Z) */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '14px' }}>
             <div>
-              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '3px' }}>
                 Description
               </label>
               <input
                 type="text"
                 className="input-text-clean"
                 value={description}
-                onChange={e => {
-                  setIsTouched(true);
-                  setDescription(e.target.value);
-                }}
+                onChange={e => { setIsTouched(true); setDescription(e.target.value); }}
                 placeholder="e.g. High Quality Glossy Aster Sheets"
+                style={{ width: '100%' }}
               />
             </div>
+
             <div>
-              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '3px' }}>
                 Category
               </label>
               <input
                 type="text"
+                list="category-suggestions"
                 className="input-text-clean"
                 value={category}
-                onChange={e => {
-                  setIsTouched(true);
-                  setCategory(e.target.value);
-                }}
+                onChange={e => { setIsTouched(true); setCategory(e.target.value); }}
                 placeholder="e.g. Paper & Sheets"
+                style={{ width: '100%' }}
               />
+              {/* Datalist for Category list show matching Hindi note */}
+              <datalist id="category-suggestions">
+                {existingCategories.map(cat => (
+                  <option key={cat} value={cat} />
+                ))}
+              </datalist>
             </div>
+
             <div>
-              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
-                Supplier
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '3px' }}>
+                Supplier (Alphabetical A-Z)
               </label>
               <select
                 className="input-text-clean"
                 value={supplierId}
-                onChange={e => {
-                  setIsTouched(true);
-                  setSupplierId(e.target.value);
-                }}
-                style={{ fontWeight: 700 }}
+                onChange={e => { setIsTouched(true); setSupplierId(e.target.value); }}
+                style={{ width: '100%', fontWeight: 700 }}
               >
                 <option value="">-- Select Supplier --</option>
                 {suppliers.map(s => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
                 ))}
               </select>
             </div>
           </div>
 
-          {/* UNIT-A SECTION matching item.jpg */}
-          <div style={{ background: '#FFFFFF', border: '1.5px solid #000000', borderRadius: '8px', padding: '14px', marginTop: '6px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+          {/* UNIT-A SECTION matching mockup */}
+          <div style={{ background: '#FFFFFF', border: '1.5px solid #000000', borderRadius: '8px', padding: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontWeight: 900, fontSize: '1rem', color: '#000000' }}>UNIT-A :</span>
+                <span style={{ fontWeight: 900, fontSize: '0.95rem' }}>UNIT-A :</span>
                 <input
                   type="text"
                   className="input-text-clean"
                   value={unitAName}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitAName(e.target.value);
-                  }}
-                  style={{ width: '100px', color: '#EA3943', fontWeight: 900, textAlign: 'center', fontSize: '0.95rem' }}
-                  placeholder="e.g. Roll"
+                  onChange={e => { setIsTouched(true); setUnitAName(e.target.value); }}
+                  style={{ width: '90px', color: '#DC2626', fontWeight: 900, textAlign: 'center' }}
+                  placeholder=""
                 />
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer' }}>
                 <input
                   type="checkbox"
-                  id="unitAActiveCheck"
                   checked={unitAActive}
-                  onChange={e => {
-                    setIsTouched(true);
-                    setUnitAActive(e.target.checked);
-                  }}
-                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                  onChange={e => { setIsTouched(true); setUnitAActive(e.target.checked); }}
                 />
-                <label htmlFor="unitAActiveCheck" style={{ fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer' }}>
-                  Active
-                </label>
-              </div>
+                Active
+              </label>
             </div>
 
-            {/* Pricing Grid with Red Calculation Subtexts */}
+            {/* Pricing 10-column Grid */}
             <div className="pricing-calc-scroll-wrapper">
               <div className="pricing-calc-grid-10">
                 <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Besic Price</label>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block' }}>Besic Price</label>
                   <input
                     type="number"
                     step="any"
                     className="input-text-clean"
                     value={unitABasicPrice}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitABasicPrice(e.target.value);
-                    }}
+                    onChange={e => { setIsTouched(true); setUnitABasicPrice(e.target.value); }}
                     style={{ textAlign: 'center', fontWeight: 700 }}
                   />
                   <div className="subtext-calc-red">{unitABreakdown.basicPrice}</div>
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>GST %</label>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block' }}>GST %</label>
                   <input
                     type="number"
                     step="any"
                     className="input-text-clean"
                     value={unitAGstPercent}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitAGstPercent(e.target.value);
-                    }}
+                    onChange={e => handleUnitAChange('gst', e.target.value)}
                     style={{ textAlign: 'center', fontWeight: 700 }}
                   />
                   <div className="subtext-calc-red">{unitABreakdown.gstAmt}</div>
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>tran%</label>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block' }}>tran%</label>
                   <input
                     type="number"
                     step="any"
                     className="input-text-clean"
                     value={unitATranPercent}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitATranPercent(e.target.value);
-                    }}
+                    onChange={e => handleUnitAChange('tran', e.target.value)}
                     style={{ textAlign: 'center', fontWeight: 700 }}
                   />
                   <div className="subtext-calc-red">{unitABreakdown.tranAmt}</div>
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>mis%</label>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block' }}>mis%</label>
                   <input
                     type="number"
                     step="any"
                     className="input-text-clean"
                     value={unitAMisPercent}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitAMisPercent(e.target.value);
-                    }}
+                    onChange={e => handleUnitAChange('mis', e.target.value)}
                     style={{ textAlign: 'center', fontWeight: 700 }}
                   />
                   <div className="subtext-calc-red">{unitABreakdown.misAmt}</div>
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Prof% -S</label>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', color: '#6D28D9' }}>Prof% -S</label>
                   <input
                     type="number"
                     step="any"
                     className="input-text-clean"
                     value={unitAProfDeal}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitAProfDeal(e.target.value);
-                    }}
+                    onChange={e => handleUnitAChange('profDeal', e.target.value)}
                     style={{ textAlign: 'center', fontWeight: 700, borderColor: '#8B5CF6' }}
                   />
                   <div className="subtext-calc-red">{unitABreakdown.profDealAmt}</div>
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Round-S</label>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', color: '#6D28D9' }}>Round-S</label>
                   <input
                     type="number"
                     step="any"
                     className="input-text-clean"
                     value={unitARoundUpSale}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitARoundUpSale(e.target.value);
-                    }}
+                    onChange={e => { setIsTouched(true); setUnitARoundUpSale(e.target.value); }}
                     style={{ textAlign: 'center', fontWeight: 700, borderColor: '#8B5CF6' }}
                   />
                   <div className="subtext-calc-red">{unitABreakdown.roundUpSale}</div>
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Sale Price</label>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', color: '#6D28D9' }}>Sale Price</label>
                   <input
                     type="number"
                     step="any"
                     className="input-text-clean"
                     value={unitABreakdown.salePrice}
                     readOnly
-                    style={{ textAlign: 'center', fontWeight: 900, color: '#6D28D9', fontSize: '0.92rem', background: '#F5F3FF', cursor: 'default' }}
+                    style={{ textAlign: 'center', fontWeight: 900, color: '#6D28D9', background: '#F5F3FF' }}
                   />
                   <div className="subtext-calc-red">{unitABreakdown.salePrice}</div>
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Prof% -M</label>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', color: '#1E40AF' }}>Prof% -M</label>
                   <input
                     type="number"
                     step="any"
                     className="input-text-clean"
                     value={unitAProfAm}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitAProfAm(e.target.value);
-                    }}
+                    onChange={e => handleUnitAChange('profAm', e.target.value)}
                     style={{ textAlign: 'center', fontWeight: 700, borderColor: '#3B82F6' }}
                   />
                   <div className="subtext-calc-red">{unitABreakdown.profAmAmt}</div>
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Round-M</label>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', color: '#1E40AF' }}>Round-M</label>
                   <input
                     type="number"
                     step="any"
                     className="input-text-clean"
                     value={unitARoundUpMrp}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitARoundUpMrp(e.target.value);
-                    }}
+                    onChange={e => { setIsTouched(true); setUnitARoundUpMrp(e.target.value); }}
                     style={{ textAlign: 'center', fontWeight: 700, borderColor: '#3B82F6' }}
                   />
                   <div className="subtext-calc-red">{unitABreakdown.roundUpMrp}</div>
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>mrp</label>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', color: '#1E40AF' }}>mrp</label>
                   <input
                     type="number"
                     step="any"
                     className="input-text-clean"
                     value={unitABreakdown.mrp}
                     readOnly
-                    style={{ textAlign: 'center', fontWeight: 900, color: '#1E40AF', fontSize: '0.92rem', background: '#EFF6FF', cursor: 'default' }}
+                    style={{ textAlign: 'center', fontWeight: 900, color: '#1E40AF', background: '#EFF6FF' }}
                   />
                   <div className="subtext-calc-red">{unitABreakdown.mrp}</div>
                 </div>
@@ -929,206 +817,171 @@ export const ItemMasterView: React.FC = () => {
             </div>
           </div>
 
-          {/* UNIT-B SECTION matching item.jpg - Only shown when Secondary Unit is enabled */}
+          {/* UNIT-B SECTION matching mockup */}
           {hasSecondaryUnit && (
-            <div style={{ background: '#FFFFFF', border: '1.5px solid #000000', borderRadius: '8px', padding: '14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 900, fontSize: '1rem', color: '#000000' }}>UNIT-B :</span>
+            <div style={{ background: '#FFFFFF', border: '1.5px solid #000000', borderRadius: '8px', padding: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 900, fontSize: '0.95rem' }}>UNIT-B :</span>
                   <input
                     type="text"
                     className="input-text-clean"
                     value={unitBName}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitBName(e.target.value);
-                    }}
-                    style={{ width: '90px', color: '#EA3943', fontWeight: 800, textAlign: 'center' }}
-                    placeholder="e.g. Mt."
+                    onChange={e => { setIsTouched(true); setUnitBName(e.target.value); }}
+                    style={{ width: '80px', color: '#DC2626', fontWeight: 900, textAlign: 'center' }}
+                    placeholder=""
                   />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontWeight: 800, fontSize: '0.9rem' }}>1 {unitAName || 'Unit A'} =</span>
-                    <input
-                      type="number"
-                      step="any"
-                      className="input-text-clean"
-                      value={unitBConversion}
-                      onChange={e => {
-                        setIsTouched(true);
-                        setUnitBConversion(e.target.value);
-                      }}
-                      style={{ width: '70px', textAlign: 'center', fontWeight: 800, color: '#047857' }}
-                    />
-                    <span style={{ fontWeight: 800, fontSize: '0.9rem' }}>{unitBName || 'Unit B'}</span>
-                  </div>
+                  <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>1 {unitAName || 'Roll'} =</span>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={unitBConversion}
+                    onChange={e => { setIsTouched(true); setUnitBConversion(e.target.value); }}
+                    style={{ width: '60px', textAlign: 'center', fontWeight: 900, color: '#059669' }}
+                  />
+                  <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>{unitBName || 'Mt.'}</span>
                 </div>
 
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer' }}>
                   <input
                     type="checkbox"
                     checked={unitBActive}
-                    onChange={e => {
-                      setIsTouched(true);
-                      setUnitBActive(e.target.checked);
-                    }}
+                    onChange={e => { setIsTouched(true); setUnitBActive(e.target.checked); }}
                   />
                   Active Unit B
                 </label>
               </div>
 
-              {/* Pricing Grid for Unit B */}
+              {/* Pricing 10-column Grid for Unit B */}
               <div className="pricing-calc-scroll-wrapper">
                 <div className="pricing-calc-grid-10">
                   <div>
-                    <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Besic Price</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block' }}>Besic Price</label>
                     <input
                       type="number"
                       step="any"
                       className="input-text-clean"
                       value={unitBBasicPrice}
-                      onChange={e => {
-                        setIsTouched(true);
-                        setUnitBBasicPrice(e.target.value);
-                      }}
+                      onChange={e => { setIsTouched(true); setUnitBBasicPrice(e.target.value); }}
                       style={{ textAlign: 'center', fontWeight: 700 }}
                     />
                     <div className="subtext-calc-red">{unitBBreakdown.basicPrice}</div>
                   </div>
 
                   <div>
-                    <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>GST %</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block' }}>GST %</label>
                     <input
                       type="number"
                       step="any"
                       className="input-text-clean"
                       value={unitBGstPercent}
-                      onChange={e => {
-                        setIsTouched(true);
-                        setUnitBGstPercent(e.target.value);
-                      }}
+                      onChange={e => { setIsTouched(true); setUnitBGstPercent(e.target.value); }}
                       style={{ textAlign: 'center', fontWeight: 700 }}
                     />
                     <div className="subtext-calc-red">{unitBBreakdown.gstAmt}</div>
                   </div>
 
                   <div>
-                    <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>tran%</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block' }}>tran%</label>
                     <input
                       type="number"
                       step="any"
                       className="input-text-clean"
                       value={unitBTranPercent}
-                      onChange={e => {
-                        setIsTouched(true);
-                        setUnitBTranPercent(e.target.value);
-                      }}
+                      onChange={e => { setIsTouched(true); setUnitBTranPercent(e.target.value); }}
                       style={{ textAlign: 'center', fontWeight: 700 }}
                     />
                     <div className="subtext-calc-red">{unitBBreakdown.tranAmt}</div>
                   </div>
 
                   <div>
-                    <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>mis%</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block' }}>mis%</label>
                     <input
                       type="number"
                       step="any"
                       className="input-text-clean"
                       value={unitBMisPercent}
-                      onChange={e => {
-                        setIsTouched(true);
-                        setUnitBMisPercent(e.target.value);
-                      }}
+                      onChange={e => { setIsTouched(true); setUnitBMisPercent(e.target.value); }}
                       style={{ textAlign: 'center', fontWeight: 700 }}
                     />
                     <div className="subtext-calc-red">{unitBBreakdown.misAmt}</div>
                   </div>
 
                   <div>
-                    <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Prof% -S</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', color: '#6D28D9' }}>Prof% -S</label>
                     <input
                       type="number"
                       step="any"
                       className="input-text-clean"
                       value={unitBProfDeal}
-                      onChange={e => {
-                        setIsTouched(true);
-                        setUnitBProfDeal(e.target.value);
-                      }}
+                      onChange={e => { setIsTouched(true); setUnitBProfDeal(e.target.value); }}
                       style={{ textAlign: 'center', fontWeight: 700, borderColor: '#8B5CF6' }}
                     />
                     <div className="subtext-calc-red">{unitBBreakdown.profDealAmt}</div>
                   </div>
 
                   <div>
-                    <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Round-S</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', color: '#6D28D9' }}>Round-S</label>
                     <input
                       type="number"
                       step="any"
                       className="input-text-clean"
                       value={unitBRoundUpSale}
-                      onChange={e => {
-                        setIsTouched(true);
-                        setUnitBRoundUpSale(e.target.value);
-                      }}
+                      onChange={e => { setIsTouched(true); setUnitBRoundUpSale(e.target.value); }}
                       style={{ textAlign: 'center', fontWeight: 700, borderColor: '#8B5CF6' }}
                     />
                     <div className="subtext-calc-red">{unitBBreakdown.roundUpSale}</div>
                   </div>
 
                   <div>
-                    <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Sale Price</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', color: '#6D28D9' }}>Sale Price</label>
                     <input
                       type="number"
                       step="any"
                       className="input-text-clean"
                       value={unitBBreakdown.salePrice}
                       readOnly
-                      style={{ textAlign: 'center', fontWeight: 900, color: '#6D28D9', fontSize: '0.92rem', background: '#F5F3FF', cursor: 'default' }}
+                      style={{ textAlign: 'center', fontWeight: 900, color: '#6D28D9', background: '#F5F3FF' }}
                     />
                     <div className="subtext-calc-red">{unitBBreakdown.salePrice}</div>
                   </div>
 
                   <div>
-                    <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Prof% -M</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', color: '#1E40AF' }}>Prof% -M</label>
                     <input
                       type="number"
                       step="any"
                       className="input-text-clean"
                       value={unitBProfAm}
-                      onChange={e => {
-                        setIsTouched(true);
-                        setUnitBProfAm(e.target.value);
-                      }}
+                      onChange={e => { setIsTouched(true); setUnitBProfAm(e.target.value); }}
                       style={{ textAlign: 'center', fontWeight: 700, borderColor: '#3B82F6' }}
                     />
                     <div className="subtext-calc-red">{unitBBreakdown.profAmAmt}</div>
                   </div>
 
                   <div>
-                    <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Round-M</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', color: '#1E40AF' }}>Round-M</label>
                     <input
                       type="number"
                       step="any"
                       className="input-text-clean"
                       value={unitBRoundUpMrp}
-                      onChange={e => {
-                        setIsTouched(true);
-                        setUnitBRoundUpMrp(e.target.value);
-                      }}
+                      onChange={e => { setIsTouched(true); setUnitBRoundUpMrp(e.target.value); }}
                       style={{ textAlign: 'center', fontWeight: 700, borderColor: '#3B82F6' }}
                     />
                     <div className="subtext-calc-red">{unitBBreakdown.roundUpMrp}</div>
                   </div>
 
                   <div>
-                    <label style={{ fontSize: '0.78rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>mrp</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', color: '#1E40AF' }}>mrp</label>
                     <input
                       type="number"
                       step="any"
                       className="input-text-clean"
                       value={unitBBreakdown.mrp}
                       readOnly
-                      style={{ textAlign: 'center', fontWeight: 900, color: '#1E40AF', fontSize: '0.92rem', background: '#EFF6FF', cursor: 'default' }}
+                      style={{ textAlign: 'center', fontWeight: 900, color: '#1E40AF', background: '#EFF6FF' }}
                     />
                     <div className="subtext-calc-red">{unitBBreakdown.mrp}</div>
                   </div>
@@ -1138,9 +991,9 @@ export const ItemMasterView: React.FC = () => {
           )}
 
           {/* Stock Thresholds */}
-          <div className="form-grid-2col" style={{ marginTop: '4px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
             <div>
-              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '3px' }}>
                 Min Stock (Reorder Alert Threshold)
               </label>
               <input
@@ -1149,14 +1002,13 @@ export const ItemMasterView: React.FC = () => {
                 min="0"
                 className="input-text-clean"
                 value={minStock}
-                onChange={e => {
-                  setIsTouched(true);
-                  setMinStock(e.target.value);
-                }}
+                onChange={e => { setIsTouched(true); setMinStock(e.target.value); }}
+                style={{ width: '100%' }}
               />
             </div>
+
             <div>
-              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', marginBottom: '4px' }}>
+              <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '3px' }}>
                 Opening Stock
               </label>
               <input
@@ -1165,38 +1017,115 @@ export const ItemMasterView: React.FC = () => {
                 min="0"
                 className="input-text-clean"
                 value={openingStock}
-                onChange={e => {
-                  setIsTouched(true);
-                  setOpeningStock(e.target.value);
-                }}
+                onChange={e => { setIsTouched(true); setOpeningStock(e.target.value); }}
+                style={{ width: '100%' }}
               />
             </div>
           </div>
 
-          {/* Customer Action Buttons: Del, Large Save, Print */}
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', flexWrap: 'wrap', marginTop: '24px' }}>
+          {/* Action Buttons row matching mockup: Add New | Edit | Repit | Del | Save | Print */}
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginTop: '16px' }}>
             <button
               type="button"
-              className="btn-customer-action-pill"
+              onClick={handleCreateNew}
+              style={{
+                background: '#E9D5FF',
+                color: '#7E22CE',
+                border: '1.5px solid #C084FC',
+                borderRadius: '20px',
+                padding: '6px 22px',
+                fontWeight: 900,
+                fontSize: '0.9rem',
+                cursor: 'pointer'
+              }}
+            >
+              Add New
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedItemId) setIsViewOnly(false);
+                else showToast('Select an item from the list below to edit', 'info');
+              }}
+              style={{
+                background: '#E9D5FF',
+                color: '#DC2626',
+                border: '1.5px solid #C084FC',
+                borderRadius: '20px',
+                padding: '6px 22px',
+                fontWeight: 900,
+                fontSize: '0.9rem',
+                cursor: 'pointer'
+              }}
+            >
+              Edit
+            </button>
+
+            <button
+              type="button"
+              onClick={handleRepeat}
+              style={{
+                background: '#E9D5FF',
+                color: '#DC2626',
+                border: '1.5px solid #C084FC',
+                borderRadius: '20px',
+                padding: '6px 22px',
+                fontWeight: 900,
+                fontSize: '0.9rem',
+                cursor: 'pointer'
+              }}
+            >
+              Repit
+            </button>
+
+            <button
+              type="button"
               onClick={handleDelete}
-              disabled={!isEditing}
-              style={{ opacity: isEditing ? 1 : 0.5, cursor: isEditing ? 'pointer' : 'not-allowed' }}
+              style={{
+                background: '#E9D5FF',
+                color: '#6B7280',
+                border: '1.5px solid #C084FC',
+                borderRadius: '20px',
+                padding: '6px 22px',
+                fontWeight: 900,
+                fontSize: '0.9rem',
+                cursor: selectedItemId ? 'pointer' : 'not-allowed',
+                opacity: selectedItemId ? 1 : 0.6
+              }}
             >
               Del
             </button>
 
             <button
               type="submit"
-              className="btn-customer-save"
-              style={{ padding: '10px 48px', fontSize: '1.2rem', minWidth: '160px' }}
+              style={{
+                background: '#86EFAC',
+                color: '#15803D',
+                border: '1.5px solid #22C55E',
+                borderRadius: '20px',
+                padding: '8px 36px',
+                fontWeight: 900,
+                fontSize: '1.05rem',
+                cursor: 'pointer'
+              }}
             >
               Save
             </button>
 
             <button
               type="button"
-              className="btn-customer-action-pill"
               onClick={handlePrint}
+              style={{
+                background: '#E9D5FF',
+                color: '#DC2626',
+                border: '1.5px solid #C084FC',
+                borderRadius: '20px',
+                padding: '6px 22px',
+                fontWeight: 900,
+                fontSize: '0.9rem',
+                cursor: 'pointer'
+              }}
             >
               Print
             </button>
@@ -1204,156 +1133,173 @@ export const ItemMasterView: React.FC = () => {
         </form>
       </div>
 
-      {/* Item Stock Directory Register in the Downside (Always Visible) */}
-      <div id="item-directory-register" style={{ marginTop: '28px', background: '#FFFFFF', border: '2px solid #000000', borderRadius: '12px', padding: '20px', maxWidth: '980px', margin: '28px auto 0', boxShadow: '0 2px 4px rgba(0,0,0,0.04)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <h4 style={{ fontWeight: 900, fontSize: '1.1rem', margin: 0 }}>Items Master & Live Stock (Register)</h4>
-            <span style={{ fontSize: '0.8rem', background: '#E0E7FF', color: '#3730A3', padding: '2px 10px', borderRadius: '12px', fontWeight: 800 }}>
-              {filteredSummaries.length} {filteredSummaries.length === 1 ? 'Item' : 'Items'}
-            </span>
-          </div>
-          <div style={{ position: 'relative', width: '280px' }}>
-            <Search size={14} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
+      {/* BOTTOM REGISTER & TABLE matching mockup */}
+      <div style={{ maxWidth: '960px', margin: '0 auto' }}>
+        {/* Filters row above table */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '8px', flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer' }}>
             <input
-              type="text"
-              placeholder="Search items by name, code, category..."
-              className="input-text-clean"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{ paddingLeft: '32px', fontSize: '0.85rem' }}
+              type="checkbox"
+              checked={showCategoryWise}
+              onChange={e => setShowCategoryWise(e.target.checked)}
+              style={{ width: '16px', height: '16px' }}
             />
+            Show Category Wise
+          </label>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>Select Cate. :</span>
+            <select
+              value={filterCategory}
+              onChange={e => setFilterCategory(e.target.value)}
+              style={{
+                border: '1.5px solid #000000',
+                borderRadius: '4px',
+                padding: '4px 10px',
+                fontWeight: 800,
+                fontSize: '0.85rem',
+                background: '#FFFFFF'
+              }}
+            >
+              <option value="ALL">Q ALL</option>
+              {existingCategories.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>Select Item :</span>
+            <select
+              value={filterItem}
+              onChange={e => setFilterItem(e.target.value)}
+              style={{
+                border: '1.5px solid #000000',
+                borderRadius: '4px',
+                padding: '4px 10px',
+                fontWeight: 800,
+                fontSize: '0.85rem',
+                background: '#FFFFFF'
+              }}
+            >
+              <option value="ALL">Q ALL</option>
+              {items.map(it => (
+                <option key={it.id} value={it.name}>{it.name}</option>
+              ))}
+            </select>
           </div>
         </div>
 
-        <div className="custom-table-container">
-          <table className="custom-table">
-            <thead>
-              <tr>
-                <th>Item Name</th>
-                <th>Supplier</th>
-                <th>Unit-A (Sale / MRP)</th>
-                <th>Unit-B (Conversion)</th>
-                <th style={{ textAlign: 'center' }}>Live Stock</th>
-                <th style={{ textAlign: 'center' }}>Status</th>
-                <th style={{ textAlign: 'center' }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredSummaries.length === 0 ? (
-                <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: '#9CA3AF', fontWeight: 600 }}>
-                    No items found matching "{search}".
-                  </td>
+        {/* Register Table with Lavender Header #D4C4FB */}
+        <div style={{ background: '#FFFFFF', border: '2px solid #000000', borderRadius: '4px', overflow: 'hidden' }}>
+          <div className="table-responsive-wrapper">
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+              <thead>
+                <tr style={{ background: '#D4C4FB', borderBottom: '2px solid #000000' }}>
+                  <th style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 900, fontSize: '0.82rem' }}>
+                    ITEM
+                  </th>
+                  <th style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 900, fontSize: '0.82rem' }}>
+                    SUPPLIER
+                  </th>
+                  <th style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 900, fontSize: '0.82rem', width: '70px', textAlign: 'center' }}>
+                    UNIT A
+                  </th>
+                  <th style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 900, fontSize: '0.82rem', width: '80px', textAlign: 'right' }}>
+                    BASIC PRICE
+                  </th>
+                  <th style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 900, fontSize: '0.82rem', width: '80px', textAlign: 'right' }}>
+                    SALE PRICE
+                  </th>
+                  <th style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 900, fontSize: '0.82rem', width: '70px', textAlign: 'right' }}>
+                    MRP
+                  </th>
+                  <th style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 900, fontSize: '0.82rem', width: '70px', textAlign: 'center' }}>
+                    LIVE STOCK
+                  </th>
+                  <th style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 900, fontSize: '0.82rem', width: '70px', textAlign: 'center' }}>
+                    RE-STOCK
+                  </th>
+                  <th style={{ padding: '8px 10px', fontWeight: 900, fontSize: '0.82rem', width: '90px', textAlign: 'center' }}>
+                    ACTION
+                  </th>
                 </tr>
-              ) : (
-                filteredSummaries.map(s => (
-                  <tr
-                    key={s.item.id}
-                    title="Single-click to view, double-click to edit directly"
-                    style={{
-                      backgroundColor: selectedItemId === s.item.id ? '#EFF6FF' : 'transparent',
-                      cursor: 'pointer'
-                    }}
-                    onClick={() => loadItemIntoForm(s.item, true)}
-                    onDoubleClick={() => loadItemIntoForm(s.item, false)}
-                  >
-                    <td style={{ fontWeight: 800 }}>{s.item.name}</td>
-                    <td>{s.item.supplierName || '-'}</td>
-                    <td>
-                      {s.item.unitA
-                        ? `${s.item.unitA.unitName}: ₹${s.item.unitA.salePrice ?? s.item.saleRate ?? 0} (Sale) / ₹${s.item.unitA.mrp ?? s.item.mrp ?? 0} (MRP)`
-                        : `${s.item.unit || 'Pcs'}: ₹${s.item.saleRate || 0} (Sale) / ₹${s.item.mrp || 0} (MRP)`}
-                    </td>
-                    <td>
-                      {s.item.unitB ? `${s.item.unitB.unitName} (1=${s.item.unitB.conversionFactor})` : '-'}
-                    </td>
-                    <td style={{ textAlign: 'center', fontWeight: 900, color: s.isLowStock ? '#EA3943' : '#15803D' }}>
-                      {s.closingStock}
-                    </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-                        <span
+              </thead>
+              <tbody>
+                {filteredSummaries.map(s => {
+                  const it = s.item;
+                  const isSelected = selectedItemId === it.id;
+                  const unitName = it.unitA?.unitName || it.unit || 'PCS';
+                  const basicPrice = it.unitA?.basicPrice ?? it.purchaseRate ?? 0;
+                  const salePrice = it.unitA?.salePrice ?? it.saleRate ?? 0;
+                  const mrp = it.unitA?.mrp ?? it.mrp ?? 0;
+
+                  return (
+                    <tr
+                      key={it.id}
+                      onClick={() => loadItemIntoForm(it, true)}
+                      onDoubleClick={() => loadItemIntoForm(it, false)}
+                      style={{
+                        borderBottom: '1px solid #000000',
+                        background: isSelected ? '#EFF6FF' : '#FFFFFF',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <td style={{ padding: '6px 10px', borderRight: '1px solid #000000', fontWeight: 800, fontSize: '0.82rem' }}>
+                        {it.name}
+                      </td>
+                      <td style={{ padding: '6px 10px', borderRight: '1px solid #000000', fontWeight: 700, fontSize: '0.82rem' }}>
+                        {it.supplierName || '-'}
+                      </td>
+                      <td style={{ padding: '6px 8px', borderRight: '1px solid #000000', textAlign: 'center', fontWeight: 800, fontSize: '0.82rem' }}>
+                        {unitName}
+                      </td>
+                      <td style={{ padding: '6px 10px', borderRight: '1px solid #000000', textAlign: 'right', fontWeight: 800, fontSize: '0.82rem' }}>
+                        {basicPrice}
+                      </td>
+                      <td style={{ padding: '6px 10px', borderRight: '1px solid #000000', textAlign: 'right', fontWeight: 800, fontSize: '0.82rem' }}>
+                        {salePrice}
+                      </td>
+                      <td style={{ padding: '6px 10px', borderRight: '1px solid #000000', textAlign: 'right', fontWeight: 800, fontSize: '0.82rem' }}>
+                        {mrp}
+                      </td>
+                      <td style={{ padding: '6px 10px', borderRight: '1px solid #000000', textAlign: 'center', fontWeight: 900, fontSize: '0.85rem' }}>
+                        {s.closingStock}
+                      </td>
+                      <td style={{ padding: '6px 10px', borderRight: '1px solid #000000', textAlign: 'center', fontWeight: 900, fontSize: '0.82rem', color: s.isLowStock ? '#DC2626' : '#15803D' }}>
+                        {s.isLowStock ? 'YES' : ''}
+                      </td>
+                      <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={e => {
+                            e.stopPropagation();
+                            openItemLedger(it.id);
+                          }}
                           style={{
+                            background: '#E9D5FF',
+                            color: '#7E22CE',
+                            border: '1px solid #C084FC',
+                            borderRadius: '12px',
+                            padding: '2px 10px',
+                            fontWeight: 900,
                             fontSize: '0.75rem',
-                            fontWeight: 800,
-                            padding: '2px 8px',
-                            borderRadius: '12px',
-                            backgroundColor: s.item.isActive !== false ? '#DCFCE7' : '#FEE2E2',
-                            color: s.item.isActive !== false ? '#166534' : '#991B1B'
-                          }}
-                        >
-                          {s.item.isActive !== false ? 'Active' : 'Inactive'}
-                        </span>
-                        {s.item.disableRestockNotification && (
-                          <span
-                            style={{
-                              fontSize: '0.68rem',
-                              fontWeight: 700,
-                              padding: '1px 6px',
-                              borderRadius: '8px',
-                              backgroundColor: '#FEF3C7',
-                              color: '#92400E'
-                            }}
-                            title="Restock alerts disabled for this item"
-                          >
-                            No Restock
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                        <button
-                          type="button"
-                          onClick={e => {
-                            e.stopPropagation();
-                            loadItemIntoForm(s.item, false);
-                          }}
-                          style={{
-                            background: selectedItemId === s.item.id && !isViewOnly ? '#BFDBFE' : '#E2D2F8',
-                            color: selectedItemId === s.item.id && !isViewOnly ? '#1E40AF' : '#EA3943',
-                            border: '1px solid #C4B5FD',
-                            borderRadius: '12px',
-                            padding: '3px 10px',
-                            fontWeight: 800,
-                            fontSize: '0.78rem',
                             cursor: 'pointer'
                           }}
                         >
-                          {selectedItemId === s.item.id && !isViewOnly ? 'Editing' : selectedItemId === s.item.id ? 'Viewing' : 'Edit'}
+                          LEADGER
                         </button>
-                        <button
-                          type="button"
-                          onClick={e => {
-                            e.stopPropagation();
-                            openItemLedger(s.item.id);
-                          }}
-                          style={{
-                            background: '#D2BEF6',
-                            color: '#002B99',
-                            border: '1px solid #000000',
-                            borderRadius: '12px',
-                            padding: '3px 10px',
-                            fontWeight: 800,
-                            fontSize: '0.78rem',
-                            cursor: 'pointer'
-                          }}
-                          title="Open full item stock ledger"
-                        >
-                          Ledger
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
-      {/* Edit Mode Prompt Confirmation */}
+      {/* Edit Mode Prompt */}
       <ConfirmDialog
         isOpen={isEditPromptOpen}
         onClose={() => setIsEditPromptOpen(false)}
@@ -1365,7 +1311,7 @@ export const ItemMasterView: React.FC = () => {
         title="Enable Edit Mode?"
         message="Would you like to edit this item record?"
         confirmText="Yes, Edit"
-        cancelText="No, Keep View Only"
+        cancelText="Keep View Only"
       />
 
       {/* Delete Confirmation */}
@@ -1374,7 +1320,7 @@ export const ItemMasterView: React.FC = () => {
         onClose={() => setDeleteDialog({ isOpen: false, id: '', name: '' })}
         onConfirm={confirmDelete}
         title="Delete Item"
-        message={`Are you sure you want to delete item "${deleteDialog.name}"? This will also remove associated stock movements.`}
+        message={`Are you sure you want to delete item "${deleteDialog.name}"?`}
       />
 
       {/* Excel Bulk Import Modal */}
