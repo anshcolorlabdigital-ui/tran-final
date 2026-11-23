@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { formatDateToDisplay, getTodayDateString } from '../../utils/dateUtils';
 import { formatCurrency, round2 } from '../../utils/calculations';
 import { Download, Printer } from 'lucide-react';
+import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 
 export const SalesReportView: React.FC = () => {
   const { refreshKey } = useApp();
@@ -11,6 +12,28 @@ export const SalesReportView: React.FC = () => {
   const sales = useMemo(() => db.getSales(), [refreshKey]);
   const parties = useMemo(() => db.getParties(), [refreshKey]);
   const items = useMemo(() => db.getItems(), [refreshKey]);
+
+  const partyOptions = useMemo<SearchableSelectOption[]>(() => {
+    return [
+      { id: '', label: 'All Parties' },
+      ...parties.map(p => ({
+        id: p.id,
+        label: p.name,
+        subLabel: `${p.city || ''} ${p.phone || ''}`.trim()
+      }))
+    ];
+  }, [parties]);
+
+  const itemOptions = useMemo<SearchableSelectOption[]>(() => {
+    return [
+      { id: '', label: 'All Items' },
+      ...items.map(i => ({
+        id: i.id,
+        label: i.name,
+        subLabel: i.category || ''
+      }))
+    ];
+  }, [items]);
 
   // Filters
   const [fromDate, setFromDate] = useState<string>('2026-08-01');
@@ -179,36 +202,22 @@ export const SalesReportView: React.FC = () => {
 
         <div>
           <label style={{ display: 'block', fontWeight: 800, fontSize: '0.8rem', marginBottom: '4px' }}>Party</label>
-          <select
-            className="input-text-clean"
+          <SearchableSelect
+            options={partyOptions}
             value={selectedPartyId}
-            onChange={e => setSelectedPartyId(e.target.value)}
-            style={{ width: '100%' }}
-          >
-            <option value="">All Parties</option>
-            {parties.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+            onChange={val => setSelectedPartyId(val)}
+            placeholder="All Parties / Search..."
+          />
         </div>
 
         <div>
           <label style={{ display: 'block', fontWeight: 800, fontSize: '0.8rem', marginBottom: '4px' }}>Item</label>
-          <select
-            className="input-text-clean"
+          <SearchableSelect
+            options={itemOptions}
             value={selectedItemId}
-            onChange={e => setSelectedItemId(e.target.value)}
-            style={{ width: '100%' }}
-          >
-            <option value="">All Items</option>
-            {items.map(i => (
-              <option key={i.id} value={i.id}>
-                {i.name}
-              </option>
-            ))}
-          </select>
+            onChange={val => setSelectedItemId(val)}
+            placeholder="All Items / Search..."
+          />
         </div>
 
         <div>

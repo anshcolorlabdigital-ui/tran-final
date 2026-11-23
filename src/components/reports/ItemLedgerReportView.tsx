@@ -17,6 +17,7 @@ import {
   ChevronUp
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { ItemSearchSelect } from '../common/ItemSearchSelect';
 
 export interface ItemLedgerEntry {
   id: string;
@@ -503,30 +504,19 @@ export const ItemLedgerReportView: React.FC = () => {
         <span style={{ fontWeight: 900, fontSize: '0.9rem', color: '#000000', minWidth: '95px' }}>
           ITEM NAME
         </span>
-        <select
-          value={currentItemId}
-          onChange={e => {
-            setCurrentItemId(e.target.value);
-            setSelectedLedgerItemId(e.target.value);
-          }}
-          className="input-text-clean"
-          style={{
-            fontWeight: 800,
-            fontSize: '0.92rem',
-            padding: '6px 14px',
-            border: '1.5px solid #000000',
-            borderRadius: '6px',
-            minWidth: '280px',
-            maxWidth: '480px',
-            background: '#FFFFFF'
-          }}
-        >
-          {items.map(item => (
-            <option key={item.id} value={item.id}>
-              {item.name} {item.unit ? `(${item.unit})` : ''} {item.category ? `• ${item.category}` : ''}
-            </option>
-          ))}
-        </select>
+        <div style={{ minWidth: '320px', maxWidth: '520px', flex: 1 }}>
+          <ItemSearchSelect
+            items={items}
+            selectedItemId={currentItemId}
+            onSelect={(id) => {
+              if (id) {
+                setCurrentItemId(id);
+                setSelectedLedgerItemId(id);
+              }
+            }}
+            placeholder="Type item name or code to search..."
+          />
+        </div>
 
         {/* Quick Search */}
         <div style={{ position: 'relative', width: '220px', marginLeft: 'auto' }}>

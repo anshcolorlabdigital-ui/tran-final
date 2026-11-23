@@ -6,6 +6,7 @@ import { Item, Supplier, SupplierOrder, OrderItem } from '../../types';
 import { StockEngine } from '../../db/stockEngine';
 import { getTodayDateString } from '../../utils/dateUtils';
 import { ItemSearchSelect, ItemSearchSelectHandle } from '../common/ItemSearchSelect';
+import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 import { Plus, Trash2, Keyboard } from 'lucide-react';
 
 interface CreateOrderModalProps {
@@ -40,6 +41,14 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
 
   // Draft items in current order
   const [draftItems, setDraftItems] = useState<DraftOrderItem[]>([]);
+
+  const supplierOptions = React.useMemo<SearchableSelectOption[]>(() => {
+    return suppliersList.map(s => ({
+      id: s.id,
+      label: s.name,
+      subLabel: `${s.city || ''} ${s.phone || ''}`.trim()
+    }));
+  }, [suppliersList]);
 
   const itemSearchRef = useRef<ItemSearchSelectHandle>(null);
   const qtyInputRef = useRef<HTMLInputElement>(null);
@@ -185,29 +194,14 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
             <label style={{ display: 'block', fontWeight: 700, fontSize: '0.85rem', marginBottom: '4px' }}>
               Supplier *
             </label>
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <select
-                className="input-text-clean"
-                value={supplierId}
-                onChange={e => setSupplierId(e.target.value)}
-                style={{ flex: 1 }}
-              >
-                <option value="">-- Select Supplier --</option>
-                {suppliersList.map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="btn-quick-n"
-                title="Quick Add Supplier"
-                onClick={() => openQuickModal('SUPPLIER', (newId) => setSupplierId(newId))}
-              >
-                N
-              </button>
-            </div>
+            <SearchableSelect
+              options={supplierOptions}
+              value={supplierId}
+              onChange={val => setSupplierId(val)}
+              placeholder="Type supplier name or phone..."
+              onQuickAdd={() => openQuickModal('SUPPLIER', (newId) => setSupplierId(newId))}
+              quickAddTitle="Quick Add Supplier"
+            />
           </div>
         </div>
 

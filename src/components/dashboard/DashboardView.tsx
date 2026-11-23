@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { StockEngine } from '../../db/stockEngine';
 import { formatDateToDisplay, getTodayDateString } from '../../utils/dateUtils';
 import { formatCurrency, round2 } from '../../utils/calculations';
+import { ItemSearchSelect } from '../common/ItemSearchSelect';
 
 export const DashboardView: React.FC = () => {
   const { refreshKey } = useApp();
@@ -253,29 +254,16 @@ export const DashboardView: React.FC = () => {
         </select>
 
         {/* Search Item */}
-        <select
-          value={selectedItem?.id || ''}
-          onChange={e => setSelectedItemId(e.target.value)}
-          style={{
-            width: '100%',
-            maxWidth: '480px',
-            padding: '8px 14px',
-            border: '1.5px solid #000000',
-            borderRadius: '4px',
-            fontSize: '0.95rem',
-            fontWeight: 800,
-            textAlign: 'center',
-            background: '#FFFFFF',
-            outline: 'none',
-            cursor: 'pointer'
-          }}
-        >
-          {filteredItemsByCategory.map(i => (
-            <option key={i.id} value={i.id}>
-              {i.name}
-            </option>
-          ))}
-        </select>
+        <div style={{ width: '100%', maxWidth: '480px' }}>
+          <ItemSearchSelect
+            items={filteredItemsByCategory}
+            selectedItemId={selectedItem?.id || ''}
+            onSelect={id => {
+              if (id) setSelectedItemId(id);
+            }}
+            placeholder="Type item name or code to search..."
+          />
+        </div>
 
         {/* UNIT-A & UNIT-B PARALLEL BOXES matching mockup */}
         <div

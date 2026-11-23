@@ -10,10 +10,11 @@ import {
   Download,
   PlusCircle,
   X,
-  ExternalLink
+  ArrowLeft
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { SupplierPaymentModal } from '../common/SupplierPaymentModal';
+import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 
 export const SupplierLedgerReportView: React.FC = () => {
   const {
@@ -27,7 +28,11 @@ export const SupplierLedgerReportView: React.FC = () => {
   const suppliers = useMemo(() => db.getSuppliers(), [refreshKey]);
   const purchases = useMemo(() => db.getPurchases(), [refreshKey]);
 
-  // Selected supplier state
+  // Mode: 'OUTSTANDING_LIST' (all suppliers table) or 'INDIVIDUAL_LEDGER' (single supplier details)
+  const [viewMode, setViewMode] = useState<'OUTSTANDING_LIST' | 'INDIVIDUAL_LEDGER'>(() => {
+    return selectedLedgerSupplierId ? 'INDIVIDUAL_LEDGER' : 'OUTSTANDING_LIST';
+  });
+
   const [currentSupplierId, setCurrentSupplierId] = useState<string>(() => {
     if (selectedLedgerSupplierId && suppliers.some(s => s.id === selectedLedgerSupplierId)) {
       return selectedLedgerSupplierId;
@@ -39,11 +44,12 @@ export const SupplierLedgerReportView: React.FC = () => {
   useEffect(() => {
     if (selectedLedgerSupplierId && suppliers.some(s => s.id === selectedLedgerSupplierId)) {
       setCurrentSupplierId(selectedLedgerSupplierId);
+      setViewMode('INDIVIDUAL_LEDGER');
     }
   }, [selectedLedgerSupplierId, suppliers]);
 
   // Date filters
-  const [fromDate, setFromDate] = useState<string>('2026-04-01');
+  const [fromDate, setFromDate] = useState<string>('2026-11-01');
   const [toDate, setToDate] = useState<string>(getTodayDateString());
   const [isAllTime, setIsAllTime] = useState<boolean>(true);
 
@@ -53,18 +59,18 @@ export const SupplierLedgerReportView: React.FC = () => {
   // Detailed Purchase Bill Modal State
   const [selectedPurchaseDetail, setSelectedPurchaseDetail] = useState<Purchase | null>(null);
 
-  // Active supplier entity
+  // Active supplier entity for individual ledger
   const activeSupplier = useMemo<Supplier | undefined>(() => {
     return suppliers.find(s => s.id === currentSupplierId);
   }, [suppliers, currentSupplierId]);
 
-  // Ledger logs for the active supplier
+  // Individual ledger logs
   const rawLogs = useMemo<SupplierLog[]>(() => {
     if (!currentSupplierId) return [];
     return db.getSupplierLogsBySupplierId(currentSupplierId);
   }, [currentSupplierId, refreshKey]);
 
-  // Financial summary
+  // Financial summary for individual supplier
   const summary = useMemo(() => {
     if (!activeSupplier) {
       return {
@@ -83,26 +89,86 @@ export const SupplierLedgerReportView: React.FC = () => {
     };
   }, [activeSupplier, rawLogs, refreshKey]);
 
-  // Filtered transactions (excluding synthetic opening balance so it displays in Row 1)
+  // Filtered transactions for individual supplier
   const transactionLogs = useMemo<SupplierLog[]>(() => {
     if (!currentSupplierId || !activeSupplier) return [];
-
     const nonOpeningLogs = rawLogs.filter(l => l.type !== 'OPENING_BALANCE');
-
     if (isAllTime) {
       return nonOpeningLogs;
     }
-
-    return nonOpeningLogs.filter(l => {
-      return l.date >= fromDate && l.date <= toDate;
-    });
+    return nonOpeningLogs.filter(l => l.date >= fromDate && l.date <= toDate);
   }, [rawLogs, isAllTime, fromDate, toDate, currentSupplierId, activeSupplier]);
 
-  // Handle supplier change from dropdown
-  const handleSelectSupplier = (supplierId: string) => {
-    setCurrentSupplierId(supplierId);
-    setSelectedLedgerSupplierId(supplierId);
-  };
+  // All suppliers data calculated for the SUPPLIER OUTSTANDING list view
+  const supplierOutstandingRows = useMemo(() => {
+    return suppliers.map(s => {
+      const balSummary = db.getSupplierBalanceSummary(s.id);
+      const sLogs = db.getSupplierLogs().filter(l => l.supplierId === s.id && l.type !== 'OPENING_BALANCE');
+      
+      let periodDebit = 0;
+      let periodCredit = 0;
+
+      sLogs.forEach(l => {
+        if (isAllTime || (l.date >= fromDate && l.date <= toDate)) {
+          if (l.type === 'PURCHASE') {
+            periodDebit += Number(l.totalAmount) || 0;
+            periodCredit += Number(l.paidAmount) || 0;
+          } else if (l.type === 'PAYMENT') {
+            periodCredit += Number(l.paidAmount) || 0;
+          }
+        }
+      });
+
+      const oppBal = Number(s.openingBalance) || 0;
+      const netBalance = isAllTime ? (balSummary.payableBalance ?? 0) : round2(oppBal + periodDebit - periodCredit);
+
+      return {
+        supplier: s,
+        gstin: s.gstin || '-',
+        oppBalance: oppBal,
+        debit: round2(periodDebit),
+        credit: round2(periodCredit),
+        balance: round2(netBalance)
+      };
+    });
+  }, [suppliers, isAllTime, fromDate, toDate, refreshKey]);
+
+  // Totals for SUPPLIER OUTSTANDING list view
+  const outstandingTotals = useMemo(() => {
+    let totalOpp = 0;
+    let totalDebit = 0;
+    let totalCredit = 0;
+    let totalBal = 0;
+
+    supplierOutstandingRows.forEach(r => {
+      totalOpp += r.oppBalance;
+      totalDebit += r.debit;
+      totalCredit += r.credit;
+      totalBal += r.balance;
+    });
+
+    return {
+      oppBalance: round2(totalOpp),
+      debit: round2(totalDebit),
+      credit: round2(totalCredit),
+      balance: round2(totalBal)
+    };
+  }, [supplierOutstandingRows]);
+
+  // Supplier options for SearchableSelect
+  const supplierOptions = useMemo<SearchableSelectOption[]>(() => {
+    return suppliers.map(s => {
+      const bal = db.getSupplierBalanceSummary(s.id).outstandingPayable;
+      return {
+        id: s.id,
+        label: s.name,
+        subLabel: `${s.city || ''} ${s.phone || ''}`.trim(),
+        badge: bal > 0 ? `₹${bal}` : 'Settled',
+        badgeBg: bal > 0 ? '#FEE2E2' : '#DCFCE7',
+        badgeColor: bal > 0 ? '#991B1B' : '#166534'
+      };
+    });
+  }, [suppliers, refreshKey]);
 
   // Quick preset filters
   const setQuickFilter = (type: 'ALL' | 'TODAY' | 'MONTH') => {
@@ -121,7 +187,14 @@ export const SupplierLedgerReportView: React.FC = () => {
     }
   };
 
-  // Open full detail log when clicking any purchase bill
+  // Open individual ledger for a supplier
+  const handleOpenLedger = (supplierId: string) => {
+    setCurrentSupplierId(supplierId);
+    setSelectedLedgerSupplierId(supplierId);
+    setViewMode('INDIVIDUAL_LEDGER');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleOpenPurchaseDetail = (refNo?: string) => {
     if (!refNo) return;
     const purchase = purchases.find(
@@ -134,38 +207,64 @@ export const SupplierLedgerReportView: React.FC = () => {
     }
   };
 
-  // Export ledger to Excel
+  // Export to Excel
   const handleExportExcel = () => {
-    if (!activeSupplier) return;
-    const exportRows: Record<string, any>[] = [
-      {
-        'Date': '',
-        'Bill No.': 'OPP. BALANCE',
-        'Debit (Billed ₹)': '',
-        'Credit (Paid ₹)': '',
-        'Balance (₹)': summary.openingBalance,
-        'Mode': '',
-        'Remarks': 'Opening Balance'
-      }
-    ];
-
-    transactionLogs.forEach(log => {
-      exportRows.push({
-        'Date': formatDateToDisplay(log.date),
-        'Bill No.': log.refNo || '-',
-        'Debit (Billed ₹)': log.totalAmount || '',
-        'Credit (Paid ₹)': log.paidAmount || '',
-        'Balance (₹)': log.runningBalance !== undefined ? log.runningBalance : log.balanceChange,
-        'Mode': log.paymentMode || '',
-        'Remarks': log.notes || ''
+    if (viewMode === 'OUTSTANDING_LIST') {
+      const rows = supplierOutstandingRows.map((r, idx) => ({
+        '#': idx + 1,
+        'SUPPLIER': r.supplier.name,
+        'GST NO.': r.gstin,
+        'Opp. Balance': r.oppBalance,
+        'Debit (Purchases)': r.debit,
+        'Credit (Paid)': r.credit,
+        'Balance (Payable)': r.balance
+      }));
+      rows.push({
+        '#': 'Total' as any,
+        'SUPPLIER': '',
+        'GST NO.': '',
+        'Opp. Balance': outstandingTotals.oppBalance,
+        'Debit (Purchases)': outstandingTotals.debit,
+        'Credit (Paid)': outstandingTotals.credit,
+        'Balance (Payable)': outstandingTotals.balance
       });
-    });
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Supplier Outstanding');
+      XLSX.writeFile(wb, `Supplier_Outstanding_${getTodayDateString()}.xlsx`);
+      showToast('Supplier outstanding list exported to Excel!', 'success');
+    } else {
+      if (!activeSupplier) return;
+      const exportRows: Record<string, any>[] = [
+        {
+          'Date': '',
+          'Bill No.': 'OPP. BALANCE',
+          'Debit (Billed ₹)': '',
+          'Credit (Paid ₹)': '',
+          'Balance (₹)': summary.openingBalance,
+          'Mode': '',
+          'Remarks': 'Opening Balance'
+        }
+      ];
 
-    const ws = XLSX.utils.json_to_sheet(exportRows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Supplier Ledger');
-    XLSX.writeFile(wb, `Supplier_Ledger_${activeSupplier.name.replace(/\s+/g, '_')}_${getTodayDateString()}.xlsx`);
-    showToast('Supplier statement ledger exported to Excel!', 'success');
+      transactionLogs.forEach(log => {
+        exportRows.push({
+          'Date': formatDateToDisplay(log.date),
+          'Bill No.': log.refNo || '-',
+          'Debit (Billed ₹)': log.totalAmount || '',
+          'Credit (Paid ₹)': log.paidAmount || '',
+          'Balance (₹)': log.runningBalance !== undefined ? log.runningBalance : log.balanceChange,
+          'Mode': log.paymentMode || '',
+          'Remarks': log.notes || ''
+        });
+      });
+
+      const ws = XLSX.utils.json_to_sheet(exportRows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Supplier Ledger');
+      XLSX.writeFile(wb, `Supplier_Ledger_${activeSupplier.name.replace(/\s+/g, '_')}_${getTodayDateString()}.xlsx`);
+      showToast('Supplier statement ledger exported to Excel!', 'success');
+    }
   };
 
   const handlePrint = () => {
@@ -188,6 +287,28 @@ export const SupplierLedgerReportView: React.FC = () => {
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {viewMode === 'INDIVIDUAL_LEDGER' && (
+              <button
+                type="button"
+                onClick={() => setViewMode('OUTSTANDING_LIST')}
+                style={{
+                  background: '#F1F5F9',
+                  border: '1.5px solid #000000',
+                  borderRadius: '6px',
+                  padding: '6px 10px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontWeight: 800,
+                  fontSize: '0.82rem'
+                }}
+                title="Back to Outstanding List"
+              >
+                <ArrowLeft size={16} />
+                <span>All Outstanding</span>
+              </button>
+            )}
             <div
               style={{
                 background: '#002B99',
@@ -202,12 +323,9 @@ export const SupplierLedgerReportView: React.FC = () => {
               <FileText size={20} />
             </div>
             <div>
-              <h2 style={{ margin: 0, fontWeight: 900, fontSize: '1.25rem', color: '#002B99', letterSpacing: '-0.3px' }}>
-                SUPPLIER LEDGER
+              <h2 style={{ margin: 0, fontWeight: 900, fontSize: '1.35rem', color: '#002B99', letterSpacing: '-0.3px' }}>
+                {viewMode === 'OUTSTANDING_LIST' ? 'SUPPLIER OUTSTANDING' : 'SUPPLIER LEDGER'}
               </h2>
-              <div style={{ fontSize: '0.78rem', color: '#6B7280', fontWeight: 600 }}>
-                Comprehensive purchase logs, vendor payments outgoing, and running balance ledger
-              </div>
             </div>
           </div>
 
@@ -277,60 +395,37 @@ export const SupplierLedgerReportView: React.FC = () => {
           </div>
         </div>
 
-        {/* Filter controls row */}
+        {/* Date Filter Bar matching mockup */}
         <div
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            display: 'flex',
+            alignItems: 'center',
             gap: '12px',
-            alignItems: 'flex-end',
-            paddingTop: '8px',
-            borderTop: '1px solid #E5E7EB'
+            flexWrap: 'wrap',
+            paddingTop: '6px'
           }}
         >
-          <div>
-            <label style={{ display: 'block', fontWeight: 800, fontSize: '0.75rem', color: '#4B5563', marginBottom: '3px' }}>
-              Select Vendor / Supplier
-            </label>
-            <select
-              className="input-text-clean"
-              value={currentSupplierId}
-              onChange={e => handleSelectSupplier(e.target.value)}
-              style={{ width: '100%', fontWeight: 800, fontSize: '0.9rem' }}
-            >
-              {suppliers.map(s => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontWeight: 800, fontSize: '0.75rem', color: '#4B5563', marginBottom: '3px' }}>
-              From Date
-            </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <label style={{ fontWeight: 800, fontSize: '0.78rem', color: '#4B5563' }}>From Date</label>
             <input
               type="date"
               className="input-text-clean"
               disabled={isAllTime}
               value={fromDate}
               onChange={e => { setFromDate(e.target.value); setIsAllTime(false); }}
-              style={{ width: '100%', opacity: isAllTime ? 0.5 : 1 }}
+              style={{ opacity: isAllTime ? 0.5 : 1, width: '140px' }}
             />
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontWeight: 800, fontSize: '0.75rem', color: '#4B5563', marginBottom: '3px' }}>
-              To Date
-            </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <label style={{ fontWeight: 800, fontSize: '0.78rem', color: '#4B5563' }}>To Date</label>
             <input
               type="date"
               className="input-text-clean"
               disabled={isAllTime}
               value={toDate}
               onChange={e => { setToDate(e.target.value); setIsAllTime(false); }}
-              style={{ width: '100%', opacity: isAllTime ? 0.5 : 1 }}
+              style={{ opacity: isAllTime ? 0.5 : 1, width: '140px' }}
             />
           </div>
 
@@ -339,7 +434,7 @@ export const SupplierLedgerReportView: React.FC = () => {
               type="button"
               onClick={() => setQuickFilter('ALL')}
               style={{
-                padding: '6px 12px',
+                padding: '5px 12px',
                 fontSize: '0.75rem',
                 fontWeight: 900,
                 borderRadius: '4px',
@@ -355,7 +450,7 @@ export const SupplierLedgerReportView: React.FC = () => {
               type="button"
               onClick={() => setQuickFilter('MONTH')}
               style={{
-                padding: '6px 12px',
+                padding: '5px 12px',
                 fontSize: '0.75rem',
                 fontWeight: 900,
                 borderRadius: '4px',
@@ -371,7 +466,7 @@ export const SupplierLedgerReportView: React.FC = () => {
               type="button"
               onClick={() => setQuickFilter('TODAY')}
               style={{
-                padding: '6px 12px',
+                padding: '5px 12px',
                 fontSize: '0.75rem',
                 fontWeight: 900,
                 borderRadius: '4px',
@@ -384,312 +479,378 @@ export const SupplierLedgerReportView: React.FC = () => {
               Today
             </button>
           </div>
+
+          {viewMode === 'INDIVIDUAL_LEDGER' && (
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px', minWidth: '300px' }}>
+              <label style={{ fontWeight: 800, fontSize: '0.78rem', color: '#4B5563', whiteSpace: 'nowrap' }}>Switch Vendor:</label>
+              <div style={{ flex: 1 }}>
+                <SearchableSelect
+                  options={supplierOptions}
+                  value={currentSupplierId}
+                  onChange={val => {
+                    if (val) {
+                      setCurrentSupplierId(val);
+                      setSelectedLedgerSupplierId(val);
+                    }
+                  }}
+                  placeholder="Search vendor / supplier..."
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* FULL-WIDTH MAGENTA SUPPLIER BANNER matching mockup */}
-      <div
-        style={{
-          background: '#F5A3E0',
-          border: '2px solid #000000',
-          borderRadius: '8px',
-          padding: '8px 16px',
-          textAlign: 'left'
-        }}
-      >
-        <span
-          style={{
-            fontWeight: 900,
-            fontSize: '1.25rem',
-            color: '#000000',
-            letterSpacing: '0.02em',
-            textTransform: 'uppercase'
-          }}
-        >
-          {activeSupplier?.name || 'SELECT SUPPLIER'}
-        </span>
-      </div>
-
-      {/* 4 KPI SUMMARY CARDS matching mockup */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-          gap: '12px'
-        }}
-      >
-        {/* Card 1: SUPPLIER OPP. BALANCE */}
-        <div
-          style={{
-            background: '#FFFFFF',
-            border: '2px solid #000000',
-            borderRadius: '8px',
-            padding: '10px 14px',
-            textAlign: 'center'
-          }}
-        >
+      {/* ========================================================================= */}
+      {/* VIEW 1: SUPPLIER OUTSTANDING (Main view matching Image 2 mockup)          */}
+      {/* ========================================================================= */}
+      {viewMode === 'OUTSTANDING_LIST' && (
+        <>
+          {/* TOTAL OUTSTANDING PINK BANNER matching mockup */}
           <div
             style={{
-              display: 'inline-block',
-              background: '#DC2626',
-              color: '#FFFFFF',
-              fontSize: '0.72rem',
-              fontWeight: 900,
-              padding: '2px 8px',
-              borderRadius: '2px',
-              textTransform: 'uppercase',
-              marginBottom: '6px'
+              background: '#F5A3E0',
+              border: '2px solid #000000',
+              borderRadius: '6px',
+              padding: '6px',
+              textAlign: 'center'
             }}
           >
-            SUPPLIER OPP. BALANCE
+            <span
+              style={{
+                background: '#DC2626',
+                color: '#FFFFFF',
+                fontWeight: 900,
+                fontSize: '1.1rem',
+                padding: '4px 18px',
+                borderRadius: '2px',
+                letterSpacing: '0.04em'
+              }}
+            >
+              TOTAL OUTSTANDING
+            </span>
           </div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#000000' }}>
-            {summary.openingBalance}
-          </div>
-        </div>
 
-        {/* Card 2: TOTAL PURCHASES */}
-        <div
-          style={{
-            background: '#FFFFFF',
-            border: '2px solid #000000',
-            borderRadius: '8px',
-            padding: '10px 14px',
-            textAlign: 'center'
-          }}
-        >
-          <div
-            style={{
-              display: 'inline-block',
-              background: '#DC2626',
-              color: '#FFFFFF',
-              fontSize: '0.72rem',
-              fontWeight: 900,
-              padding: '2px 8px',
-              borderRadius: '2px',
-              textTransform: 'uppercase',
-              marginBottom: '6px'
-            }}
-          >
-            TOTAL PURCHASES
+          {/* Centered Total Box matching mockup */}
+          <div style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
+            <div
+              style={{
+                background: '#FFFFFF',
+                border: '2px solid #000000',
+                borderRadius: '8px',
+                padding: '8px 36px',
+                minWidth: '220px',
+                textAlign: 'center'
+              }}
+            >
+              <div style={{ fontSize: '2rem', fontWeight: 900, color: '#000000', fontFamily: 'monospace' }}>
+                {outstandingTotals.balance}
+              </div>
+            </div>
           </div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#000000' }}>
-            {summary.totalPurchased}
-          </div>
-        </div>
 
-        {/* Card 3: TOTAL PAID TO SUPPLIER */}
-        <div
-          style={{
-            background: '#FFFFFF',
-            border: '2px solid #000000',
-            borderRadius: '8px',
-            padding: '10px 14px',
-            textAlign: 'center'
-          }}
-        >
-          <div
-            style={{
-              display: 'inline-block',
-              background: '#DC2626',
-              color: '#FFFFFF',
-              fontSize: '0.72rem',
-              fontWeight: 900,
-              padding: '2px 8px',
-              borderRadius: '2px',
-              textTransform: 'uppercase',
-              marginBottom: '6px'
-            }}
-          >
-            TOTAL PAID TO SUPPLIER
-          </div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#000000' }}>
-            {summary.totalPaid}
-          </div>
-        </div>
-
-        {/* Card 4: NET PAYBLE BALANCE */}
-        <div
-          style={{
-            background: '#FFFFFF',
-            border: '2px solid #000000',
-            borderRadius: '8px',
-            padding: '10px 14px',
-            textAlign: 'center'
-          }}
-        >
-          <div
-            style={{
-              display: 'inline-block',
-              background: '#DC2626',
-              color: '#FFFFFF',
-              fontSize: '0.72rem',
-              fontWeight: 900,
-              padding: '2px 8px',
-              borderRadius: '2px',
-              textTransform: 'uppercase',
-              marginBottom: '6px'
-            }}
-          >
-            NET PAYBLE BALANCE
-          </div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#000000' }}>
-            {summary.payableBalance}
-          </div>
-        </div>
-      </div>
-
-      {/* DETAILED TRANSACTION LEDGER TABLE matching mockup */}
-      <div
-        style={{
-          background: '#FFFFFF',
-          border: '2px solid #000000',
-          borderRadius: '10px',
-          overflow: 'hidden'
-        }}
-      >
-        <div className="table-responsive-wrapper">
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
-            <thead>
-              <tr style={{ background: '#D4C4FB', borderBottom: '2px solid #000000' }}>
-                <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', width: '130px', fontWeight: 900, fontSize: '0.95rem' }}>
-                  Date
-                </th>
-                <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', width: '150px', fontWeight: 900, fontSize: '0.95rem' }}>
-                  Bill No.
-                </th>
-                <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', width: '140px', fontWeight: 900, fontSize: '0.95rem', color: '#002B99' }}>
-                  Debit (Billed ₹)
-                </th>
-                <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', width: '140px', fontWeight: 900, fontSize: '0.95rem', color: '#16A34A' }}>
-                  Credit (Paid ₹)
-                </th>
-                <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', width: '150px', fontWeight: 900, fontSize: '0.95rem', color: '#DC2626' }}>
-                  Balance (₹)
-                </th>
-                <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', width: '100px', fontWeight: 900, fontSize: '0.95rem' }}>
-                  Mode
-                </th>
-                <th style={{ padding: '10px 12px', fontWeight: 900, fontSize: '0.95rem', textAlign: 'left' }}>
-                  Remarks
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {/* Row 1: Light cyan OPP. BALANCE ROW matching mockup */}
-              <tr style={{ background: '#CFF4FC', borderBottom: '1px solid #000000', height: '48px' }}>
-                <td style={{ borderRight: '1px solid #000000' }}></td>
-                <td style={{ borderRight: '1px solid #000000' }}></td>
-                <td style={{ borderRight: '1px solid #000000' }}></td>
-                <td style={{ borderRight: '1px solid #000000' }}></td>
-                <td style={{ borderRight: '1px solid #000000', padding: '6px 10px', lineHeight: 1.2 }}>
-                  <div style={{ fontWeight: 900, fontSize: '0.85rem', color: '#000000' }}>OPP. BALACE</div>
-                  <div style={{ fontWeight: 900, fontSize: '1rem', color: '#000000' }}>{summary.openingBalance}</div>
-                </td>
-                <td style={{ borderRight: '1px solid #000000' }}></td>
-                <td></td>
-              </tr>
-
-              {/* Transactions */}
-              {transactionLogs.map(log => {
-                const isPurchase = log.type === 'PURCHASE';
-                const displayBalance = log.runningBalance !== undefined ? log.runningBalance : log.balanceChange;
-                return (
-                  <tr
-                    key={log.id}
-                    style={{
-                      borderBottom: '1px solid #000000',
-                      background: '#FFFFFF',
-                      height: '38px'
-                    }}
-                  >
-                    <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
-                      {formatDateToDisplay(log.date)}
-                    </td>
-                    <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
-                      {isPurchase ? (
+          {/* Outstanding Table with Lavender Header #D4C4FB matching mockup */}
+          <div style={{ background: '#FFFFFF', border: '2px solid #000000', borderRadius: '4px', overflow: 'hidden' }}>
+            <div className="table-responsive-wrapper">
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
+                <thead>
+                  <tr style={{ background: '#D4C4FB', borderBottom: '2px solid #000000' }}>
+                    <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', textAlign: 'center', fontWeight: 900, fontSize: '1rem', color: '#002B99', width: '280px' }}>
+                      SUPPLIER
+                    </th>
+                    <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', textAlign: 'center', fontWeight: 900, fontSize: '0.92rem', width: '160px' }}>
+                      GST NO.
+                    </th>
+                    <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', textAlign: 'center', fontWeight: 900, fontSize: '0.92rem', width: '130px' }}>
+                      Opp. Balance
+                    </th>
+                    <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', textAlign: 'center', fontWeight: 900, fontSize: '0.92rem', width: '120px' }}>
+                      Debit
+                    </th>
+                    <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', textAlign: 'center', fontWeight: 900, fontSize: '0.92rem', width: '120px' }}>
+                      Crebit
+                    </th>
+                    <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', textAlign: 'center', fontWeight: 900, fontSize: '0.95rem', width: '130px' }}>
+                      Balance
+                    </th>
+                    <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 900, fontSize: '0.92rem', width: '110px' }}>
+                      ACTION
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {supplierOutstandingRows.map((r) => (
+                    <tr
+                      key={r.supplier.id}
+                      style={{
+                        borderBottom: '1px solid #000000',
+                        background: '#FFFFFF',
+                        height: '38px'
+                      }}
+                    >
+                      <td style={{ padding: '8px 12px', borderRight: '1px solid #000000', textAlign: 'left', fontWeight: 900, color: '#002B99' }}>
+                        {r.supplier.name}
+                      </td>
+                      <td style={{ padding: '8px 12px', borderRight: '1px solid #000000', textAlign: 'center', fontWeight: 800, fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                        {r.gstin}
+                      </td>
+                      <td style={{ padding: '8px 12px', borderRight: '1px solid #000000', textAlign: 'center', fontWeight: 800 }}>
+                        {r.oppBalance || ''}
+                      </td>
+                      <td style={{ padding: '8px 12px', borderRight: '1px solid #000000', textAlign: 'center', fontWeight: 800 }}>
+                        {r.debit || ''}
+                      </td>
+                      <td style={{ padding: '8px 12px', borderRight: '1px solid #000000', textAlign: 'center', fontWeight: 800 }}>
+                        {r.credit || ''}
+                      </td>
+                      <td style={{ padding: '8px 12px', borderRight: '1px solid #000000', textAlign: 'center', fontWeight: 900 }}>
+                        {r.balance}
+                      </td>
+                      <td style={{ padding: '8px 12px', textAlign: 'center' }}>
                         <button
                           type="button"
-                          onClick={() => handleOpenPurchaseDetail(log.refNo)}
+                          onClick={() => handleOpenLedger(r.supplier.id)}
                           style={{
-                            background: 'transparent',
-                            border: 'none',
-                            color: '#000000',
-                            fontWeight: 800,
-                            cursor: 'pointer',
-                            textDecoration: 'underline'
+                            background: '#FFFFFF',
+                            color: '#002B99',
+                            border: '1px solid #000000',
+                            borderRadius: '4px',
+                            padding: '3px 14px',
+                            fontWeight: 900,
+                            fontSize: '0.8rem',
+                            cursor: 'pointer'
                           }}
                         >
-                          {log.refNo}
+                          LEDGER
                         </button>
-                      ) : (
-                        <span>{log.refNo || '-'}</span>
-                      )}
+                      </td>
+                    </tr>
+                  ))}
+
+                  {/* Empty rows padding */}
+                  {Array.from({ length: Math.max(0, 8 - supplierOutstandingRows.length) }).map((_, i) => (
+                    <tr key={`empty-${i}`} style={{ borderBottom: '1px solid #000000', height: '34px' }}>
+                      <td style={{ borderRight: '1px solid #000000' }}></td>
+                      <td style={{ borderRight: '1px solid #000000' }}></td>
+                      <td style={{ borderRight: '1px solid #000000' }}></td>
+                      <td style={{ borderRight: '1px solid #000000' }}></td>
+                      <td style={{ borderRight: '1px solid #000000' }}></td>
+                      <td style={{ borderRight: '1px solid #000000' }}></td>
+                      <td></td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background: '#FFFFFF', borderTop: '2px solid #000000', height: '42px' }}>
+                    <td
+                      colSpan={2}
+                      style={{
+                        padding: '8px 14px',
+                        fontWeight: 900,
+                        fontSize: '1.15rem',
+                        textAlign: 'center',
+                        borderRight: '1px solid #000000'
+                      }}
+                    >
+                      Total
                     </td>
-                    <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
-                      {log.totalAmount ? round2(log.totalAmount) : ''}
+                    <td style={{ padding: '8px 12px', fontWeight: 900, fontSize: '1.05rem', borderRight: '1px solid #000000' }}>
+                      {outstandingTotals.oppBalance}
                     </td>
-                    <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
-                      {log.paidAmount ? round2(log.paidAmount) : ''}
+                    <td style={{ padding: '8px 12px', fontWeight: 900, fontSize: '1.05rem', borderRight: '1px solid #000000' }}>
+                      {outstandingTotals.debit}
                     </td>
-                    <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
-                      {round2(displayBalance)}
+                    <td style={{ padding: '8px 12px', fontWeight: 900, fontSize: '1.05rem', borderRight: '1px solid #000000' }}>
+                      {outstandingTotals.credit}
                     </td>
-                    <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
-                      {log.paymentMode || ''}
+                    <td style={{ padding: '8px 12px', fontWeight: 900, fontSize: '1.1rem', borderRight: '1px solid #000000' }}>
+                      {outstandingTotals.balance}
                     </td>
-                    <td style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 700 }}>
-                      {log.notes || ''}
-                    </td>
+                    <td></td>
                   </tr>
-                );
-              })}
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
 
-              {/* Pad with empty rows if fewer than 5 transactions to give clean table look */}
-              {Array.from({ length: Math.max(0, 5 - transactionLogs.length) }).map((_, i) => (
-                <tr key={`empty-${i}`} style={{ borderBottom: '1px solid #000000', height: '34px' }}>
-                  <td style={{ borderRight: '1px solid #000000' }}></td>
-                  <td style={{ borderRight: '1px solid #000000' }}></td>
-                  <td style={{ borderRight: '1px solid #000000' }}></td>
-                  <td style={{ borderRight: '1px solid #000000' }}></td>
-                  <td style={{ borderRight: '1px solid #000000' }}></td>
-                  <td style={{ borderRight: '1px solid #000000' }}></td>
-                  <td></td>
-                </tr>
-              ))}
-            </tbody>
+      {/* ========================================================================= */}
+      {/* VIEW 2: INDIVIDUAL SUPPLIER LEDGER STATEMENT                              */}
+      {/* ========================================================================= */}
+      {viewMode === 'INDIVIDUAL_LEDGER' && (
+        <>
+          {/* Magenta Banner */}
+          <div
+            style={{
+              background: '#F5A3E0',
+              border: '2px solid #000000',
+              borderRadius: '8px',
+              padding: '8px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}
+          >
+            <span
+              style={{
+                fontWeight: 900,
+                fontSize: '1.25rem',
+                color: '#000000',
+                letterSpacing: '0.02em',
+                textTransform: 'uppercase'
+              }}
+            >
+              {activeSupplier?.name || 'SELECT SUPPLIER'}
+            </span>
+            <button
+              type="button"
+              onClick={() => setViewMode('OUTSTANDING_LIST')}
+              style={{
+                background: '#FFFFFF',
+                color: '#000000',
+                border: '1.5px solid #000000',
+                borderRadius: '4px',
+                padding: '3px 10px',
+                fontWeight: 800,
+                fontSize: '0.8rem',
+                cursor: 'pointer'
+              }}
+            >
+              ← Back to Outstanding
+            </button>
+          </div>
 
-            {/* Bottom Total Row matching mockup */}
-            <tfoot>
-              <tr style={{ background: '#FFFFFF', borderTop: '2px solid #000000', height: '42px' }}>
-                <td
-                  colSpan={2}
-                  style={{
-                    padding: '8px 12px',
-                    fontWeight: 900,
-                    fontSize: '1.1rem',
-                    textAlign: 'center',
-                    borderRight: '1px solid #000000'
-                  }}
-                >
-                  Total
-                </td>
-                <td style={{ padding: '8px 10px', fontWeight: 900, fontSize: '1rem', borderRight: '1px solid #000000' }}>
-                  {summary.totalPurchased}
-                </td>
-                <td style={{ padding: '8px 10px', fontWeight: 900, fontSize: '1rem', borderRight: '1px solid #000000' }}>
-                  {summary.totalPaid}
-                </td>
-                <td style={{ padding: '8px 10px', fontWeight: 900, fontSize: '1rem', borderRight: '1px solid #000000' }}>
-                  {summary.payableBalance}
-                </td>
-                <td style={{ borderRight: '1px solid #000000' }}></td>
-                <td></td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
+          {/* 4 KPI Cards */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: '12px'
+            }}
+          >
+            <div style={{ background: '#FFFFFF', border: '2px solid #000000', borderRadius: '8px', padding: '10px 14px', textAlign: 'center' }}>
+              <div style={{ display: 'inline-block', background: '#DC2626', color: '#FFFFFF', fontSize: '0.72rem', fontWeight: 900, padding: '2px 8px', borderRadius: '2px', textTransform: 'uppercase', marginBottom: '6px' }}>
+                SUPPLIER OPP. BALANCE
+              </div>
+              <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#000000' }}>{summary.openingBalance}</div>
+            </div>
+
+            <div style={{ background: '#FFFFFF', border: '2px solid #000000', borderRadius: '8px', padding: '10px 14px', textAlign: 'center' }}>
+              <div style={{ display: 'inline-block', background: '#DC2626', color: '#FFFFFF', fontSize: '0.72rem', fontWeight: 900, padding: '2px 8px', borderRadius: '2px', textTransform: 'uppercase', marginBottom: '6px' }}>
+                TOTAL PURCHASES
+              </div>
+              <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#000000' }}>{summary.totalPurchased}</div>
+            </div>
+
+            <div style={{ background: '#FFFFFF', border: '2px solid #000000', borderRadius: '8px', padding: '10px 14px', textAlign: 'center' }}>
+              <div style={{ display: 'inline-block', background: '#DC2626', color: '#FFFFFF', fontSize: '0.72rem', fontWeight: 900, padding: '2px 8px', borderRadius: '2px', textTransform: 'uppercase', marginBottom: '6px' }}>
+                TOTAL PAID TO SUPPLIER
+              </div>
+              <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#000000' }}>{summary.totalPaid}</div>
+            </div>
+
+            <div style={{ background: '#FFFFFF', border: '2px solid #000000', borderRadius: '8px', padding: '10px 14px', textAlign: 'center' }}>
+              <div style={{ display: 'inline-block', background: '#DC2626', color: '#FFFFFF', fontSize: '0.72rem', fontWeight: 900, padding: '2px 8px', borderRadius: '2px', textTransform: 'uppercase', marginBottom: '6px' }}>
+                NET PAYBLE BALANCE
+              </div>
+              <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#000000' }}>{summary.payableBalance}</div>
+            </div>
+          </div>
+
+          {/* Statement Table */}
+          <div style={{ background: '#FFFFFF', border: '2px solid #000000', borderRadius: '10px', overflow: 'hidden' }}>
+            <div className="table-responsive-wrapper">
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
+                <thead>
+                  <tr style={{ background: '#D4C4FB', borderBottom: '2px solid #000000' }}>
+                    <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', width: '130px', fontWeight: 900, fontSize: '0.95rem' }}>Date</th>
+                    <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', width: '150px', fontWeight: 900, fontSize: '0.95rem' }}>Bill No.</th>
+                    <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', width: '140px', fontWeight: 900, fontSize: '0.95rem', color: '#002B99' }}>Debit (Billed ₹)</th>
+                    <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', width: '140px', fontWeight: 900, fontSize: '0.95rem', color: '#16A34A' }}>Credit (Paid ₹)</th>
+                    <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', width: '150px', fontWeight: 900, fontSize: '0.95rem', color: '#DC2626' }}>Balance (₹)</th>
+                    <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', width: '100px', fontWeight: 900, fontSize: '0.95rem' }}>Mode</th>
+                    <th style={{ padding: '10px 12px', fontWeight: 900, fontSize: '0.95rem', textAlign: 'left' }}>Remarks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* Row 1: OPP. BALANCE */}
+                  <tr style={{ background: '#CFF4FC', borderBottom: '1px solid #000000', height: '48px' }}>
+                    <td style={{ borderRight: '1px solid #000000' }}></td>
+                    <td style={{ borderRight: '1px solid #000000' }}></td>
+                    <td style={{ borderRight: '1px solid #000000' }}></td>
+                    <td style={{ borderRight: '1px solid #000000' }}></td>
+                    <td style={{ borderRight: '1px solid #000000', padding: '6px 10px', lineHeight: 1.2 }}>
+                      <div style={{ fontWeight: 900, fontSize: '0.85rem' }}>OPP. BALACE</div>
+                      <div style={{ fontWeight: 900, fontSize: '1rem' }}>{summary.openingBalance}</div>
+                    </td>
+                    <td style={{ borderRight: '1px solid #000000' }}></td>
+                    <td></td>
+                  </tr>
+
+                  {transactionLogs.map(log => {
+                    const isPurchase = log.type === 'PURCHASE';
+                    const displayBalance = log.runningBalance !== undefined ? log.runningBalance : log.balanceChange;
+                    return (
+                      <tr key={log.id} style={{ borderBottom: '1px solid #000000', background: '#FFFFFF', height: '38px' }}>
+                        <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
+                          {formatDateToDisplay(log.date)}
+                        </td>
+                        <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
+                          {isPurchase ? (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenPurchaseDetail(log.refNo)}
+                              style={{ background: 'transparent', border: 'none', color: '#000000', fontWeight: 800, cursor: 'pointer', textDecoration: 'underline' }}
+                            >
+                              {log.refNo}
+                            </button>
+                          ) : (
+                            <span>{log.refNo || '-'}</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
+                          {log.totalAmount ? round2(log.totalAmount) : ''}
+                        </td>
+                        <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
+                          {log.paidAmount ? round2(log.paidAmount) : ''}
+                        </td>
+                        <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
+                          {round2(displayBalance)}
+                        </td>
+                        <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
+                          {log.paymentMode || ''}
+                        </td>
+                        <td style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 700 }}>
+                          {log.notes || ''}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background: '#FFFFFF', borderTop: '2px solid #000000', height: '42px' }}>
+                    <td colSpan={2} style={{ padding: '8px 12px', fontWeight: 900, fontSize: '1.1rem', textAlign: 'center', borderRight: '1px solid #000000' }}>
+                      Total
+                    </td>
+                    <td style={{ padding: '8px 10px', fontWeight: 900, fontSize: '1rem', borderRight: '1px solid #000000' }}>
+                      {summary.totalPurchased}
+                    </td>
+                    <td style={{ padding: '8px 10px', fontWeight: 900, fontSize: '1rem', borderRight: '1px solid #000000' }}>
+                      {summary.totalPaid}
+                    </td>
+                    <td style={{ padding: '8px 10px', fontWeight: 900, fontSize: '1rem', borderRight: '1px solid #000000' }}>
+                      {summary.payableBalance}
+                    </td>
+                    <td style={{ borderRight: '1px solid #000000' }}></td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Payment Modal */}
       <SupplierPaymentModal

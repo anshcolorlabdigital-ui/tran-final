@@ -515,7 +515,21 @@ class DatabaseService {
 
   // --- PARTY LOGS (Customer Ledger Statements) ---
   public getPartyLogs(): PartyLog[] {
-    return this.get(STORAGE_KEYS.PARTY_LOGS, []);
+    const raw = this.get<PartyLog[]>(STORAGE_KEYS.PARTY_LOGS, []);
+    const seenSaleRef = new Set<string>();
+    const deduplicated: PartyLog[] = [];
+    for (let i = raw.length - 1; i >= 0; i--) {
+      const log = raw[i];
+      if (log.type === 'SALE' && log.refNo) {
+        const key = `${log.partyId}_${log.refNo.trim().toLowerCase()}`;
+        if (seenSaleRef.has(key)) {
+          continue;
+        }
+        seenSaleRef.add(key);
+      }
+      deduplicated.unshift(log);
+    }
+    return deduplicated;
   }
 
   public getPartyLogsByPartyId(partyId: string): PartyLog[] {
@@ -667,7 +681,21 @@ class DatabaseService {
 
   // --- SUPPLIER LOGS (Supplier Ledger Statements) ---
   public getSupplierLogs(): SupplierLog[] {
-    return this.get(STORAGE_KEYS.SUPPLIER_LOGS, []);
+    const raw = this.get<SupplierLog[]>(STORAGE_KEYS.SUPPLIER_LOGS, []);
+    const seenPurchaseRef = new Set<string>();
+    const deduplicated: SupplierLog[] = [];
+    for (let i = raw.length - 1; i >= 0; i--) {
+      const log = raw[i];
+      if (log.type === 'PURCHASE' && log.refNo) {
+        const key = `${log.supplierId}_${log.refNo.trim().toLowerCase()}`;
+        if (seenPurchaseRef.has(key)) {
+          continue;
+        }
+        seenPurchaseRef.add(key);
+      }
+      deduplicated.unshift(log);
+    }
+    return deduplicated;
   }
 
   public getSupplierLogsBySupplierId(supplierId: string): SupplierLog[] {
@@ -1099,7 +1127,24 @@ class DatabaseService {
 
     // Maintain customer statement ledger if sale is associated with a party
     if (sale.partyId) {
-      const logs = this.getPartyLogs().filter(l => !(l.type === 'SALE' && l.refNo === sale.billNo));
+      const allPartyLogs = this.getPartyLogs();
+      const logsToDelete = allPartyLogs.filter(l => 
+        l.type === 'SALE' && (
+          l.id === `log-sale-${sale.id}` ||
+          l.refNo === sale.billNo ||
+          Boolean(index >= 0 && sales[index] && (l.refNo === sales[index].billNo || l.id === `log-sale-${sales[index].id}`))
+        )
+      );
+      logsToDelete.forEach(l => this.deleteDocFromFirestore('party_logs', l.id));
+
+      const remainingLogs = allPartyLogs.filter(l => 
+        !(l.type === 'SALE' && (
+          l.id === `log-sale-${sale.id}` ||
+          l.refNo === sale.billNo ||
+          Boolean(index >= 0 && sales[index] && (l.refNo === sales[index].billNo || l.id === `log-sale-${sales[index].id}`))
+        ))
+      );
+
       const logRecord: PartyLog = {
         id: `log-sale-${sale.id}`,
         partyId: sale.partyId,
@@ -1113,8 +1158,8 @@ class DatabaseService {
         notes: balanceDue > 0 ? `Credit Sale (Due: ₹${balanceDue})` : 'Full Payment Received',
         createdAt: sale.createdAt || new Date().toISOString()
       };
-      logs.push(logRecord);
-      this.set(STORAGE_KEYS.PARTY_LOGS, logs);
+      remainingLogs.push(logRecord);
+      this.set(STORAGE_KEYS.PARTY_LOGS, remainingLogs);
       this.pushDocToFirestore('party_logs', logRecord.id, logRecord);
     }
 
@@ -1129,9 +1174,15 @@ class DatabaseService {
     this.deleteStockMovementsByRef('SALE', id);
 
     if (sale) {
-      const logs = this.getPartyLogs().filter(l => !(l.type === 'SALE' && l.refNo === sale.billNo));
-      this.set(STORAGE_KEYS.PARTY_LOGS, logs);
-      this.deleteDocFromFirestore('party_logs', `log-sale-${sale.id}`);
+      const allLogs = this.getPartyLogs();
+      const logsToDelete = allLogs.filter(l => 
+        l.type === 'SALE' && (l.id === `log-sale-${sale.id}` || l.refNo === sale.billNo)
+      );
+      logsToDelete.forEach(l => this.deleteDocFromFirestore('party_logs', l.id));
+      const remainingLogs = allLogs.filter(l => 
+        !(l.type === 'SALE' && (l.id === `log-sale-${sale.id}` || l.refNo === sale.billNo))
+      );
+      this.set(STORAGE_KEYS.PARTY_LOGS, remainingLogs);
     }
 
     this.notify();
@@ -1149,6 +1200,7 @@ class DatabaseService {
   public savePurchase(purchase: Purchase): void {
     const purchases = this.getPurchases();
     const index = purchases.findIndex(p => p.id === purchase.id);
+    const prevPurchase = index >= 0 ? purchases[index] : null;
 
     // Remove previous stock movements for this purchase if editing
     this.deleteStockMovementsByRef('PURCHASE', purchase.id);
@@ -1205,7 +1257,24 @@ class DatabaseService {
     if (purchase.supplierId) {
       const totalPaid = (Number(purchase.paidCash) || Number(purchase.recdCash) || 0) + (Number(purchase.paidUpi) || Number(purchase.recdUpi) || 0);
       const payableDue = Number((purchase.billTotal - totalPaid).toFixed(2));
-      const logs = this.getSupplierLogs().filter(l => !(l.type === 'PURCHASE' && l.refNo === purchase.billNo));
+      const allSupplierLogs = this.getSupplierLogs();
+      const logsToDelete = allSupplierLogs.filter(l => 
+        l.type === 'PURCHASE' && (
+          l.id === `log-pur-${purchase.id}` ||
+          l.refNo === purchase.billNo ||
+          Boolean(prevPurchase && (l.refNo === prevPurchase.billNo || l.id === `log-pur-${prevPurchase.id}`))
+        )
+      );
+      logsToDelete.forEach(l => this.deleteDocFromFirestore('supplier_logs', l.id));
+
+      const remainingLogs = allSupplierLogs.filter(l => 
+        !(l.type === 'PURCHASE' && (
+          l.id === `log-pur-${purchase.id}` ||
+          l.refNo === purchase.billNo ||
+          Boolean(prevPurchase && (l.refNo === prevPurchase.billNo || l.id === `log-pur-${prevPurchase.id}`))
+        ))
+      );
+
       const logRecord: SupplierLog = {
         id: `log-pur-${purchase.id}`,
         supplierId: purchase.supplierId,
@@ -1219,8 +1288,8 @@ class DatabaseService {
         notes: payableDue > 0 ? `Credit Purchase (Due: ₹${payableDue})` : 'Full Payment Paid on Purchase',
         createdAt: purchase.createdAt || new Date().toISOString()
       };
-      logs.push(logRecord);
-      this.set(STORAGE_KEYS.SUPPLIER_LOGS, logs);
+      remainingLogs.push(logRecord);
+      this.set(STORAGE_KEYS.SUPPLIER_LOGS, remainingLogs);
       this.pushDocToFirestore('supplier_logs', logRecord.id, logRecord);
     }
 
@@ -1235,9 +1304,15 @@ class DatabaseService {
     this.deleteStockMovementsByRef('PURCHASE', id);
 
     if (purchase) {
-      const logs = this.getSupplierLogs().filter(l => !(l.type === 'PURCHASE' && l.refNo === purchase.billNo));
-      this.set(STORAGE_KEYS.SUPPLIER_LOGS, logs);
-      this.deleteDocFromFirestore('supplier_logs', `log-pur-${purchase.id}`);
+      const allLogs = this.getSupplierLogs();
+      const logsToDelete = allLogs.filter(l => 
+        l.type === 'PURCHASE' && (l.id === `log-pur-${purchase.id}` || l.refNo === purchase.billNo)
+      );
+      logsToDelete.forEach(l => this.deleteDocFromFirestore('supplier_logs', l.id));
+      const remainingLogs = allLogs.filter(l => 
+        !(l.type === 'PURCHASE' && (l.id === `log-pur-${purchase.id}` || l.refNo === purchase.billNo))
+      );
+      this.set(STORAGE_KEYS.SUPPLIER_LOGS, remainingLogs);
     }
 
     this.notify();

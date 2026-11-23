@@ -23,13 +23,29 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { ConfirmDialog } from '../common/ConfirmDialog';
+import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 
 export const PaymentCollectionView: React.FC = () => {
-  const { refreshKey, triggerRefresh, showToast, showAlert, openPartyLedger } = useApp();
+  const { refreshKey, triggerRefresh, showToast, showAlert, openPartyLedger, openQuickModal } = useApp();
 
   const parties = useMemo(() => {
     return db.getParties().filter(p => p.isActive !== false);
   }, [refreshKey]);
+
+  const partyOptions = useMemo<SearchableSelectOption[]>(() => {
+    return parties.map(p => {
+      const bal = db.getPartyBalanceSummary(p.id).outstandingBalance;
+      const tag = p.partyType === 'DEALER' ? '[Dealer]' : '[Amateur]';
+      return {
+        id: p.id,
+        label: p.name,
+        subLabel: `${tag} ${p.city || ''} ${p.phone || ''}`.trim(),
+        badge: bal > 0 ? `Due: ₹${bal}` : 'Settled',
+        badgeBg: bal > 0 ? '#FEE2E2' : '#DCFCE7',
+        badgeColor: bal > 0 ? '#991B1B' : '#166534'
+      };
+    });
+  }, [parties, refreshKey]);
 
   const allLogs = useMemo(() => {
     return db.getPartyLogs();
@@ -394,29 +410,14 @@ export const PaymentCollectionView: React.FC = () => {
               <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '4px', color: '#1E293B' }}>
                 Select Customer / Party *
               </label>
-              <select
-                className="input-text-clean"
+              <SearchableSelect
+                options={partyOptions}
                 value={selectedPartyId}
-                onChange={e => setSelectedPartyId(e.target.value)}
-                required
-                style={{
-                  width: '100%',
-                  fontWeight: 800,
-                  fontSize: '0.95rem',
-                  background: '#F8FAFC',
-                  borderColor: '#002B99'
-                }}
-              >
-                {parties.map(p => {
-                  const bal = db.getPartyBalanceSummary(p.id).outstandingBalance;
-                  const tag = p.partyType === 'DEALER' ? '[Dealer]' : '[Amateur]';
-                  return (
-                    <option key={p.id} value={p.id}>
-                      {p.name} {tag} {p.city ? `(${p.city})` : ''} {bal > 0 ? `— Due: ₹${bal}` : '— Settled'}
-                    </option>
-                  );
-                })}
-              </select>
+                onChange={val => setSelectedPartyId(val)}
+                placeholder="Type customer name, city, phone..."
+                onQuickAdd={() => openQuickModal('PARTY', (newId) => setSelectedPartyId(newId))}
+                quickAddTitle="Quick Create Party"
+              />
             </div>
 
             {/* Dynamic Due Balance Card */}

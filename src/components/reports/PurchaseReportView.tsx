@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { formatDateToDisplay, getTodayDateString } from '../../utils/dateUtils';
 import { formatCurrency, round2 } from '../../utils/calculations';
 import { Download, Printer } from 'lucide-react';
+import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 
 export const PurchaseReportView: React.FC = () => {
   const { refreshKey, openSupplierLedger } = useApp();
@@ -11,6 +12,28 @@ export const PurchaseReportView: React.FC = () => {
   const purchases = useMemo(() => db.getPurchases(), [refreshKey]);
   const suppliers = useMemo(() => db.getSuppliers(), [refreshKey]);
   const items = useMemo(() => db.getItems(), [refreshKey]);
+
+  const supplierOptions = useMemo<SearchableSelectOption[]>(() => {
+    return [
+      { id: '', label: 'All Suppliers' },
+      ...suppliers.map(s => ({
+        id: s.id,
+        label: s.name,
+        subLabel: `${s.city || ''} ${s.phone || ''}`.trim()
+      }))
+    ];
+  }, [suppliers]);
+
+  const itemOptions = useMemo<SearchableSelectOption[]>(() => {
+    return [
+      { id: '', label: 'All Items' },
+      ...items.map(i => ({
+        id: i.id,
+        label: i.name,
+        subLabel: i.category || ''
+      }))
+    ];
+  }, [items]);
 
   const [fromDate, setFromDate] = useState<string>('2026-08-01');
   const [toDate, setToDate] = useState<string>(getTodayDateString());
@@ -170,36 +193,22 @@ export const PurchaseReportView: React.FC = () => {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           <div>
             <label style={{ display: 'block', fontWeight: 800, fontSize: '0.8rem', marginBottom: '4px' }}>Supplier</label>
-            <select
-              className="input-text-clean"
+            <SearchableSelect
+              options={supplierOptions}
               value={selectedSupplierId}
-              onChange={e => setSelectedSupplierId(e.target.value)}
-              style={{ width: '100%' }}
-            >
-              <option value="">All Suppliers</option>
-              {suppliers.map(s => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+              onChange={val => setSelectedSupplierId(val)}
+              placeholder="All Suppliers / Search..."
+            />
           </div>
 
           <div>
             <label style={{ display: 'block', fontWeight: 800, fontSize: '0.8rem', marginBottom: '4px' }}>Item</label>
-            <select
-              className="input-text-clean"
+            <SearchableSelect
+              options={itemOptions}
               value={selectedItemId}
-              onChange={e => setSelectedItemId(e.target.value)}
-              style={{ width: '100%' }}
-            >
-              <option value="">All Items</option>
-              {items.map(i => (
-                <option key={i.id} value={i.id}>
-                  {i.name}
-                </option>
-              ))}
-            </select>
+              onChange={val => setSelectedItemId(val)}
+              placeholder="All Items / Search..."
+            />
           </div>
         </div>
       </div>

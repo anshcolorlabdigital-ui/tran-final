@@ -3,6 +3,7 @@ import { db } from '../../db/db';
 import { useApp } from '../../context/AppContext';
 import { getTodayDateString, formatDateToDisplay } from '../../utils/dateUtils';
 import { X, CheckCircle2, DollarSign, CreditCard, User, AlertCircle } from 'lucide-react';
+import { SearchableSelect, SearchableSelectOption } from './SearchableSelect';
 
 interface PaymentCollectModalProps {
   isOpen: boolean;
@@ -15,11 +16,25 @@ export const PaymentCollectModal: React.FC<PaymentCollectModalProps> = ({
   onClose,
   initialPartyId
 }) => {
-  const { showToast, showAlert, triggerRefresh, refreshKey } = useApp();
+  const { showToast, showAlert, triggerRefresh, refreshKey, openQuickModal } = useApp();
 
   const parties = useMemo(() => {
     return db.getParties().filter(p => p.isActive !== false);
   }, [refreshKey]);
+
+  const partyOptions = useMemo<SearchableSelectOption[]>(() => {
+    return parties.map(p => {
+      const bal = db.getPartyBalanceSummary(p.id).outstandingBalance;
+      return {
+        id: p.id,
+        label: p.name,
+        subLabel: `${p.city || ''} ${p.phone || ''}`.trim(),
+        badge: bal > 0 ? `Due: ₹${bal}` : 'Settled',
+        badgeBg: bal > 0 ? '#FEE2E2' : '#DCFCE7',
+        badgeColor: bal > 0 ? '#991B1B' : '#166534'
+      };
+    });
+  }, [parties, refreshKey]);
 
   const [selectedPartyId, setSelectedPartyId] = useState<string>('');
   const [paymentAmount, setPaymentAmount] = useState<string>('');
@@ -150,28 +165,14 @@ export const PaymentCollectModal: React.FC<PaymentCollectModalProps> = ({
             <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', color: '#374151', marginBottom: '4px' }}>
               Select Customer / Party *
             </label>
-            <select
-              className="input-text-clean"
+            <SearchableSelect
+              options={partyOptions}
               value={selectedPartyId}
-              onChange={e => setSelectedPartyId(e.target.value)}
-              style={{
-                width: '100%',
-                fontWeight: 800,
-                fontSize: '0.95rem',
-                background: '#FFFFFF',
-                borderColor: '#002B99',
-                padding: '8px 10px'
-              }}
-            >
-              {parties.map(p => {
-                const bal = db.getPartyBalanceSummary(p.id).outstandingBalance;
-                return (
-                  <option key={p.id} value={p.id}>
-                    {p.name} {p.city ? `(${p.city})` : ''} {bal > 0 ? `— Due: ₹${bal}` : '— Settled'}
-                  </option>
-                );
-              })}
-            </select>
+              onChange={val => setSelectedPartyId(val)}
+              placeholder="Search customer / party..."
+              onQuickAdd={() => openQuickModal('PARTY', (newId) => setSelectedPartyId(newId))}
+              quickAddTitle="Quick Create Party"
+            />
           </div>
 
           {/* Outstanding Balance Banner */}

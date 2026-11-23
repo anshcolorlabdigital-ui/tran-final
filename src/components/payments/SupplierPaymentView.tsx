@@ -22,13 +22,28 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { ConfirmDialog } from '../common/ConfirmDialog';
+import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 
 export const SupplierPaymentView: React.FC = () => {
-  const { refreshKey, triggerRefresh, showToast, showAlert, openSupplierLedger } = useApp();
+  const { refreshKey, triggerRefresh, showToast, showAlert, openSupplierLedger, openQuickModal } = useApp();
 
   const suppliers = useMemo(() => {
     return db.getSuppliers().filter(s => s.isActive !== false);
   }, [refreshKey]);
+
+  const supplierOptions = useMemo<SearchableSelectOption[]>(() => {
+    return suppliers.map(s => {
+      const bal = db.getSupplierBalanceSummary(s.id).outstandingPayable;
+      return {
+        id: s.id,
+        label: s.name,
+        subLabel: `${s.city || ''} ${s.phone || ''}`.trim(),
+        badge: bal > 0 ? `Payable: ₹${bal}` : 'Settled',
+        badgeBg: bal > 0 ? '#FEE2E2' : '#DCFCE7',
+        badgeColor: bal > 0 ? '#991B1B' : '#166534'
+      };
+    });
+  }, [suppliers, refreshKey]);
 
   const allLogs = useMemo(() => {
     return db.getSupplierLogs();
@@ -393,28 +408,14 @@ export const SupplierPaymentView: React.FC = () => {
               <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '4px', color: '#1E293B' }}>
                 Select Supplier / Vendor *
               </label>
-              <select
-                className="input-text-clean"
+              <SearchableSelect
+                options={supplierOptions}
                 value={selectedSupplierId}
-                onChange={e => setSelectedSupplierId(e.target.value)}
-                required
-                style={{
-                  width: '100%',
-                  fontWeight: 800,
-                  fontSize: '0.95rem',
-                  background: '#F8FAFC',
-                  borderColor: '#002B99'
-                }}
-              >
-                {suppliers.map(s => {
-                  const bal = db.getSupplierBalanceSummary(s.id).outstandingPayable;
-                  return (
-                    <option key={s.id} value={s.id}>
-                      {s.name} {s.city ? `(${s.city})` : ''} {bal > 0 ? `— Payable: ₹${bal}` : '— Settled'}
-                    </option>
-                  );
-                })}
-              </select>
+                onChange={val => setSelectedSupplierId(val)}
+                placeholder="Type supplier name, city, phone..."
+                onQuickAdd={() => openQuickModal('SUPPLIER', (newId) => setSelectedSupplierId(newId))}
+                quickAddTitle="Quick Create Supplier"
+              />
             </div>
 
             {/* Dynamic Payable Balance Card */}
