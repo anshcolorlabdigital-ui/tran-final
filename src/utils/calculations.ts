@@ -185,13 +185,52 @@ export function normalizeItemPricing<T extends {
 
     let updatedUnitB = item.unitB;
     if (item.hasSecondaryUnit && item.unitB) {
-      const conv = Number(item.unitB.conversionFactor) || 1;
-      const bdB = calculateUnitBFromUnitA(bdA, conv);
+      const conv = Number(item.unitB.conversionFactor) > 0 ? Number(item.unitB.conversionFactor) : 1;
+      const basicB = item.unitB.basicPrice !== undefined && item.unitB.basicPrice !== null && Number(item.unitB.basicPrice) > 0
+        ? Number(item.unitB.basicPrice)
+        : Number((basicPrice / conv).toFixed(2));
+
+      const gstB = item.unitB.gstPercent !== undefined ? Number(item.unitB.gstPercent) : gstPercent;
+      const tranB = item.unitB.tranPercent !== undefined ? Number(item.unitB.tranPercent) : Number(bdA.tranPercent || 0);
+      const misB = item.unitB.misPercent !== undefined ? Number(item.unitB.misPercent) : Number(bdA.misPercent || 0);
+
+      // PRESERVE Unit B's custom profit % if provided, otherwise default to Unit A's profit %
+      const profDealB = item.unitB.profPercentDeal !== undefined && item.unitB.profPercentDeal !== null
+        ? Number(item.unitB.profPercentDeal)
+        : (item.unitB.profPercent !== undefined ? Number(item.unitB.profPercent) : Number(bdA.profPercentDeal || 0));
+
+      const profAmB = item.unitB.profPercentAm !== undefined && item.unitB.profPercentAm !== null
+        ? Number(item.unitB.profPercentAm)
+        : Number(bdA.profPercentAm || 0);
+
+      const roundUpSaleB = item.unitB.roundUpSale !== undefined ? Number(item.unitB.roundUpSale) : Number(item.unitB.roundUp || 0);
+      const roundUpMrpB = item.unitB.roundUpMrp !== undefined ? Number(item.unitB.roundUpMrp) : 0;
+
+      const bdB = calculateItemUnitBreakdown({
+        basicPrice: basicB,
+        gstPercent: gstB,
+        tranPercent: tranB,
+        misPercent: misB,
+        profPercentDeal: profDealB,
+        profPercentAm: profAmB,
+        roundUpSale: roundUpSaleB,
+        roundUpMrp: roundUpMrpB
+      });
+
       updatedUnitB = {
         ...item.unitB,
         ...bdB,
         unitName: item.unitB.unitName || 'Mt.',
         conversionFactor: conv,
+        basicPrice: basicB,
+        gstPercent: gstB,
+        tranPercent: tranB,
+        misPercent: misB,
+        profPercentDeal: profDealB,
+        profPercentAm: profAmB,
+        profPercent: profDealB,
+        roundUpSale: roundUpSaleB,
+        roundUpMrp: roundUpMrpB,
         salePrice: bdB.salePrice,
         mrp: bdB.mrp,
         isActive: item.unitB.isActive !== false
@@ -263,13 +302,48 @@ export function updateItemPricingFromPurchase<T extends {
 
   let updatedUnitB = item.unitB;
   if (item.hasSecondaryUnit && item.unitB) {
-    const conv = Number(item.unitB.conversionFactor) || 1;
-    const bdB = calculateUnitBFromUnitA(bdA, conv);
+    const conv = Number(item.unitB.conversionFactor) > 0 ? Number(item.unitB.conversionFactor) : 1;
+    const basicB = Number((safeBasic / conv).toFixed(2));
+    const gstB = item.unitB.gstPercent !== undefined ? Number(item.unitB.gstPercent) : safeGst;
+    const tranB = item.unitB.tranPercent !== undefined ? Number(item.unitB.tranPercent) : Number(bdA.tranPercent || 0);
+    const misB = item.unitB.misPercent !== undefined ? Number(item.unitB.misPercent) : Number(bdA.misPercent || 0);
+
+    const profDealB = item.unitB.profPercentDeal !== undefined && item.unitB.profPercentDeal !== null
+      ? Number(item.unitB.profPercentDeal)
+      : (item.unitB.profPercent !== undefined ? Number(item.unitB.profPercent) : Number(bdA.profPercentDeal || 0));
+
+    const profAmB = item.unitB.profPercentAm !== undefined && item.unitB.profPercentAm !== null
+      ? Number(item.unitB.profPercentAm)
+      : Number(bdA.profPercentAm || 0);
+
+    const roundUpSaleB = item.unitB.roundUpSale !== undefined ? Number(item.unitB.roundUpSale) : Number(item.unitB.roundUp || 0);
+    const roundUpMrpB = item.unitB.roundUpMrp !== undefined ? Number(item.unitB.roundUpMrp) : 0;
+
+    const bdB = calculateItemUnitBreakdown({
+      basicPrice: basicB,
+      gstPercent: gstB,
+      tranPercent: tranB,
+      misPercent: misB,
+      profPercentDeal: profDealB,
+      profPercentAm: profAmB,
+      roundUpSale: roundUpSaleB,
+      roundUpMrp: roundUpMrpB
+    });
+
     updatedUnitB = {
       ...item.unitB,
       ...bdB,
       unitName: item.unitB.unitName || 'Mt.',
       conversionFactor: conv,
+      basicPrice: basicB,
+      gstPercent: gstB,
+      tranPercent: tranB,
+      misPercent: misB,
+      profPercentDeal: profDealB,
+      profPercentAm: profAmB,
+      profPercent: profDealB,
+      roundUpSale: roundUpSaleB,
+      roundUpMrp: roundUpMrpB,
       salePrice: bdB.salePrice,
       mrp: bdB.mrp,
       isActive: item.unitB.isActive !== false

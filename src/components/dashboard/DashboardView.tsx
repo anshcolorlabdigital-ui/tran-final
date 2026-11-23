@@ -269,10 +269,10 @@ export const DashboardView: React.FC = () => {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
+            gridTemplateColumns: (selectedItem?.hasSecondaryUnit && selectedItem?.unitB?.unitName && selectedItem?.unitB?.isActive !== false) ? '1fr 1fr' : '1fr',
             gap: '24px',
             width: '100%',
-            maxWidth: '560px',
+            maxWidth: (selectedItem?.hasSecondaryUnit && selectedItem?.unitB?.unitName && selectedItem?.unitB?.isActive !== false) ? '560px' : '280px',
             marginTop: '6px'
           }}
         >
@@ -319,46 +319,48 @@ export const DashboardView: React.FC = () => {
           </div>
 
           {/* Unit-B */}
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontWeight: 800, fontSize: '0.92rem', marginBottom: '4px' }}>
-              Unit-B : {selectedItem?.unitB?.unitName || 'Box'}
-            </div>
-            <div
-              style={{
-                border: '1.5px solid #000000',
-                height: '38px',
-                background: '#FFFFFF',
-                borderRadius: '4px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: 900,
-                fontSize: '1rem'
-              }}
-            >
-              {selectedItem?.unitB?.unitName || ''}
-            </div>
+          {Boolean(selectedItem?.hasSecondaryUnit && selectedItem?.unitB?.unitName && selectedItem?.unitB?.isActive !== false) && (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontWeight: 800, fontSize: '0.92rem', marginBottom: '4px' }}>
+                Unit-B : {selectedItem?.unitB?.unitName || 'Box'}
+              </div>
+              <div
+                style={{
+                  border: '1.5px solid #000000',
+                  height: '38px',
+                  background: '#FFFFFF',
+                  borderRadius: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 900,
+                  fontSize: '1rem'
+                }}
+              >
+                {selectedItem?.unitB?.unitName || ''}
+              </div>
 
-            <div style={{ fontWeight: 900, fontSize: '0.9rem', color: '#15803D', margin: '8px 0 4px' }}>
-              SALE PRICE
+              <div style={{ fontWeight: 900, fontSize: '0.9rem', color: '#15803D', margin: '8px 0 4px' }}>
+                SALE PRICE
+              </div>
+              <div
+                style={{
+                  border: '1.5px solid #000000',
+                  height: '48px',
+                  background: '#FFFFFF',
+                  borderRadius: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 900,
+                  fontSize: '1.3rem',
+                  color: '#002B99'
+                }}
+              >
+                {selectedItem?.unitB?.salePrice ?? 0}
+              </div>
             </div>
-            <div
-              style={{
-                border: '1.5px solid #000000',
-                height: '48px',
-                background: '#FFFFFF',
-                borderRadius: '4px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: 900,
-                fontSize: '1.3rem',
-                color: '#002B99'
-              }}
-            >
-              {selectedItem?.unitB?.salePrice ?? 0}
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Current Stock Value matching mockup */}

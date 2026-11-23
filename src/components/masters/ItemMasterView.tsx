@@ -91,6 +91,7 @@ export const ItemMasterView: React.FC = () => {
   const [unitBSalePrice, setUnitBSalePrice] = useState('0');
   const [unitBMrp, setUnitBMrp] = useState('0');
   const [unitBActive, setUnitBActive] = useState(true);
+  const [isUnitBProfCustomized, setIsUnitBProfCustomized] = useState(false);
 
   const [minStock, setMinStock] = useState('0');
   const [openingStock, setOpeningStock] = useState('0');
@@ -158,10 +159,14 @@ export const ItemMasterView: React.FC = () => {
       setUnitBMisPercent(value);
     } else if (field === 'profDeal') {
       setUnitAProfDeal(value);
-      setUnitBProfDeal(value);
+      if (!isUnitBProfCustomized) {
+        setUnitBProfDeal(value);
+      }
     } else if (field === 'profAm') {
       setUnitAProfAm(value);
-      setUnitBProfAm(value);
+      if (!isUnitBProfCustomized) {
+        setUnitBProfAm(value);
+      }
     }
   };
 
@@ -230,6 +235,12 @@ export const ItemMasterView: React.FC = () => {
       setUnitBSalePrice(String(item.unitB.salePrice ?? 0));
       setUnitBMrp(String(item.unitB.mrp ?? 0));
       setUnitBActive(item.unitB.isActive !== false);
+
+      const bProfDeal = String(item.unitB.profPercentDeal ?? item.unitB.profPercent ?? 0);
+      const bProfAm = String(item.unitB.profPercentAm ?? 0);
+      const aProfDeal = String(item.unitA?.profPercentDeal ?? item.unitA?.profPercent ?? item.profPercentDeal ?? 0);
+      const aProfAm = String(item.unitA?.profPercentAm ?? item.profPercentAm ?? 0);
+      setIsUnitBProfCustomized(bProfDeal !== aProfDeal || bProfAm !== aProfAm);
     } else {
       setUnitBName('');
       setUnitBConversion('40');
@@ -244,6 +255,7 @@ export const ItemMasterView: React.FC = () => {
       setUnitBSalePrice(String(item.saleRate || 0));
       setUnitBMrp(String(item.mrp || 0));
       setUnitBActive(true);
+      setIsUnitBProfCustomized(false);
     }
 
     setMinStock(String(item.minStock || 0));
@@ -296,6 +308,7 @@ export const ItemMasterView: React.FC = () => {
     setUnitBSalePrice('0');
     setUnitBMrp('0');
     setUnitBActive(true);
+    setIsUnitBProfCustomized(false);
 
     setMinStock('0');
     setOpeningStock('0');
@@ -915,7 +928,11 @@ export const ItemMasterView: React.FC = () => {
                       step="any"
                       className="input-text-clean"
                       value={unitBProfDeal}
-                      onChange={e => { setIsTouched(true); setUnitBProfDeal(e.target.value); }}
+                      onChange={e => {
+                        setIsTouched(true);
+                        setIsUnitBProfCustomized(true);
+                        setUnitBProfDeal(e.target.value);
+                      }}
                       style={{ textAlign: 'center', fontWeight: 700, borderColor: '#8B5CF6' }}
                     />
                     <div className="subtext-calc-red">{unitBBreakdown.profDealAmt}</div>
@@ -954,7 +971,11 @@ export const ItemMasterView: React.FC = () => {
                       step="any"
                       className="input-text-clean"
                       value={unitBProfAm}
-                      onChange={e => { setIsTouched(true); setUnitBProfAm(e.target.value); }}
+                      onChange={e => {
+                        setIsTouched(true);
+                        setIsUnitBProfCustomized(true);
+                        setUnitBProfAm(e.target.value);
+                      }}
                       style={{ textAlign: 'center', fontWeight: 700, borderColor: '#3B82F6' }}
                     />
                     <div className="subtext-calc-red">{unitBBreakdown.profAmAmt}</div>

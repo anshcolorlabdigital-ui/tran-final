@@ -101,11 +101,36 @@ export const ItemLedgerReportView: React.FC = () => {
     });
   }, [activeItem]);
 
+  // Check whether Unit B is defined and active for the active item
+  const hasUnitB = Boolean(
+    activeItem?.hasSecondaryUnit &&
+    activeItem?.unitB &&
+    activeItem?.unitB?.unitName &&
+    activeItem?.unitB?.isActive !== false
+  );
+
   // Unit B pricing breakdown
   const unitBBreakdown = useMemo(() => {
-    const conv = activeItem?.unitB?.conversionFactor || 50;
-    return calculateUnitBFromUnitA(unitABreakdown, conv);
-  }, [unitABreakdown, activeItem]);
+    if (!hasUnitB || !activeItem?.unitB) {
+      return calculateItemUnitBreakdown({ basicPrice: 0 });
+    }
+    const b = activeItem.unitB;
+    const conv = Number(b.conversionFactor) > 0 ? Number(b.conversionFactor) : 1;
+    const baseB = b.basicPrice !== undefined && b.basicPrice !== null && Number(b.basicPrice) > 0
+      ? Number(b.basicPrice)
+      : Number(((activeItem.unitA?.basicPrice ?? activeItem.purchaseRate ?? 0) / conv).toFixed(2));
+
+    return calculateItemUnitBreakdown({
+      basicPrice: baseB,
+      gstPercent: b.gstPercent ?? activeItem.unitA?.gstPercent ?? activeItem.gstPercent ?? 0,
+      tranPercent: b.tranPercent ?? activeItem.unitA?.tranPercent ?? 0,
+      misPercent: b.misPercent ?? activeItem.unitA?.misPercent ?? 0,
+      profPercentDeal: b.profPercentDeal ?? b.profPercent ?? activeItem.unitA?.profPercentDeal ?? 0,
+      roundUpSale: b.roundUpSale ?? b.roundUp ?? 0,
+      profPercentAm: b.profPercentAm ?? activeItem.unitA?.profPercentAm ?? 0,
+      roundUpMrp: b.roundUpMrp ?? 0,
+    });
+  }, [hasUnitB, activeItem]);
 
   // Build complete chronological ledger entries for the active item
   const rawLedgerEntries = useMemo<ItemLedgerEntry[]>(() => {
@@ -674,127 +699,129 @@ export const ItemLedgerReportView: React.FC = () => {
         </div>
 
         {/* UNIT-B SECTION */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '8px', borderTop: '1px dashed #CBD5E1' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span style={{ fontWeight: 900, fontSize: '0.88rem', color: '#000000' }}>UNIT-B :</span>
-              <span
-                style={{
-                  border: '1.5px solid #F43F5E',
-                  color: '#E11D48',
-                  background: '#FFF1F2',
-                  padding: '2px 14px',
-                  borderRadius: '4px',
-                  fontWeight: 900,
-                  fontSize: '0.85rem'
-                }}
-              >
-                {activeItem?.unitB?.unitName || 'Mt'}
-              </span>
-              <span style={{ fontWeight: 800, fontSize: '0.85rem', color: '#000000' }}>
-                1 {activeItem?.unitA?.unitName || activeItem?.unit || 'PIC'} ={' '}
-                <span style={{ border: '1.5px solid #059669', padding: '2px 10px', borderRadius: '4px', fontWeight: 900, color: '#059669', background: '#ECFDF5' }}>
-                  {activeItem?.unitB?.conversionFactor || 50}
-                </span>{' '}
-                {activeItem?.unitB?.unitName || 'Mt'}
-              </span>
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 800, cursor: 'default' }}>
-                <input
-                  type="checkbox"
-                  checked={Boolean(activeItem?.hasSecondaryUnit || activeItem?.unitB?.isActive)}
-                  readOnly
-                  style={{ accentColor: '#2563EB', width: '16px', height: '16px' }}
-                />
-                Active Unit B
-              </label>
-            </div>
-          </div>
-
-          {/* Unit B 10-column pricing table */}
-          <div className="pricing-calc-scroll-wrapper">
-            <div className="pricing-calc-grid-10" style={{ gap: '6px' }}>
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Besic Price</label>
-                <div style={{ border: '1.5px solid #000000', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
-                  {unitBBreakdown.basicPrice}
-                </div>
-                <div className="subtext-calc-red">{unitBBreakdown.basicPrice}</div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>GST %</label>
-                <div style={{ border: '1.5px solid #000000', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
-                  {unitBBreakdown.gstPercent}
-                </div>
-                <div className="subtext-calc-red">{unitBBreakdown.gstAmt}</div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>tran%</label>
-                <div style={{ border: '1.5px solid #000000', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
-                  {unitBBreakdown.tranPercent}
-                </div>
-                <div className="subtext-calc-red">{unitBBreakdown.tranAmt}</div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>mis%</label>
-                <div style={{ border: '1.5px solid #000000', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
-                  {unitBBreakdown.misPercent}
-                </div>
-                <div className="subtext-calc-red">{unitBBreakdown.misAmt}</div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Prof% -S</label>
-                <div style={{ border: '1.5px solid #8B5CF6', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
-                  {unitBBreakdown.profPercentDeal}
-                </div>
-                <div className="subtext-calc-red">{unitBBreakdown.profDealAmt}</div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Round-S</label>
-                <div style={{ border: '1.5px solid #8B5CF6', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
-                  {unitBBreakdown.roundUpSale}
-                </div>
-                <div className="subtext-calc-red">{unitBBreakdown.roundUpSale}</div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#2563EB' }}>Sale Price</label>
-                <div style={{ border: '2px solid #2563EB', borderRadius: '4px', padding: '4px', fontWeight: 900, fontSize: '0.92rem', background: '#EFF6FF', color: '#1D4ED8', textAlign: 'center' }}>
-                  {unitBBreakdown.salePrice}
-                </div>
-                <div className="subtext-calc-red">{unitBBreakdown.salePrice}</div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Prof% -M</label>
-                <div style={{ border: '1.5px solid #3B82F6', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
-                  {unitBBreakdown.profPercentAm}
-                </div>
-                <div className="subtext-calc-red">{unitBBreakdown.profAmAmt}</div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Round-M</label>
-                <div style={{ border: '1.5px solid #3B82F6', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
-                  {unitBBreakdown.roundUpMrp}
-                </div>
-                <div className="subtext-calc-red">{unitBBreakdown.roundUpMrp}</div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#2563EB' }}>mrp</label>
-                <div style={{ border: '2px solid #2563EB', borderRadius: '4px', padding: '4px', fontWeight: 900, fontSize: '0.92rem', background: '#EFF6FF', color: '#1D4ED8', textAlign: 'center' }}>
-                  {unitBBreakdown.mrp}
-                </div>
-                <div className="subtext-calc-red">{unitBBreakdown.mrp}</div>
+        {hasUnitB && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '8px', borderTop: '1px dashed #CBD5E1' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontWeight: 900, fontSize: '0.88rem', color: '#000000' }}>UNIT-B :</span>
+                <span
+                  style={{
+                    border: '1.5px solid #F43F5E',
+                    color: '#E11D48',
+                    background: '#FFF1F2',
+                    padding: '2px 14px',
+                    borderRadius: '4px',
+                    fontWeight: 900,
+                    fontSize: '0.85rem'
+                  }}
+                >
+                  {activeItem?.unitB?.unitName || 'Mt'}
+                </span>
+                <span style={{ fontWeight: 800, fontSize: '0.85rem', color: '#000000' }}>
+                  1 {activeItem?.unitA?.unitName || activeItem?.unit || 'PIC'} ={' '}
+                  <span style={{ border: '1.5px solid #059669', padding: '2px 10px', borderRadius: '4px', fontWeight: 900, color: '#059669', background: '#ECFDF5' }}>
+                    {activeItem?.unitB?.conversionFactor || 50}
+                  </span>{' '}
+                  {activeItem?.unitB?.unitName || 'Mt'}
+                </span>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 800, cursor: 'default' }}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(activeItem?.unitB?.isActive !== false)}
+                    readOnly
+                    style={{ accentColor: '#2563EB', width: '16px', height: '16px' }}
+                  />
+                  Active Unit B
+                </label>
               </div>
             </div>
+
+            {/* Unit B 10-column pricing table */}
+            <div className="pricing-calc-scroll-wrapper">
+              <div className="pricing-calc-grid-10" style={{ gap: '6px' }}>
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>Besic Price</label>
+                  <div style={{ border: '1.5px solid #000000', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                    {unitBBreakdown.basicPrice}
+                  </div>
+                  <div className="subtext-calc-red">{unitBBreakdown.basicPrice}</div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>GST %</label>
+                  <div style={{ border: '1.5px solid #000000', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                    {unitBBreakdown.gstPercent}
+                  </div>
+                  <div className="subtext-calc-red">{unitBBreakdown.gstAmt}</div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>tran%</label>
+                  <div style={{ border: '1.5px solid #000000', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                    {unitBBreakdown.tranPercent}
+                  </div>
+                  <div className="subtext-calc-red">{unitBBreakdown.tranAmt}</div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px' }}>mis%</label>
+                  <div style={{ border: '1.5px solid #000000', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                    {unitBBreakdown.misPercent}
+                  </div>
+                  <div className="subtext-calc-red">{unitBBreakdown.misAmt}</div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Prof% -S</label>
+                  <div style={{ border: '1.5px solid #8B5CF6', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                    {unitBBreakdown.profPercentDeal}
+                  </div>
+                  <div className="subtext-calc-red">{unitBBreakdown.profDealAmt}</div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#6D28D9' }}>Round-S</label>
+                  <div style={{ border: '1.5px solid #8B5CF6', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                    {unitBBreakdown.roundUpSale}
+                  </div>
+                  <div className="subtext-calc-red">{unitBBreakdown.roundUpSale}</div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#2563EB' }}>Sale Price</label>
+                  <div style={{ border: '2px solid #2563EB', borderRadius: '4px', padding: '4px', fontWeight: 900, fontSize: '0.92rem', background: '#EFF6FF', color: '#1D4ED8', textAlign: 'center' }}>
+                    {unitBBreakdown.salePrice}
+                  </div>
+                  <div className="subtext-calc-red">{unitBBreakdown.salePrice}</div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Prof% -M</label>
+                  <div style={{ border: '1.5px solid #3B82F6', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                    {unitBBreakdown.profPercentAm}
+                  </div>
+                  <div className="subtext-calc-red">{unitBBreakdown.profAmAmt}</div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#1E40AF' }}>Round-M</label>
+                  <div style={{ border: '1.5px solid #3B82F6', borderRadius: '4px', padding: '4px', fontWeight: 800, fontSize: '0.88rem', background: '#FFFFFF', textAlign: 'center' }}>
+                    {unitBBreakdown.roundUpMrp}
+                  </div>
+                  <div className="subtext-calc-red">{unitBBreakdown.roundUpMrp}</div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 800, display: 'block', marginBottom: '2px', color: '#2563EB' }}>mrp</label>
+                  <div style={{ border: '2px solid #2563EB', borderRadius: '4px', padding: '4px', fontWeight: 900, fontSize: '0.92rem', background: '#EFF6FF', color: '#1D4ED8', textAlign: 'center' }}>
+                    {unitBBreakdown.mrp}
+                  </div>
+                  <div className="subtext-calc-red">{unitBBreakdown.mrp}</div>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
 
       </div>
 
