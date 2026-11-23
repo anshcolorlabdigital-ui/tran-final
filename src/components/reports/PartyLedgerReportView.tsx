@@ -10,7 +10,8 @@ import {
   Download,
   PlusCircle,
   X,
-  ArrowLeft
+  ArrowLeft,
+  Trash2
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { PaymentCollectModal } from '../common/PaymentCollectModal';
@@ -208,7 +209,24 @@ export const PartyLedgerReportView: React.FC = () => {
     if (sale) {
       setSelectedSaleDetail(sale);
     } else {
-      showAlert(`Invoice detail log for "${refNo}" not found.`, 'Invoice Not Found', 'info');
+      const orphanLog = transactionLogs.find(l => l.refNo === refNo);
+      if (orphanLog && window.confirm(`Invoice for "${refNo}" was not found in sales.\n\nWould you like to remove this orphan entry from the ledger statement?`)) {
+        db.deletePartyLog(orphanLog.id);
+        showToast(`Orphan entry "${refNo}" deleted from ledger.`, 'success');
+      } else {
+        showAlert(`Invoice detail log for "${refNo}" not found.`, 'Invoice Not Found', 'info');
+      }
+    }
+  };
+
+  const handleDeleteLog = (log: PartyLog) => {
+    const isSale = log.type === 'SALE';
+    const msg = isSale
+      ? `Are you sure you want to delete invoice entry "${log.refNo || 'entry'}"? This will remove it from the statement.`
+      : `Are you sure you want to delete receipt entry "${log.refNo || 'entry'}" of ₹${log.paidAmount || 0}?`;
+    if (window.confirm(msg)) {
+      db.deletePartyLog(log.id);
+      showToast(`Ledger entry ${log.refNo || ''} deleted successfully.`, 'success');
     }
   };
 
@@ -848,8 +866,11 @@ export const PartyLedgerReportView: React.FC = () => {
                     <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', width: '100px', fontWeight: 900, fontSize: '0.95rem' }}>
                       Mode
                     </th>
-                    <th style={{ padding: '10px 12px', fontWeight: 900, fontSize: '0.95rem', textAlign: 'left' }}>
+                    <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', fontWeight: 900, fontSize: '0.95rem', textAlign: 'left' }}>
                       Remarks
+                    </th>
+                    <th style={{ padding: '10px 8px', width: '70px', fontWeight: 900, fontSize: '0.95rem', textAlign: 'center' }}>
+                      Action
                     </th>
                   </tr>
                 </thead>
@@ -864,6 +885,7 @@ export const PartyLedgerReportView: React.FC = () => {
                       <div style={{ fontWeight: 900, fontSize: '0.85rem', color: '#000000' }}>OPP. BALACE</div>
                       <div style={{ fontWeight: 900, fontSize: '1rem', color: '#000000' }}>{summary.openingBalance}</div>
                     </td>
+                    <td style={{ borderRight: '1px solid #000000' }}></td>
                     <td style={{ borderRight: '1px solid #000000' }}></td>
                     <td></td>
                   </tr>
@@ -916,8 +938,28 @@ export const PartyLedgerReportView: React.FC = () => {
                         <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
                           {log.paymentMode || ''}
                         </td>
-                        <td style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 700 }}>
+                        <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', textAlign: 'left', fontWeight: 700 }}>
                           {log.notes || ''}
+                        </td>
+                        <td style={{ padding: '8px 8px', textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteLog(log)}
+                            title="Delete Ledger Entry"
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: '#DC2626',
+                              cursor: 'pointer',
+                              padding: '4px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              borderRadius: '4px'
+                            }}
+                          >
+                            <Trash2 size={16} />
+                          </button>
                         </td>
                       </tr>
                     );
@@ -926,6 +968,7 @@ export const PartyLedgerReportView: React.FC = () => {
                   {/* Pad with empty rows if fewer than 5 transactions */}
                   {Array.from({ length: Math.max(0, 5 - transactionLogs.length) }).map((_, i) => (
                     <tr key={`empty-${i}`} style={{ borderBottom: '1px solid #000000', height: '34px' }}>
+                      <td style={{ borderRight: '1px solid #000000' }}></td>
                       <td style={{ borderRight: '1px solid #000000' }}></td>
                       <td style={{ borderRight: '1px solid #000000' }}></td>
                       <td style={{ borderRight: '1px solid #000000' }}></td>
@@ -961,6 +1004,7 @@ export const PartyLedgerReportView: React.FC = () => {
                     <td style={{ padding: '8px 10px', fontWeight: 900, fontSize: '1rem', borderRight: '1px solid #000000' }}>
                       {summary.outstandingBalance}
                     </td>
+                    <td style={{ borderRight: '1px solid #000000' }}></td>
                     <td style={{ borderRight: '1px solid #000000' }}></td>
                     <td></td>
                   </tr>

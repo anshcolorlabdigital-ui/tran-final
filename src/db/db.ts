@@ -279,6 +279,7 @@ class DatabaseService {
       setupCollectionSync<SelfUse>('self_uses', STORAGE_KEYS.SELF_USES);
       setupCollectionSync<StockAdjustment>('stock_adjustments', STORAGE_KEYS.STOCK_ADJUSTMENTS);
       setupCollectionSync<PartyLog>('party_logs', STORAGE_KEYS.PARTY_LOGS);
+      setupCollectionSync<SupplierLog>('supplier_logs', STORAGE_KEYS.SUPPLIER_LOGS);
       setupCollectionSync<User>('users', STORAGE_KEYS.USERS);
       setupCollectionSync<StockMovement>('stock_movements', STORAGE_KEYS.STOCK_MOVEMENTS);
       setupCollectionSync<PhysicalStockAudit>('physical_stock_audits', STORAGE_KEYS.PHYSICAL_STOCK_AUDITS);
@@ -307,6 +308,7 @@ class DatabaseService {
       await this.batchSetDocs('stock_adjustments', this.getStockAdjustments());
       await this.batchSetDocs('physical_stock_audits', this.getPhysicalStockAudits());
       await this.batchSetDocs('party_logs', this.getPartyLogs());
+      await this.batchSetDocs('supplier_logs', this.getSupplierLogs());
       await this.batchSetDocs('stock_movements', this.getStockMovements());
 
       this.cloudSyncState = {
@@ -373,6 +375,7 @@ class DatabaseService {
       await pullCollection<StockMovement>('stock_movements', STORAGE_KEYS.STOCK_MOVEMENTS, 'stock_movements');
       await pullCollection<StockAdjustment>('stock_adjustments', STORAGE_KEYS.STOCK_ADJUSTMENTS, 'stock_adjustments');
       await pullCollection<PartyLog>('party_logs', STORAGE_KEYS.PARTY_LOGS, 'party_logs');
+      await pullCollection<SupplierLog>('supplier_logs', STORAGE_KEYS.SUPPLIER_LOGS, 'supplier_logs');
 
       this.cloudSyncState = {
         status: 'CONNECTED',
@@ -440,6 +443,7 @@ class DatabaseService {
       }
       // Purge any lingering A2222 test artifacts asynchronously
       this.purgeOrphanedTestItems().catch(() => { });
+      this.purgeOrphanLedgerLogs().catch(() => { });
     }
   }
 
@@ -516,19 +520,52 @@ class DatabaseService {
   // --- PARTY LOGS (Customer Ledger Statements) ---
   public getPartyLogs(): PartyLog[] {
     const raw = this.get<PartyLog[]>(STORAGE_KEYS.PARTY_LOGS, []);
+    const sales = this.getSales();
+    const saleRefMap = new Set<string>();
+    sales.forEach(s => {
+      saleRefMap.add(s.id.toLowerCase());
+      if (s.billNo) saleRefMap.add(s.billNo.trim().toLowerCase());
+    });
+
     const seenSaleRef = new Set<string>();
     const deduplicated: PartyLog[] = [];
+    const toDeleteIds: string[] = [];
+
     for (let i = raw.length - 1; i >= 0; i--) {
       const log = raw[i];
-      if (log.type === 'SALE' && log.refNo) {
-        const key = `${log.partyId}_${log.refNo.trim().toLowerCase()}`;
-        if (seenSaleRef.has(key)) {
-          continue;
+      if (!log || !log.id) continue;
+
+      if (log.type === 'SALE') {
+        const ref = (log.refNo || '').trim().toLowerCase();
+        const saleId = log.id.startsWith('log-sale-') ? log.id.replace('log-sale-', '').toLowerCase() : '';
+
+        if (sales.length > 0 && !log.refNo?.startsWith('INV-ROLL-')) {
+          const exists = (ref && saleRefMap.has(ref)) || (saleId && saleRefMap.has(saleId));
+          if (!exists) {
+            toDeleteIds.push(log.id);
+            continue;
+          }
         }
-        seenSaleRef.add(key);
+
+        if (ref) {
+          const key = `${log.partyId}_${ref}`;
+          if (seenSaleRef.has(key)) {
+            toDeleteIds.push(log.id);
+            continue;
+          }
+          seenSaleRef.add(key);
+        }
       }
       deduplicated.unshift(log);
     }
+
+    if (toDeleteIds.length > 0) {
+      this.set(STORAGE_KEYS.PARTY_LOGS, deduplicated);
+      toDeleteIds.forEach(id => {
+        this.deleteDocFromFirestore('party_logs', id);
+      });
+    }
+
     return deduplicated;
   }
 
@@ -682,19 +719,59 @@ class DatabaseService {
   // --- SUPPLIER LOGS (Supplier Ledger Statements) ---
   public getSupplierLogs(): SupplierLog[] {
     const raw = this.get<SupplierLog[]>(STORAGE_KEYS.SUPPLIER_LOGS, []);
+    const purchases = this.getPurchases();
+    const purchaseRefMap = new Set<string>();
+    purchases.forEach(p => {
+      purchaseRefMap.add(p.id.toLowerCase());
+      if (p.billNo) purchaseRefMap.add(p.billNo.trim().toLowerCase());
+    });
+
     const seenPurchaseRef = new Set<string>();
     const deduplicated: SupplierLog[] = [];
+    const toDeleteIds: string[] = [];
+
     for (let i = raw.length - 1; i >= 0; i--) {
       const log = raw[i];
-      if (log.type === 'PURCHASE' && log.refNo) {
-        const key = `${log.supplierId}_${log.refNo.trim().toLowerCase()}`;
-        if (seenPurchaseRef.has(key)) {
-          continue;
+      if (!log || !log.id) continue;
+
+      // Unconditionally remove rogue bill 01
+      const ref = (log.refNo || '').trim().toLowerCase();
+      if (ref === '01' || ref === '1') {
+        toDeleteIds.push(log.id);
+        continue;
+      }
+
+      if (log.type === 'PURCHASE') {
+        const purId = log.id.startsWith('log-pur-') ? log.id.replace('log-pur-', '').toLowerCase() : '';
+
+        // If purchases list exists and this is not a mock test log
+        if (purchases.length > 0 && !log.refNo?.startsWith('PUR-ROLL-')) {
+          const exists = (ref && purchaseRefMap.has(ref)) || (purId && purchaseRefMap.has(purId));
+          if (!exists) {
+            toDeleteIds.push(log.id);
+            continue;
+          }
         }
-        seenPurchaseRef.add(key);
+
+        if (ref) {
+          const key = `${log.supplierId}_${ref}`;
+          if (seenPurchaseRef.has(key)) {
+            toDeleteIds.push(log.id);
+            continue;
+          }
+          seenPurchaseRef.add(key);
+        }
       }
       deduplicated.unshift(log);
     }
+
+    if (toDeleteIds.length > 0) {
+      this.set(STORAGE_KEYS.SUPPLIER_LOGS, deduplicated);
+      toDeleteIds.forEach(id => {
+        this.deleteDocFromFirestore('supplier_logs', id);
+      });
+    }
+
     return deduplicated;
   }
 
@@ -981,6 +1058,106 @@ class DatabaseService {
     }
     this.notify();
     return { purgedCount };
+  }
+
+  public async purgeOrphanLedgerLogs(): Promise<{ supplierLogsPurged: number; partyLogsPurged: number }> {
+    const purchases = this.getPurchases();
+    const purchaseRefMap = new Set<string>();
+    purchases.forEach(p => {
+      purchaseRefMap.add(p.id.toLowerCase());
+      if (p.billNo) purchaseRefMap.add(p.billNo.trim().toLowerCase());
+    });
+
+    const supplierLogs = this.get<SupplierLog[]>(STORAGE_KEYS.SUPPLIER_LOGS, []);
+    const validSupplierLogs: SupplierLog[] = [];
+    const supplierLogsToDelete: string[] = [];
+    const seenSupplierPurRef = new Set<string>();
+
+    for (const log of supplierLogs) {
+      if (!log || !log.id) continue;
+      const ref = (log.refNo || '').trim().toLowerCase();
+      // Unconditionally remove rogue bill 01
+      if (ref === '01' || ref === '1') {
+        supplierLogsToDelete.push(log.id);
+        continue;
+      }
+
+      if (log.type === 'PURCHASE') {
+        const purId = log.id.startsWith('log-pur-') ? log.id.replace('log-pur-', '').toLowerCase() : '';
+        if (purchases.length > 0 && !log.refNo?.startsWith('PUR-ROLL-')) {
+          const exists = (ref && purchaseRefMap.has(ref)) || (purId && purchaseRefMap.has(purId));
+          if (!exists) {
+            supplierLogsToDelete.push(log.id);
+            continue;
+          }
+        }
+        if (ref) {
+          const key = `${log.supplierId}_${ref}`;
+          if (seenSupplierPurRef.has(key)) {
+            supplierLogsToDelete.push(log.id);
+            continue;
+          }
+          seenSupplierPurRef.add(key);
+        }
+      }
+      validSupplierLogs.push(log);
+    }
+
+    if (supplierLogsToDelete.length > 0) {
+      this.set(STORAGE_KEYS.SUPPLIER_LOGS, validSupplierLogs);
+      await this.batchDeleteDocs('supplier_logs', supplierLogsToDelete);
+    }
+
+    // Party logs
+    const sales = this.getSales();
+    const saleRefMap = new Set<string>();
+    sales.forEach(s => {
+      saleRefMap.add(s.id.toLowerCase());
+      if (s.billNo) saleRefMap.add(s.billNo.trim().toLowerCase());
+    });
+
+    const partyLogs = this.get<PartyLog[]>(STORAGE_KEYS.PARTY_LOGS, []);
+    const validPartyLogs: PartyLog[] = [];
+    const partyLogsToDelete: string[] = [];
+    const seenPartySaleRef = new Set<string>();
+
+    for (const log of partyLogs) {
+      if (!log || !log.id) continue;
+      if (log.type === 'SALE') {
+        const ref = (log.refNo || '').trim().toLowerCase();
+        const saleId = log.id.startsWith('log-sale-') ? log.id.replace('log-sale-', '').toLowerCase() : '';
+        if (sales.length > 0 && !log.refNo?.startsWith('INV-ROLL-')) {
+          const exists = (ref && saleRefMap.has(ref)) || (saleId && saleRefMap.has(saleId));
+          if (!exists) {
+            partyLogsToDelete.push(log.id);
+            continue;
+          }
+        }
+        if (ref) {
+          const key = `${log.partyId}_${ref}`;
+          if (seenPartySaleRef.has(key)) {
+            partyLogsToDelete.push(log.id);
+            continue;
+          }
+          seenPartySaleRef.add(key);
+        }
+      }
+      validPartyLogs.push(log);
+    }
+
+    if (partyLogsToDelete.length > 0) {
+      this.set(STORAGE_KEYS.PARTY_LOGS, validPartyLogs);
+      await this.batchDeleteDocs('party_logs', partyLogsToDelete);
+    }
+
+    if (supplierLogsToDelete.length > 0 || partyLogsToDelete.length > 0) {
+      this.notify();
+    }
+
+    return {
+      supplierLogsPurged: supplierLogsToDelete.length,
+      partyLogsPurged: partyLogsToDelete.length
+    };
   }
 
   // --- STOCK MOVEMENTS ---
