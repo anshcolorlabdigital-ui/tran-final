@@ -271,11 +271,12 @@ export const PartyLedgerReportView: React.FC = () => {
       ];
 
       transactionLogs.forEach(log => {
+        const isInv = log.type === 'SALE';
         exportRows.push({
           'Date': formatDateToDisplay(log.date),
           'Bill No.': log.refNo || '-',
-          'Debit (Billed ₹)': log.totalAmount || '',
-          'Credit (Paid ₹)': log.paidAmount || '',
+          'Debit (Billed ₹)': isInv && log.totalAmount ? round2(log.totalAmount) : '',
+          'Credit (Paid ₹)': log.paidAmount ? round2(log.paidAmount) : '',
           'Balance (₹)': log.runningBalance !== undefined ? log.runningBalance : log.balanceChange,
           'Mode': log.paymentMode || '',
           'Remarks': log.notes || ''
@@ -927,7 +928,7 @@ export const PartyLedgerReportView: React.FC = () => {
                           )}
                         </td>
                         <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
-                          {log.totalAmount ? round2(log.totalAmount) : ''}
+                          {isInvoice && log.totalAmount ? round2(log.totalAmount) : ''}
                         </td>
                         <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
                           {log.paidAmount ? round2(log.paidAmount) : ''}

@@ -56,6 +56,11 @@ export const SupplierLedgerReportView: React.FC = () => {
 
   // Supplier Payment Modal State
   const [showPaymentModal, setShowPaymentModal] = useState<boolean>(false);
+  const [selectedSupplierForPayment, setSelectedSupplierForPayment] = useState<Supplier | null>(null);
+
+  // Filters and sorting for Supplier Outstanding list view matching mockup
+  const [balanceFilter, setBalanceFilter] = useState<'ALL' | 'ZERO' | 'PLUS' | 'MINUS'>('ALL');
+  const [sortOrder, setSortOrder] = useState<'DEFAULT' | 'ASC' | 'DESC'>('DEFAULT');
 
   // Detailed Purchase Bill Modal State
   const [selectedPurchaseDetail, setSelectedPurchaseDetail] = useState<Purchase | null>(null);
@@ -134,6 +139,27 @@ export const SupplierLedgerReportView: React.FC = () => {
     });
   }, [suppliers, isAllTime, fromDate, toDate, refreshKey]);
 
+  // Filtered and sorted rows for Supplier Outstanding
+  const displayedOutstandingRows = useMemo(() => {
+    let list = [...supplierOutstandingRows];
+
+    if (balanceFilter === 'ZERO') {
+      list = list.filter(r => r.balance === 0);
+    } else if (balanceFilter === 'PLUS') {
+      list = list.filter(r => r.balance > 0);
+    } else if (balanceFilter === 'MINUS') {
+      list = list.filter(r => r.balance < 0);
+    }
+
+    if (sortOrder === 'ASC') {
+      list.sort((a, b) => a.balance - b.balance);
+    } else if (sortOrder === 'DESC') {
+      list.sort((a, b) => b.balance - a.balance);
+    }
+
+    return list;
+  }, [supplierOutstandingRows, balanceFilter, sortOrder]);
+
   // Totals for SUPPLIER OUTSTANDING list view
   const outstandingTotals = useMemo(() => {
     let totalOpp = 0;
@@ -141,7 +167,7 @@ export const SupplierLedgerReportView: React.FC = () => {
     let totalCredit = 0;
     let totalBal = 0;
 
-    supplierOutstandingRows.forEach(r => {
+    displayedOutstandingRows.forEach(r => {
       totalOpp += r.oppBalance;
       totalDebit += r.debit;
       totalCredit += r.credit;
@@ -154,7 +180,7 @@ export const SupplierLedgerReportView: React.FC = () => {
       credit: round2(totalCredit),
       balance: round2(totalBal)
     };
-  }, [supplierOutstandingRows]);
+  }, [displayedOutstandingRows]);
 
   // Supplier options for SearchableSelect
   const supplierOptions = useMemo<SearchableSelectOption[]>(() => {
@@ -266,11 +292,12 @@ export const SupplierLedgerReportView: React.FC = () => {
       ];
 
       transactionLogs.forEach(log => {
+        const isPur = log.type === 'PURCHASE';
         exportRows.push({
           'Date': formatDateToDisplay(log.date),
           'Bill No.': log.refNo || '-',
-          'Debit (Billed ₹)': log.totalAmount || '',
-          'Credit (Paid ₹)': log.paidAmount || '',
+          'Debit (Billed ₹)': isPur && log.totalAmount ? round2(log.totalAmount) : '',
+          'Credit (Paid ₹)': log.paidAmount ? round2(log.paidAmount) : '',
           'Balance (₹)': log.runningBalance !== undefined ? log.runningBalance : log.balanceChange,
           'Mode': log.paymentMode || '',
           'Remarks': log.notes || ''
@@ -549,8 +576,59 @@ export const SupplierLedgerReportView: React.FC = () => {
             </span>
           </div>
 
-          {/* Centered Total Box matching mockup */}
-          <div style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
+          {/* Centered Total Box with Left Filters & Right Sorting matching Image 2 */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              margin: '8px 0',
+              flexWrap: 'wrap',
+              gap: '16px',
+              padding: '0 8px'
+            }}
+          >
+            {/* Left Balance Filters matching Image 2 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontWeight: 800, fontSize: '0.88rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={balanceFilter === 'ALL'}
+                  onChange={() => setBalanceFilter('ALL')}
+                  style={{ width: '16px', height: '16px', accentColor: '#000000' }}
+                />
+                <span>All</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={balanceFilter === 'ZERO'}
+                  onChange={() => setBalanceFilter('ZERO')}
+                  style={{ width: '16px', height: '16px', accentColor: '#000000' }}
+                />
+                <span>Zero Balance</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={balanceFilter === 'PLUS'}
+                  onChange={() => setBalanceFilter('PLUS')}
+                  style={{ width: '16px', height: '16px', accentColor: '#000000' }}
+                />
+                <span>Only Plus Balnace</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={balanceFilter === 'MINUS'}
+                  onChange={() => setBalanceFilter('MINUS')}
+                  style={{ width: '16px', height: '16px', accentColor: '#000000' }}
+                />
+                <span>Only Minus Balance</span>
+              </label>
+            </div>
+
+            {/* Centered Total Box */}
             <div
               style={{
                 background: '#FFFFFF',
@@ -564,6 +642,28 @@ export const SupplierLedgerReportView: React.FC = () => {
               <div style={{ fontSize: '2rem', fontWeight: 900, color: '#000000', fontFamily: 'monospace' }}>
                 {outstandingTotals.balance}
               </div>
+            </div>
+
+            {/* Right Sorting Checkboxes matching Image 2 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontWeight: 800, fontSize: '0.88rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={sortOrder === 'ASC'}
+                  onChange={() => setSortOrder(prev => prev === 'ASC' ? 'DEFAULT' : 'ASC')}
+                  style={{ width: '16px', height: '16px', accentColor: '#000000' }}
+                />
+                <span>Assending</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={sortOrder === 'DESC'}
+                  onChange={() => setSortOrder(prev => prev === 'DESC' ? 'DEFAULT' : 'DESC')}
+                  style={{ width: '16px', height: '16px', accentColor: '#000000' }}
+                />
+                <span>Desending</span>
+              </label>
             </div>
           </div>
 
@@ -591,13 +691,13 @@ export const SupplierLedgerReportView: React.FC = () => {
                     <th style={{ padding: '10px 12px', borderRight: '1px solid #000000', textAlign: 'center', fontWeight: 900, fontSize: '0.95rem', width: '130px' }}>
                       Balance
                     </th>
-                    <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 900, fontSize: '0.92rem', width: '110px' }}>
+                    <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 900, fontSize: '0.92rem', width: '200px' }}>
                       ACTION
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {supplierOutstandingRows.map((r) => (
+                  {displayedOutstandingRows.map((r) => (
                     <tr
                       key={r.supplier.id}
                       style={{
@@ -625,28 +725,53 @@ export const SupplierLedgerReportView: React.FC = () => {
                         {r.balance}
                       </td>
                       <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenLedger(r.supplier.id)}
-                          style={{
-                            background: '#FFFFFF',
-                            color: '#002B99',
-                            border: '1px solid #000000',
-                            borderRadius: '4px',
-                            padding: '3px 14px',
-                            fontWeight: 900,
-                            fontSize: '0.8rem',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          LEDGER
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenLedger(r.supplier.id)}
+                            style={{
+                              background: '#FFFFFF',
+                              color: '#002B99',
+                              border: '1px solid #000000',
+                              borderRadius: '4px',
+                              padding: '3px 12px',
+                              fontWeight: 900,
+                              fontSize: '0.8rem',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            LEDGER
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedSupplierForPayment(r.supplier);
+                              setShowPaymentModal(true);
+                            }}
+                            style={{
+                              background: '#DC2626',
+                              color: '#FFFFFF',
+                              border: '1px solid #000000',
+                              borderRadius: '4px',
+                              padding: '3px 10px',
+                              fontWeight: 900,
+                              fontSize: '0.8rem',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <PlusCircle size={12} />
+                            <span>Pay Supplier</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
 
                   {/* Empty rows padding */}
-                  {Array.from({ length: Math.max(0, 8 - supplierOutstandingRows.length) }).map((_, i) => (
+                  {Array.from({ length: Math.max(0, 8 - displayedOutstandingRows.length) }).map((_, i) => (
                     <tr key={`empty-${i}`} style={{ borderBottom: '1px solid #000000', height: '34px' }}>
                       <td style={{ borderRight: '1px solid #000000' }}></td>
                       <td style={{ borderRight: '1px solid #000000' }}></td>
@@ -830,7 +955,7 @@ export const SupplierLedgerReportView: React.FC = () => {
                           )}
                         </td>
                         <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
-                          {log.totalAmount ? round2(log.totalAmount) : ''}
+                          {isPurchase && log.totalAmount ? round2(log.totalAmount) : ''}
                         </td>
                         <td style={{ padding: '8px 10px', borderRight: '1px solid #000000', fontWeight: 800 }}>
                           {log.paidAmount ? round2(log.paidAmount) : ''}
@@ -896,8 +1021,11 @@ export const SupplierLedgerReportView: React.FC = () => {
       {/* Payment Modal */}
       <SupplierPaymentModal
         isOpen={showPaymentModal}
-        onClose={() => setShowPaymentModal(false)}
-        initialSupplierId={activeSupplier?.id}
+        onClose={() => {
+          setShowPaymentModal(false);
+          setSelectedSupplierForPayment(null);
+        }}
+        initialSupplierId={selectedSupplierForPayment?.id || activeSupplier?.id}
       />
 
       {/* Detailed Purchase Bill Modal */}

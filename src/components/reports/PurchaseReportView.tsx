@@ -37,19 +37,49 @@ export const PurchaseReportView: React.FC = () => {
 
   const [fromDate, setFromDate] = useState<string>('2026-08-01');
   const [toDate, setToDate] = useState<string>(getTodayDateString());
+  const [isAllTime, setIsAllTime] = useState<boolean>(true);
+  const [quickFilter, setQuickFilter] = useState<'ALL' | 'MONTH' | 'TODAY'>('ALL');
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
   const [selectedItemId, setSelectedItemId] = useState<string>('');
 
+  const setQuickFilterOption = (type: 'ALL' | 'MONTH' | 'TODAY') => {
+    setQuickFilter(type);
+    const today = getTodayDateString();
+    if (type === 'ALL') {
+      setIsAllTime(true);
+    } else if (type === 'TODAY') {
+      setIsAllTime(false);
+      setFromDate(today);
+      setToDate(today);
+    } else if (type === 'MONTH') {
+      setIsAllTime(false);
+      const parts = today.split('-');
+      setFromDate(`${parts[0]}-${parts[1]}-01`);
+      setToDate(today);
+    }
+  };
+
   const filteredPurchases = useMemo(() => {
-    return purchases.filter(p => {
-      const dateToCheck = p.recdDate || p.billDate;
-      if (fromDate && dateToCheck < fromDate) return false;
-      if (toDate && dateToCheck > toDate) return false;
+    const list = purchases.filter(p => {
+      const recdOrBillDate = p.recdDate || p.billDate;
+      if (!isAllTime) {
+        if (fromDate && recdOrBillDate < fromDate) return false;
+        if (toDate && recdOrBillDate > toDate) return false;
+      }
       if (selectedSupplierId && p.supplierId !== selectedSupplierId) return false;
       if (selectedItemId && !p.items.some(i => i.itemId === selectedItemId)) return false;
       return true;
     });
-  }, [purchases, fromDate, toDate, selectedSupplierId, selectedItemId]);
+
+    // Arrange / sort strictly by Received Date (RECD Date) descending
+    return list.sort((a, b) => {
+      const dateA = a.recdDate || a.billDate || '';
+      const dateB = b.recdDate || b.billDate || '';
+      if (dateA > dateB) return -1;
+      if (dateA < dateB) return 1;
+      return (b.createdAt || '').localeCompare(a.createdAt || '');
+    });
+  }, [purchases, fromDate, toDate, isAllTime, selectedSupplierId, selectedItemId]);
 
   const totals = useMemo(() => {
     let totalQty = 0;
@@ -172,9 +202,13 @@ export const PurchaseReportView: React.FC = () => {
             <input
               type="date"
               className="input-text-clean"
+              disabled={isAllTime}
               value={fromDate}
-              onChange={e => setFromDate(e.target.value)}
-              style={{ width: '100%' }}
+              onChange={e => {
+                setFromDate(e.target.value);
+                setIsAllTime(false);
+              }}
+              style={{ width: '100%', opacity: isAllTime ? 0.6 : 1 }}
             />
           </div>
 
@@ -183,11 +217,69 @@ export const PurchaseReportView: React.FC = () => {
             <input
               type="date"
               className="input-text-clean"
+              disabled={isAllTime}
               value={toDate}
-              onChange={e => setToDate(e.target.value)}
-              style={{ width: '100%' }}
+              onChange={e => {
+                setToDate(e.target.value);
+                setIsAllTime(false);
+              }}
+              style={{ width: '100%', opacity: isAllTime ? 0.6 : 1 }}
             />
           </div>
+        </div>
+
+        {/* 3 Date Range Options matching requirement: This Month, Today, All */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center' }}>
+          <button
+            type="button"
+            onClick={() => setQuickFilterOption('MONTH')}
+            style={{
+              padding: '6px 16px',
+              fontSize: '0.82rem',
+              fontWeight: 900,
+              borderRadius: '6px',
+              border: '1.5px solid #000000',
+              background: !isAllTime && quickFilter === 'MONTH' ? '#002B99' : '#FFFFFF',
+              color: !isAllTime && quickFilter === 'MONTH' ? '#FFFFFF' : '#000000',
+              cursor: 'pointer'
+            }}
+          >
+            This Month
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setQuickFilterOption('TODAY')}
+            style={{
+              padding: '6px 16px',
+              fontSize: '0.82rem',
+              fontWeight: 900,
+              borderRadius: '6px',
+              border: '1.5px solid #000000',
+              background: !isAllTime && quickFilter === 'TODAY' ? '#002B99' : '#FFFFFF',
+              color: !isAllTime && quickFilter === 'TODAY' ? '#FFFFFF' : '#000000',
+              cursor: 'pointer'
+            }}
+          >
+            Today
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setQuickFilterOption('ALL')}
+            style={{
+              padding: '6px 16px',
+              fontSize: '0.82rem',
+              fontWeight: 900,
+              borderRadius: '6px',
+              border: '1.5px solid #000000',
+              background: isAllTime ? '#002B99' : '#FFFFFF',
+              color: isAllTime ? '#FFFFFF' : '#000000',
+              cursor: 'pointer'
+            }}
+          >
+            All
+          </button>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>

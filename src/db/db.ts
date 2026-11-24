@@ -1305,7 +1305,7 @@ class DatabaseService {
     // Maintain customer statement ledger if sale is associated with a party
     if (sale.partyId) {
       const allPartyLogs = this.getPartyLogs();
-      const logsToDelete = allPartyLogs.filter(l => 
+      const logsToDelete = allPartyLogs.filter(l =>
         l.type === 'SALE' && (
           l.id === `log-sale-${sale.id}` ||
           l.refNo === sale.billNo ||
@@ -1314,7 +1314,7 @@ class DatabaseService {
       );
       logsToDelete.forEach(l => this.deleteDocFromFirestore('party_logs', l.id));
 
-      const remainingLogs = allPartyLogs.filter(l => 
+      const remainingLogs = allPartyLogs.filter(l =>
         !(l.type === 'SALE' && (
           l.id === `log-sale-${sale.id}` ||
           l.refNo === sale.billNo ||
@@ -1352,11 +1352,11 @@ class DatabaseService {
 
     if (sale) {
       const allLogs = this.getPartyLogs();
-      const logsToDelete = allLogs.filter(l => 
+      const logsToDelete = allLogs.filter(l =>
         l.type === 'SALE' && (l.id === `log-sale-${sale.id}` || l.refNo === sale.billNo)
       );
       logsToDelete.forEach(l => this.deleteDocFromFirestore('party_logs', l.id));
-      const remainingLogs = allLogs.filter(l => 
+      const remainingLogs = allLogs.filter(l =>
         !(l.type === 'SALE' && (l.id === `log-sale-${sale.id}` || l.refNo === sale.billNo))
       );
       this.set(STORAGE_KEYS.PARTY_LOGS, remainingLogs);
@@ -1435,7 +1435,7 @@ class DatabaseService {
       const totalPaid = (Number(purchase.paidCash) || Number(purchase.recdCash) || 0) + (Number(purchase.paidUpi) || Number(purchase.recdUpi) || 0);
       const payableDue = Number((purchase.billTotal - totalPaid).toFixed(2));
       const allSupplierLogs = this.getSupplierLogs();
-      const logsToDelete = allSupplierLogs.filter(l => 
+      const logsToDelete = allSupplierLogs.filter(l =>
         l.type === 'PURCHASE' && (
           l.id === `log-pur-${purchase.id}` ||
           l.refNo === purchase.billNo ||
@@ -1444,7 +1444,7 @@ class DatabaseService {
       );
       logsToDelete.forEach(l => this.deleteDocFromFirestore('supplier_logs', l.id));
 
-      const remainingLogs = allSupplierLogs.filter(l => 
+      const remainingLogs = allSupplierLogs.filter(l =>
         !(l.type === 'PURCHASE' && (
           l.id === `log-pur-${purchase.id}` ||
           l.refNo === purchase.billNo ||
@@ -1482,11 +1482,11 @@ class DatabaseService {
 
     if (purchase) {
       const allLogs = this.getSupplierLogs();
-      const logsToDelete = allLogs.filter(l => 
+      const logsToDelete = allLogs.filter(l =>
         l.type === 'PURCHASE' && (l.id === `log-pur-${purchase.id}` || l.refNo === purchase.billNo)
       );
       logsToDelete.forEach(l => this.deleteDocFromFirestore('supplier_logs', l.id));
-      const remainingLogs = allLogs.filter(l => 
+      const remainingLogs = allLogs.filter(l =>
         !(l.type === 'PURCHASE' && (l.id === `log-pur-${purchase.id}` || l.refNo === purchase.billNo))
       );
       this.set(STORAGE_KEYS.SUPPLIER_LOGS, remainingLogs);

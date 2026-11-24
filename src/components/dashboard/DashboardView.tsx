@@ -25,9 +25,7 @@ export const DashboardView: React.FC = () => {
 
   // Filter state for dashboard center search
   const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [selectedItemId, setSelectedItemId] = useState<string>(() => {
-    return items.length > 0 ? items[0].id : '';
-  });
+  const [selectedItemId, setSelectedItemId] = useState<string>('');
 
   const [showQty, setShowQty] = useState<boolean>(true);
   const [showAmount, setShowAmount] = useState<boolean>(false);
@@ -40,8 +38,8 @@ export const DashboardView: React.FC = () => {
 
   // Selected item entity
   const selectedItem = useMemo(() => {
-    const found = items.find(i => i.id === selectedItemId);
-    return found || (items.length > 0 ? items[0] : null);
+    if (!selectedItemId) return null;
+    return items.find(i => i.id === selectedItemId) || null;
   }, [items, selectedItemId]);
 
   // Compute live stock value for selected item
@@ -363,26 +361,59 @@ export const DashboardView: React.FC = () => {
           )}
         </div>
 
-        {/* Current Stock Value matching mockup */}
-        <div style={{ textAlign: 'center', marginTop: '6px', width: '100%', maxWidth: '240px' }}>
-          <div style={{ fontWeight: 900, fontSize: '0.92rem', color: '#15803D', marginBottom: '4px' }}>
-            Curent Stock Value
+        {/* Stock Quantity & Current Stock Value side by side */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '16px',
+            width: '100%',
+            maxWidth: '380px',
+            marginTop: '6px'
+          }}
+        >
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontWeight: 900, fontSize: '0.92rem', color: '#15803D', marginBottom: '4px' }}>
+              Stock Quantity
+            </div>
+            <div
+              style={{
+                border: '1.5px solid #000000',
+                height: '42px',
+                background: '#FFFFFF',
+                borderRadius: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 900,
+                fontSize: '1.25rem',
+                color: '#000000'
+              }}
+            >
+              {selectedItem ? itemClosingStock : 0} {selectedItem?.unit || selectedItem?.unitA?.unitName || ''}
+            </div>
           </div>
-          <div
-            style={{
-              border: '1.5px solid #000000',
-              height: '42px',
-              background: '#FFFFFF',
-              borderRadius: '4px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 900,
-              fontSize: '1.25rem',
-              color: '#000000'
-            }}
-          >
-            {itemStockValue}
+
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontWeight: 900, fontSize: '0.92rem', color: '#15803D', marginBottom: '4px' }}>
+              Curent Stock Value
+            </div>
+            <div
+              style={{
+                border: '1.5px solid #000000',
+                height: '42px',
+                background: '#FFFFFF',
+                borderRadius: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 900,
+                fontSize: '1.25rem',
+                color: '#000000'
+              }}
+            >
+              {selectedItem ? itemStockValue : 0}
+            </div>
           </div>
         </div>
       </div>
@@ -498,7 +529,9 @@ export const DashboardView: React.FC = () => {
                 {itemLedgerRows.length === 0 ? (
                   <tr>
                     <td colSpan={9} style={{ textAlign: 'center', padding: '36px', color: '#4B5563', fontWeight: 700 }}>
-                      No transactions recorded for {selectedItem?.name || 'this item'}.
+                      {selectedItem
+                        ? `No transactions recorded for ${selectedItem.name}.`
+                        : 'Select an item from above to view its stock ledger.'}
                     </td>
                   </tr>
                 ) : (

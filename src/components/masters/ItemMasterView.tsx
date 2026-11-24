@@ -38,12 +38,43 @@ export const ItemMasterView: React.FC = () => {
   const [isJustSaved, setIsJustSaved] = useState(false);
   const [hasSecondaryUnit, setHasSecondaryUnit] = useState(true);
 
+  // Form Fields
+  const [sno, setSno] = useState('');
+  const [name, setName] = useState('');
+  const [hsn, setHsn] = useState('');
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('');
+  const [supplierId, setSupplierId] = useState('');
+
   // Table filters matching mockup
   const [showCategoryWise, setShowCategoryWise] = useState(false);
   const [filterCategory, setFilterCategory] = useState('ALL');
   const [filterItem, setFilterItem] = useState('ALL');
 
+  const [isNameDropdownOpen, setIsNameDropdownOpen] = useState(false);
+  const nameDropdownRef = useRef<HTMLDivElement>(null);
   const itemNameInputRef = useRef<HTMLInputElement>(null);
+
+  // Suggestions for Item Name dropdown
+  const filteredItemSuggestions = useMemo(() => {
+    const q = name.toLowerCase().trim();
+    if (!q) return items.slice(0, 60);
+    return items.filter(it =>
+      it.name.toLowerCase().includes(q) ||
+      (it.category && it.category.toLowerCase().includes(q))
+    ).slice(0, 60);
+  }, [items, name]);
+
+  // Click outside to close Item Name dropdown
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (nameDropdownRef.current && !nameDropdownRef.current.contains(e.target as Node)) {
+        setIsNameDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -52,14 +83,6 @@ export const ItemMasterView: React.FC = () => {
     }, 60);
     return () => clearTimeout(timer);
   }, [selectedItemId]);
-
-  // Form Fields
-  const [sno, setSno] = useState('');
-  const [name, setName] = useState('');
-  const [hsn, setHsn] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('');
-  const [supplierId, setSupplierId] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [disableRestockNotification, setDisableRestockNotification] = useState(false);
 
@@ -516,7 +539,8 @@ export const ItemMasterView: React.FC = () => {
           border: '2px solid #000000',
           borderRadius: '12px',
           padding: '20px',
-          maxWidth: '960px',
+          maxWidth: '1240px',
+          width: '100%',
           margin: '0 auto 24px'
         }}
       >
@@ -564,21 +588,22 @@ export const ItemMasterView: React.FC = () => {
             </label>
           </div>
 
-          {/* Row 1: Item Name (with datalist) and HSN */}
+          {/* Row 1: Item Name (with custom scrollable dropdown) and HSN */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-            <div>
+            <div ref={nameDropdownRef} style={{ position: 'relative' }}>
               <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', marginBottom: '3px' }}>
                 Item Name *
               </label>
               <input
                 ref={itemNameInputRef}
                 type="text"
-                list="item-name-suggestions"
                 className="input-text-clean"
                 value={name}
+                onFocus={() => setIsNameDropdownOpen(true)}
                 onChange={e => {
                   setIsTouched(true);
                   setName(e.target.value);
+                  setIsNameDropdownOpen(true);
                   // If matching existing item, offer to load
                   const matched = items.find(it => it.name.toUpperCase() === e.target.value.trim().toUpperCase());
                   if (matched) {
@@ -589,12 +614,53 @@ export const ItemMasterView: React.FC = () => {
                 required
                 style={{ width: '100%', fontWeight: 800 }}
               />
-              {/* Datalist for Item Name Suggestions matching Hindi note */}
-              <datalist id="item-name-suggestions">
-                {items.map(it => (
-                  <option key={it.id} value={it.name} />
-                ))}
-              </datalist>
+              {isNameDropdownOpen && filteredItemSuggestions.length > 0 && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    zIndex: 100,
+                    background: '#FFFFFF',
+                    border: '1.5px solid #000000',
+                    borderRadius: '6px',
+                    boxShadow: '0 6px 16px rgba(0,0,0,0.15)',
+                    maxHeight: '260px',
+                    overflowY: 'auto',
+                    marginTop: '2px'
+                  }}
+                >
+                  {filteredItemSuggestions.map(it => (
+                    <div
+                      key={it.id}
+                      onClick={() => {
+                        loadItemIntoForm(it, false);
+                        setIsNameDropdownOpen(false);
+                      }}
+                      style={{
+                        padding: '8px 12px',
+                        cursor: 'pointer',
+                        borderBottom: '1px solid #F3F4F6',
+                        fontSize: '0.85rem',
+                        fontWeight: 700,
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#EFF6FF')}
+                      onMouseLeave={e => (e.currentTarget.style.background = '#FFFFFF')}
+                    >
+                      <span style={{ color: '#000000' }}>{it.name}</span>
+                      {it.category && (
+                        <span style={{ fontSize: '0.75rem', color: '#6B7280', fontWeight: 600 }}>
+                          {it.category}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div>
@@ -1155,7 +1221,7 @@ export const ItemMasterView: React.FC = () => {
       </div>
 
       {/* BOTTOM REGISTER & TABLE matching mockup */}
-      <div style={{ maxWidth: '960px', margin: '0 auto' }}>
+      <div style={{ maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
         {/* Filters row above table */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '8px', flexWrap: 'wrap' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer' }}>
