@@ -4,7 +4,7 @@ import { db } from '../../db/db';
 import { useApp } from '../../context/AppContext';
 import { Item, Supplier } from '../../types';
 import { StockEngine } from '../../db/stockEngine';
-import { calculateItemUnitBreakdown } from '../../utils/calculations';
+import { calculateItemUnitBreakdown, round2 } from '../../utils/calculations';
 
 export const QuickItemModal: React.FC = () => {
   const { quickModal, closeQuickModal, showToast, refreshKey } = useApp();
@@ -44,6 +44,7 @@ export const QuickItemModal: React.FC = () => {
   const [unitBRoundUpMrp, setUnitBRoundUpMrp] = useState('0');
   const [unitBSalePrice, setUnitBSalePrice] = useState('0');
   const [unitBMrp, setUnitBMrp] = useState('0');
+  const [isUnitBBasicCustomized, setIsUnitBBasicCustomized] = useState(false);
 
   const [minStock, setMinStock] = useState('0');
   const [openingStock, setOpeningStock] = useState('0');
@@ -73,6 +74,7 @@ export const QuickItemModal: React.FC = () => {
       setUnitBRoundUpMrp('0');
       setMinStock('0');
       setOpeningStock('0');
+      setIsUnitBBasicCustomized(false);
       if (suppliers.length > 0 && !supplierId) {
         setSupplierId(suppliers[0].id);
       }
@@ -108,6 +110,26 @@ export const QuickItemModal: React.FC = () => {
       Number(unitBRoundUpMrp) || 0
     );
   }, [unitBBasicPrice, unitBGstPercent, unitBTranPercent, unitBProfAm, unitBProfDeal, unitBMisPercent, unitBRoundUpSale, unitBRoundUpMrp]);
+
+  const handleUnitABasicPriceChange = (val: string) => {
+    setUnitABasicPrice(val);
+    const aPrice = parseFloat(val) || 0;
+    const conv = parseFloat(unitBConversion) || 1;
+    if (conv > 0 && !isUnitBBasicCustomized) {
+      const bPrice = round2(aPrice / conv);
+      setUnitBBasicPrice(String(bPrice));
+    }
+  };
+
+  const handleUnitBConversionChange = (convVal: string) => {
+    setUnitBConversion(convVal);
+    const conv = parseFloat(convVal) || 1;
+    const aPrice = parseFloat(unitABasicPrice) || 0;
+    if (conv > 0 && !isUnitBBasicCustomized) {
+      const bPrice = round2(aPrice / conv);
+      setUnitBBasicPrice(String(bPrice));
+    }
+  };
 
   if (!quickModal.isOpen || quickModal.type !== 'ITEM') return null;
 
@@ -315,7 +337,7 @@ export const QuickItemModal: React.FC = () => {
             <div className="pricing-calc-grid-10" style={{ minWidth: '680px' }}>
               <div>
                 <label style={{ fontSize: '0.72rem', fontWeight: 800 }}>Besic Price</label>
-                <input type="number" className="input-text-clean" value={unitABasicPrice} onChange={e => setUnitABasicPrice(e.target.value)} style={{ textAlign: 'center' }} />
+                <input type="number" className="input-text-clean" value={unitABasicPrice} onChange={e => handleUnitABasicPriceChange(e.target.value)} style={{ textAlign: 'center' }} />
                 <div className="subtext-calc-red">{unitABreakdown.basicPrice}</div>
               </div>
               <div>
@@ -384,7 +406,7 @@ export const QuickItemModal: React.FC = () => {
               type="number"
               className="input-text-clean"
               value={unitBConversion}
-              onChange={e => setUnitBConversion(e.target.value)}
+              onChange={e => handleUnitBConversionChange(e.target.value)}
               style={{ width: '70px', textAlign: 'center', fontWeight: 800 }}
             />
             <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>{unitBName || 'Unit B'}</span>
@@ -393,7 +415,16 @@ export const QuickItemModal: React.FC = () => {
             <div className="pricing-calc-grid-10" style={{ minWidth: '680px' }}>
               <div>
                 <label style={{ fontSize: '0.72rem', fontWeight: 800 }}>Besic Price</label>
-                <input type="number" className="input-text-clean" value={unitBBasicPrice} onChange={e => setUnitBBasicPrice(e.target.value)} style={{ textAlign: 'center' }} />
+                <input
+                  type="number"
+                  className="input-text-clean"
+                  value={unitBBasicPrice}
+                  onChange={e => {
+                    setIsUnitBBasicCustomized(true);
+                    setUnitBBasicPrice(e.target.value);
+                  }}
+                  style={{ textAlign: 'center' }}
+                />
                 <div className="subtext-calc-red">{unitBBreakdown.basicPrice}</div>
               </div>
               <div>

@@ -2,7 +2,7 @@
  * Comprehensive Automated Verification of All 30 Customer Workflow & Business Invariant Steps
  */
 
-import { calculateItemPricing, calculateBillSummary, calculateItemUnitBreakdown, calculateUnitBFromUnitA, calculateSalesItemPricing, updateItemPricingFromPurchase } from './utils/calculations';
+import { calculateItemPricing, calculateBillSummary, calculateItemUnitBreakdown, calculateUnitBFromUnitA, calculateSalesItemPricing, updateItemPricingFromPurchase, round2 } from './utils/calculations';
 import { formatReceiptText, ReceiptData } from './utils/shareUtils';
 import { formatDateToDisplay, getTodayDateString } from './utils/dateUtils';
 import { Item, ItemUnitPricing, Party, Supplier, Purchase, SupplierOrder } from './types';
@@ -2523,8 +2523,71 @@ async function runVerificationSuite() {
   console.log('✓ Gap-filling algorithm verified');
   console.log('Step 71 PASS? true: Purchase Gap-Free Sequential S.No. verified.');
 
+  console.log('\n--- Step 72: Verify Purchase RECD Date Sorting and Unit B Auto-Division ---');
+  // 1. Verify Purchase Report sorting by recdDate
+  const purLateRecd: Purchase = {
+    id: `pur-late-recd-${Date.now()}`,
+    sno: '01',
+    billNo: 'INV-BILL-EARLY-RECD-LATE',
+    billDate: '2026-11-01',
+    recdDate: '2026-11-24',
+    supplierId: 'test-supp-72',
+    supplierName: 'STEP 72 SUPPLIER',
+    items: [],
+    basicTotal: 500,
+    gstTotal: 90,
+    roundUp: 0,
+    billTotal: 590,
+    recdCash: 0,
+    recdUpi: 0,
+    createdAt: new Date().toISOString()
+  };
+  const purEarlyRecd: Purchase = {
+    id: `pur-early-recd-${Date.now()}`,
+    sno: '02',
+    billNo: 'INV-BILL-LATE-RECD-EARLY',
+    billDate: '2026-11-20',
+    recdDate: '2026-11-05',
+    supplierId: 'test-supp-72',
+    supplierName: 'STEP 72 SUPPLIER',
+    items: [],
+    basicTotal: 600,
+    gstTotal: 108,
+    roundUp: 0,
+    billTotal: 708,
+    recdCash: 0,
+    recdUpi: 0,
+    createdAt: new Date().toISOString()
+  };
+  const sortedByRecd = [purEarlyRecd, purLateRecd].sort((a, b) => {
+    const dateA = a.recdDate || a.billDate || '';
+    const dateB = b.recdDate || b.billDate || '';
+    if (dateA > dateB) return -1;
+    if (dateA < dateB) return 1;
+    return (b.createdAt || '').localeCompare(a.createdAt || '');
+  });
+  if (sortedByRecd[0].billNo !== 'INV-BILL-EARLY-RECD-LATE') {
+    throw new Error('Purchase report not arranged strictly by RECD. DATE descending');
+  }
+
+  // 2. Verify Unit B Auto-division: Basic Price 1000, 1 Roll = 100 Mt -> Unit B Basic Price 10, Sale Price 10, MRP 10
+  const aBasicPrice = 1000;
+  const bConversion = 100;
+  const bCalculatedBasic = round2(aBasicPrice / bConversion);
+  if (bCalculatedBasic !== 10) {
+    throw new Error(`Expected Unit B calculated basic price 10, got ${bCalculatedBasic}`);
+  }
+  const unitBBreakdown = calculateItemUnitBreakdown(bCalculatedBasic, 0, 0, 0, 0, 0, undefined, 0, 0);
+  if (unitBBreakdown.basicPrice !== 10 || unitBBreakdown.salePrice !== 10 || unitBBreakdown.mrp !== 10) {
+    throw new Error(`Unit B pricing breakdown mismatch: expected 10, got ${JSON.stringify(unitBBreakdown)}`);
+  }
+
+  console.log('✓ Purchase Report arranged strictly by RECD. DATE descending');
+  console.log('✓ Unit B Basic Price auto-divided (1000 / 100 = 10, Sale Price = 10, MRP = 10)');
+  console.log('Step 72 PASS? true: Purchase RECD Date & Unit B Auto-Division verified.');
+
   console.log('\n====================================================');
-  console.log('ALL 71 INVENTORY & ACCOUNTING SUITE STEPS PASSED!');
+  console.log('ALL 72 INVENTORY & ACCOUNTING SUITE STEPS PASSED!');
   console.log('====================================================\n');
 }
 

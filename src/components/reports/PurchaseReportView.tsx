@@ -61,10 +61,10 @@ export const PurchaseReportView: React.FC = () => {
 
   const filteredPurchases = useMemo(() => {
     const list = purchases.filter(p => {
-      const recdOrBillDate = p.recdDate || p.billDate;
+      const recdDate = p.recdDate || p.billDate;
       if (!isAllTime) {
-        if (fromDate && recdOrBillDate < fromDate) return false;
-        if (toDate && recdOrBillDate > toDate) return false;
+        if (fromDate && recdDate < fromDate) return false;
+        if (toDate && recdDate > toDate) return false;
       }
       if (selectedSupplierId && p.supplierId !== selectedSupplierId) return false;
       if (selectedItemId && !p.items.some(i => i.itemId === selectedItemId)) return false;
@@ -349,7 +349,7 @@ export const PurchaseReportView: React.FC = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr style={{ background: '#D4C4FB', borderBottom: '2px solid #000000' }}>
-                <th style={{ padding: '8px 10px', borderRight: '1px solid #000000', width: '90px', fontWeight: 900, fontSize: '0.85rem' }}>DATE</th>
+                <th style={{ padding: '8px 10px', borderRight: '1px solid #000000', width: '95px', fontWeight: 900, fontSize: '0.85rem' }}>RECD. DATE</th>
                 <th style={{ padding: '8px 10px', borderRight: '1px solid #000000', width: '100px', fontWeight: 900, fontSize: '0.85rem' }}>BILL NO</th>
                 <th style={{ padding: '8px 10px', borderRight: '1px solid #000000', width: '140px', fontWeight: 900, fontSize: '0.85rem' }}>SUPPLIER</th>
                 <th style={{ padding: '8px 12px', borderRight: '1px solid #000000', fontWeight: 900, fontSize: '0.85rem' }}>Items Used In-House</th>
@@ -387,7 +387,7 @@ export const PurchaseReportView: React.FC = () => {
                                   rowSpan={p.items.length}
                                   style={{ padding: '8px 10px', borderRight: '1px solid #000000', verticalAlign: 'top', fontWeight: 700, fontSize: '0.82rem' }}
                                 >
-                                  {formatDateToDisplay(p.billDate)}
+                                  {formatDateToDisplay(p.recdDate || p.billDate)}
                                 </td>
                                 <td
                                   rowSpan={p.items.length}

@@ -7,7 +7,7 @@ import { StockEngine } from '../../db/stockEngine';
 import { Search, FileSpreadsheet } from 'lucide-react';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { ExcelImportModal } from '../common/ExcelImportModal';
-import { calculateItemUnitBreakdown } from '../../utils/calculations';
+import { calculateItemUnitBreakdown, round2 } from '../../utils/calculations';
 
 export const ItemMasterView: React.FC = () => {
   const { refreshKey, showToast, showAlert, openItemLedger } = useApp();
@@ -115,6 +115,7 @@ export const ItemMasterView: React.FC = () => {
   const [unitBMrp, setUnitBMrp] = useState('0');
   const [unitBActive, setUnitBActive] = useState(true);
   const [isUnitBProfCustomized, setIsUnitBProfCustomized] = useState(false);
+  const [isUnitBBasicCustomized, setIsUnitBBasicCustomized] = useState(false);
 
   const [minStock, setMinStock] = useState('0');
   const [openingStock, setOpeningStock] = useState('0');
@@ -193,6 +194,29 @@ export const ItemMasterView: React.FC = () => {
     }
   };
 
+  // Auto-divide Unit A Basic Price by Unit B Conversion factor to compute Unit B Basic Price
+  const handleUnitABasicPriceChange = (val: string) => {
+    setIsTouched(true);
+    setUnitABasicPrice(val);
+    const aPrice = parseFloat(val) || 0;
+    const conv = parseFloat(unitBConversion) || 1;
+    if (conv > 0 && !isUnitBBasicCustomized) {
+      const bPrice = round2(aPrice / conv);
+      setUnitBBasicPrice(String(bPrice));
+    }
+  };
+
+  const handleUnitBConversionChange = (convVal: string) => {
+    setIsTouched(true);
+    setUnitBConversion(convVal);
+    const conv = parseFloat(convVal) || 1;
+    const aPrice = parseFloat(unitABasicPrice) || 0;
+    if (conv > 0 && !isUnitBBasicCustomized) {
+      const bPrice = round2(aPrice / conv);
+      setUnitBBasicPrice(String(bPrice));
+    }
+  };
+
   // Delete dialog
   const [deleteDialog, setDeleteDialog] = useState<{ isOpen: boolean; id: string; name: string }>({
     isOpen: false,
@@ -246,8 +270,13 @@ export const ItemMasterView: React.FC = () => {
     // Unit B
     if (item.unitB) {
       setUnitBName(item.unitB.unitName || '');
-      setUnitBConversion(String(item.unitB.conversionFactor ?? 40));
-      setUnitBBasicPrice(String(item.unitB.basicPrice ?? 0));
+      const conv = Number(item.unitB.conversionFactor ?? 40);
+      setUnitBConversion(String(conv));
+      const aBasic = Number(item.unitA?.basicPrice ?? item.purchaseRate ?? 0);
+      const computedBBasic = conv > 0 ? round2(aBasic / conv) : 0;
+      const bBasic = item.unitB.basicPrice !== undefined ? item.unitB.basicPrice : computedBBasic;
+      setUnitBBasicPrice(String(bBasic));
+      setIsUnitBBasicCustomized(Boolean(item.unitB.basicPrice !== undefined && item.unitB.basicPrice !== computedBBasic));
       setUnitBGstPercent(String(item.unitB.gstPercent ?? 0));
       setUnitBTranPercent(String(item.unitB.tranPercent ?? 0));
       setUnitBProfAm(String(item.unitB.profPercentAm ?? 0));
@@ -332,6 +361,7 @@ export const ItemMasterView: React.FC = () => {
     setUnitBMrp('0');
     setUnitBActive(true);
     setIsUnitBProfCustomized(false);
+    setIsUnitBBasicCustomized(false);
 
     setMinStock('0');
     setOpeningStock('0');
@@ -797,7 +827,7 @@ export const ItemMasterView: React.FC = () => {
                     step="any"
                     className="input-text-clean"
                     value={unitABasicPrice}
-                    onChange={e => { setIsTouched(true); setUnitABasicPrice(e.target.value); }}
+                    onChange={e => handleUnitABasicPriceChange(e.target.value)}
                     style={{ textAlign: 'center', fontWeight: 700 }}
                   />
                   <div className="subtext-calc-red">{unitABreakdown.basicPrice}</div>
@@ -943,7 +973,7 @@ export const ItemMasterView: React.FC = () => {
                     step="any"
                     className="input-text-clean"
                     value={unitBConversion}
-                    onChange={e => { setIsTouched(true); setUnitBConversion(e.target.value); }}
+                    onChange={e => handleUnitBConversionChange(e.target.value)}
                     style={{ width: '60px', textAlign: 'center', fontWeight: 900, color: '#059669' }}
                   />
                   <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>{unitBName || 'Mt.'}</span>
@@ -969,7 +999,11 @@ export const ItemMasterView: React.FC = () => {
                       step="any"
                       className="input-text-clean"
                       value={unitBBasicPrice}
-                      onChange={e => { setIsTouched(true); setUnitBBasicPrice(e.target.value); }}
+                      onChange={e => {
+                        setIsTouched(true);
+                        setIsUnitBBasicCustomized(true);
+                        setUnitBBasicPrice(e.target.value);
+                      }}
                       style={{ textAlign: 'center', fontWeight: 700 }}
                     />
                     <div className="subtext-calc-red">{unitBBreakdown.basicPrice}</div>
