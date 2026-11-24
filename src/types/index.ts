@@ -314,6 +314,7 @@ export interface PurchaseItem {
 
 export interface Purchase {
   id: string;
+  sno?: string; // Sequential purchase serial number (gap-free)
   billNo: string;
   billDate: string; // YYYY-MM-DD
   recdDate: string; // YYYY-MM-DD

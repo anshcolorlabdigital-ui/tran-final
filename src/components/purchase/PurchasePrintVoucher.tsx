@@ -44,6 +44,7 @@ export const PurchasePrintVoucher: React.FC<PurchasePrintVoucherProps> = ({ purc
           <div style={{ fontWeight: 800, fontSize: '1.1rem' }}>{purchase.supplierName}</div>
         </div>
         <div style={{ textAlign: 'right' }}>
+          {purchase.sno && <div><strong>S.No:</strong> {purchase.sno}</div>}
           <div><strong>Bill No:</strong> {purchase.billNo}</div>
           <div><strong>Bill Date:</strong> {formatDateToDisplay(purchase.billDate)}</div>
           <div><strong>Recd Date:</strong> {formatDateToDisplay(purchase.recdDate)}</div>

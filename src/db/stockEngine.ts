@@ -221,4 +221,28 @@ export class StockEngine {
     });
     return String(maxSno + 1);
   }
+
+  /**
+   * Generates next S.No. for purchases ensuring no gaps even after deletions
+   */
+  public static getNextPurchaseSno(): string {
+    const purchases = db.getPurchases();
+    const usedNumbers = new Set<number>();
+    purchases.forEach(p => {
+      const val = (p as any).sno;
+      if (val !== undefined && val !== null && val !== '') {
+        const n = parseInt(String(val).trim(), 10);
+        if (!isNaN(n) && n > 0) {
+          usedNumbers.add(n);
+        }
+      }
+    });
+
+    let nextNum = 1;
+    while (usedNumbers.has(nextNum)) {
+      nextNum++;
+    }
+
+    return nextNum < 10 ? String(nextNum).padStart(2, '0') : String(nextNum);
+  }
 }

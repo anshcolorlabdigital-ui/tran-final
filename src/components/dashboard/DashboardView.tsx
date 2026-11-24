@@ -203,7 +203,7 @@ export const DashboardView: React.FC = () => {
           RAW MATERIAL MANAGEMENT SYSTEM
         </h2>
         <div style={{ fontSize: '0.78rem', color: '#DC2626', fontWeight: 800, lineHeight: 1.2 }}>
-          Devloped by evodebs<br />
+          Devloped by heygrow.in<br />
           Ansh Rajput
         </div>
       </div>

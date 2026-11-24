@@ -487,6 +487,20 @@ export const ItemMasterView: React.FC = () => {
     });
   }, [stockSummaries, filterCategory, filterItem]);
 
+  const isEditing = Boolean(selectedItemId && !isViewOnly);
+  const isViewing = Boolean(selectedItemId && isViewOnly);
+  const isCreating = Boolean(!selectedItemId && !isJustSaved);
+
+  const cardStateClass = isJustSaved
+    ? 'is-saved-yellow'
+    : isViewing
+    ? 'is-initial-blue'
+    : isEditing
+    ? 'is-editing-pink'
+    : isCreating
+    ? 'is-creating-green'
+    : 'is-initial-blue';
+
   return (
     <div className="content-panel-grey">
       {/* Top Header Strip */}
@@ -495,9 +509,23 @@ export const ItemMasterView: React.FC = () => {
           <div className="pill-header-lavender" style={{ fontSize: '1.25rem', padding: '6px 36px', fontWeight: 900 }}>
             ITEM
           </div>
-          <span className="active-mode-indicator is-creating" style={{ padding: '4px 12px', borderRadius: '16px', background: '#DCFCE7', color: '#166534', fontWeight: 800, fontSize: '0.82rem' }}>
-            ● Creating New Item
-          </span>
+          {isJustSaved ? (
+            <span className="active-mode-indicator is-saved" style={{ padding: '4px 14px', borderRadius: '16px', fontWeight: 800, fontSize: '0.82rem' }}>
+              ● Saved / Updated Just Now
+            </span>
+          ) : isViewing ? (
+            <span className="active-mode-indicator is-initial" style={{ padding: '4px 14px', borderRadius: '16px', background: '#FEF3C7', color: '#92400E', border: '1px solid #F59E0B', fontWeight: 800, fontSize: '0.82rem' }}>
+              ● Viewing Item (Double-Click to Edit)
+            </span>
+          ) : isEditing ? (
+            <span className="active-mode-indicator is-editing" style={{ padding: '4px 14px', borderRadius: '16px', background: '#FCE7F3', color: '#BE185D', border: '1px solid #F472B6', fontWeight: 800, fontSize: '0.82rem' }}>
+              ● Editing Item: {name || sno}
+            </span>
+          ) : (
+            <span className="active-mode-indicator is-creating" style={{ padding: '4px 14px', borderRadius: '16px', background: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC', fontWeight: 800, fontSize: '0.82rem' }}>
+              ● Creating New Item
+            </span>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -534,9 +562,8 @@ export const ItemMasterView: React.FC = () => {
 
       {/* Main Form Container */}
       <div
+        className={`dynamic-entry-card ${cardStateClass}`}
         style={{
-          background: '#FFFFFF',
-          border: '2px solid #000000',
           borderRadius: '12px',
           padding: '20px',
           maxWidth: '1240px',
@@ -1110,20 +1137,21 @@ export const ItemMasterView: React.FC = () => {
             </div>
           </div>
 
-          {/* Action Buttons row matching mockup: Add New | Edit | Repit | Del | Save | Print */}
+          {/* Action Buttons row with distinct differentiated backgrounds */}
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginTop: '16px' }}>
             <button
               type="button"
               onClick={handleCreateNew}
               style={{
-                background: '#E9D5FF',
-                color: '#7E22CE',
-                border: '1.5px solid #C084FC',
+                background: '#E0F2FE',
+                color: '#0369A1',
+                border: '2px solid #38BDF8',
                 borderRadius: '20px',
                 padding: '6px 22px',
                 fontWeight: 900,
                 fontSize: '0.9rem',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                boxShadow: '0 2px 4px rgba(2, 132, 199, 0.15)'
               }}
             >
               Add New
@@ -1136,14 +1164,15 @@ export const ItemMasterView: React.FC = () => {
                 else showToast('Select an item from the list below to edit', 'info');
               }}
               style={{
-                background: '#E9D5FF',
-                color: '#DC2626',
-                border: '1.5px solid #C084FC',
+                background: '#FEF3C7',
+                color: '#B45309',
+                border: '2px solid #F59E0B',
                 borderRadius: '20px',
                 padding: '6px 22px',
                 fontWeight: 900,
                 fontSize: '0.9rem',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                boxShadow: '0 2px 4px rgba(245, 158, 11, 0.15)'
               }}
             >
               Edit
@@ -1153,14 +1182,15 @@ export const ItemMasterView: React.FC = () => {
               type="button"
               onClick={handleRepeat}
               style={{
-                background: '#E9D5FF',
-                color: '#DC2626',
-                border: '1.5px solid #C084FC',
+                background: '#EDE9FE',
+                color: '#6D28D9',
+                border: '2px solid #8B5CF6',
                 borderRadius: '20px',
                 padding: '6px 22px',
                 fontWeight: 900,
                 fontSize: '0.9rem',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                boxShadow: '0 2px 4px rgba(139, 92, 246, 0.15)'
               }}
             >
               Repit
@@ -1170,15 +1200,16 @@ export const ItemMasterView: React.FC = () => {
               type="button"
               onClick={handleDelete}
               style={{
-                background: '#E9D5FF',
-                color: '#6B7280',
-                border: '1.5px solid #C084FC',
+                background: '#FEE2E2',
+                color: '#DC2626',
+                border: '2px solid #EF4444',
                 borderRadius: '20px',
                 padding: '6px 22px',
                 fontWeight: 900,
                 fontSize: '0.9rem',
                 cursor: selectedItemId ? 'pointer' : 'not-allowed',
-                opacity: selectedItemId ? 1 : 0.6
+                opacity: selectedItemId ? 1 : 0.6,
+                boxShadow: '0 2px 4px rgba(239, 68, 68, 0.15)'
               }}
             >
               Del
@@ -1189,12 +1220,13 @@ export const ItemMasterView: React.FC = () => {
               style={{
                 background: '#86EFAC',
                 color: '#15803D',
-                border: '1.5px solid #22C55E',
+                border: '2px solid #16A34A',
                 borderRadius: '20px',
                 padding: '8px 36px',
                 fontWeight: 900,
                 fontSize: '1.05rem',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(22, 163, 74, 0.25)'
               }}
             >
               Save
@@ -1204,14 +1236,15 @@ export const ItemMasterView: React.FC = () => {
               type="button"
               onClick={handlePrint}
               style={{
-                background: '#E9D5FF',
-                color: '#DC2626',
-                border: '1.5px solid #C084FC',
+                background: '#CCFBF1',
+                color: '#0F766E',
+                border: '2px solid #14B8A6',
                 borderRadius: '20px',
                 padding: '6px 22px',
                 fontWeight: 900,
                 fontSize: '0.9rem',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                boxShadow: '0 2px 4px rgba(20, 184, 166, 0.15)'
               }}
             >
               Print

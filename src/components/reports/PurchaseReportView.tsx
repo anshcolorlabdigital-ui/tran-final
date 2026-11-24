@@ -110,8 +110,9 @@ export const PurchaseReportView: React.FC = () => {
   };
 
   const handleExportCSV = () => {
-    const headers = ['Bill No', 'Bill Date', 'Recd Date', 'Supplier', 'Items', 'Total Qty', 'Basic Total', 'GST Total', 'Bill Total'];
+    const headers = ['S.No', 'Bill No', 'Bill Date', 'Recd Date', 'Supplier', 'Items', 'Total Qty', 'Basic Total', 'GST Total', 'Bill Total'];
     const rows = filteredPurchases.map(p => [
+      p.sno || '',
       p.billNo,
       p.billDate,
       p.recdDate,
@@ -392,7 +393,8 @@ export const PurchaseReportView: React.FC = () => {
                                   rowSpan={p.items.length}
                                   style={{ padding: '8px 10px', borderRight: '1px solid #000000', verticalAlign: 'top', fontWeight: 900, fontFamily: 'monospace', fontSize: '0.85rem' }}
                                 >
-                                  {p.billNo}
+                                  <div>{p.billNo}</div>
+                                  {p.sno && <div style={{ fontSize: '0.72rem', color: '#1E40AF', fontWeight: 800 }}>S.No: {p.sno}</div>}
                                 </td>
                                 <td
                                   rowSpan={p.items.length}

@@ -39,6 +39,7 @@ export const PurchaseEntryView: React.FC = () => {
   const [billDate, setBillDate] = useState<string>(getTodayDateString());
   const [recdDate, setRecdDate] = useState<string>(getTodayDateString());
   const [billNo, setBillNo] = useState<string>('');
+  const [purchaseSno, setPurchaseSno] = useState<string>(() => StockEngine.getNextPurchaseSno());
   const [supplierId, setSupplierId] = useState<string>('');
   const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(null);
   const [associatedOrderId, setAssociatedOrderId] = useState<string | null>(null);
@@ -273,6 +274,7 @@ export const PurchaseEntryView: React.FC = () => {
     setIsTouched(false);
     setIsViewOnly(false);
     setBillNo('');
+    setPurchaseSno(StockEngine.getNextPurchaseSno());
     setBillDate(getTodayDateString());
     setRecdDate(getTodayDateString());
     setSupplierId('');
@@ -309,9 +311,11 @@ export const PurchaseEntryView: React.FC = () => {
     }
 
     const supplier = suppliers.find(s => s.id === supplierId);
+    const snoToSave = purchaseSno || StockEngine.getNextPurchaseSno();
 
     const purchaseRecord: Purchase = {
       id: editingPurchaseId || `purchase-${Date.now()}`,
+      sno: snoToSave,
       billNo: billNo.trim(),
       billDate,
       recdDate,
@@ -365,6 +369,7 @@ export const PurchaseEntryView: React.FC = () => {
     setIsViewOnly(viewOnly);
     setIsTouched(true);
     setBillNo(purchase.billNo);
+    setPurchaseSno(purchase.sno || '');
     setBillDate(purchase.billDate);
     setRecdDate(purchase.recdDate || purchase.billDate);
     setSupplierId(purchase.supplierId);
@@ -419,6 +424,7 @@ export const PurchaseEntryView: React.FC = () => {
 
   const currentPurchaseForPrint: Purchase = {
     id: editingPurchaseId || 'temp',
+    sno: purchaseSno,
     billNo: billNo || 'NEW-BILL',
     billDate,
     recdDate,
@@ -614,7 +620,7 @@ export const PurchaseEntryView: React.FC = () => {
             </div>
           </div>
 
-          {/* RIGHT COLUMN: Bill Date, Bill No, Recd Date */}
+          {/* RIGHT COLUMN: Bill Date, S.No., Bill No, Recd Date */}
           <div className="entry-header-right-col">
             <div className="entry-header-right-row">
               <label>BILL DATE</label>
@@ -634,6 +640,19 @@ export const PurchaseEntryView: React.FC = () => {
                     billNoInputRef.current?.select();
                   }
                 }}
+              />
+            </div>
+
+            <div className="entry-header-right-row">
+              <label>S.NO.</label>
+              <input
+                type="text"
+                className="input-text-clean"
+                value={purchaseSno}
+                readOnly
+                placeholder="Auto S.No."
+                style={{ fontWeight: 900, background: '#F3F4F6', color: '#1E40AF', cursor: 'default' }}
+                title="Auto-generated sequential purchase serial number (No gaps on delete)"
               />
             </div>
 
@@ -1092,6 +1111,7 @@ export const PurchaseEntryView: React.FC = () => {
           <table className="custom-table">
             <thead>
               <tr>
+                <th style={{ width: '70px', textAlign: 'center' }}>S.No.</th>
                 <th>Bill Date</th>
                 <th>Bill No.</th>
                 <th>Supplier / Party</th>
@@ -1103,7 +1123,7 @@ export const PurchaseEntryView: React.FC = () => {
             <tbody>
               {filteredPurchases.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: '#9CA3AF', fontWeight: 600 }}>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: '#9CA3AF', fontWeight: 600 }}>
                     No purchase inward records found.
                   </td>
                 </tr>
@@ -1119,6 +1139,7 @@ export const PurchaseEntryView: React.FC = () => {
                     onDoubleClick={() => handleLoadPurchaseForEdit(p, false)}
                     title="Single-click to View, Double-click to Edit"
                   >
+                    <td style={{ textAlign: 'center', fontWeight: 900, color: '#1E40AF' }}>{p.sno || '-'}</td>
                     <td>{p.billDate}</td>
                     <td style={{ fontWeight: 800 }}>{p.billNo}</td>
                     <td>{p.supplierName}</td>

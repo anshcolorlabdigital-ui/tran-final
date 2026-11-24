@@ -2408,7 +2408,10 @@ async function runVerificationSuite() {
     items: [],
     basicTotal: 1000,
     gstTotal: 180,
+    roundUp: 0,
     billTotal: 1180,
+    recdCash: 0,
+    recdUpi: 0,
     createdAt: new Date().toISOString()
   };
   const pur2: Purchase = {
@@ -2421,7 +2424,10 @@ async function runVerificationSuite() {
     items: [],
     basicTotal: 2000,
     gstTotal: 360,
+    roundUp: 0,
     billTotal: 2360,
+    recdCash: 0,
+    recdUpi: 0,
     createdAt: new Date().toISOString()
   };
   db.savePurchase(pur1);
@@ -2448,8 +2454,77 @@ async function runVerificationSuite() {
   console.log('✓ Purchase report Received Date (RECD Date) sorting verified');
   console.log('Step 70 PASS? true: Maintenance Mode & New Feature Integrity verified.');
 
+  console.log('\n--- Step 71: Verify Purchase Gap-Free Sequential S.No. Generation & Deletion ---');
+  // 1. Initial next S.No.
+  const nextSno1 = StockEngine.getNextPurchaseSno();
+  console.log('Next initial Purchase S.No:', nextSno1);
+  if (!nextSno1 || isNaN(parseInt(nextSno1, 10))) {
+    throw new Error('Invalid initial purchase S.No.');
+  }
+
+  // 2. Create purchase with nextSno1
+  const testPur1: Purchase = {
+    id: `pur-test-step71-1-${Date.now()}`,
+    sno: nextSno1,
+    billNo: `SUPP-INV-${Date.now()}-1`,
+    billDate: '2026-11-24',
+    recdDate: '2026-11-24',
+    supplierId: 'test-supp-71',
+    supplierName: 'STEP 71 TEST SUPPLIER',
+    items: [],
+    basicTotal: 100,
+    gstTotal: 18,
+    roundUp: 0,
+    billTotal: 118,
+    recdCash: 0,
+    recdUpi: 0,
+    createdAt: new Date().toISOString()
+  };
+  db.savePurchase(testPur1);
+
+  // 3. Next S.No. should advance sequentially
+  const nextSno2 = StockEngine.getNextPurchaseSno();
+  console.log('Next Purchase S.No after pur1:', nextSno2);
+  const expectedSno2Num = parseInt(nextSno1, 10) + 1;
+  const expectedSno2 = expectedSno2Num < 10 ? String(expectedSno2Num).padStart(2, '0') : String(expectedSno2Num);
+  if (nextSno2 !== expectedSno2) {
+    throw new Error(`Expected next S.No ${expectedSno2}, got ${nextSno2}`);
+  }
+
+  // 4. Delete testPur1 -> Next S.No should return to nextSno1 with ZERO GAP
+  db.deletePurchase(testPur1.id);
+  const nextSnoAfterDelete = StockEngine.getNextPurchaseSno();
+  console.log('Next Purchase S.No after delete:', nextSnoAfterDelete);
+  if (nextSnoAfterDelete !== nextSno1) {
+    throw new Error(`Expected gap-free recycled S.No ${nextSno1}, got ${nextSnoAfterDelete}`);
+  }
+
+  // 5. Test gap filling with multiple purchases
+  const testPurA: Purchase = { ...testPur1, id: `pur-test-step71-A-${Date.now()}`, sno: '01' };
+  const testPurB: Purchase = { ...testPur1, id: `pur-test-step71-B-${Date.now()}`, sno: '02' };
+  const testPurC: Purchase = { ...testPur1, id: `pur-test-step71-C-${Date.now()}`, sno: '03' };
+  db.savePurchase(testPurA);
+  db.savePurchase(testPurB);
+  db.savePurchase(testPurC);
+
+  // Delete middle purchase '02' -> next S.No should be '02' (gap filled!)
+  db.deletePurchase(testPurB.id);
+  const recycledGapSno = StockEngine.getNextPurchaseSno();
+  if (recycledGapSno !== '02') {
+    throw new Error(`Expected gap-fill S.No '02', got ${recycledGapSno}`);
+  }
+
+  // Clean up test purchases
+  db.deletePurchase(testPurA.id);
+  db.deletePurchase(testPurC.id);
+
+  console.log('✓ Purchase sequential S.No. generation verified');
+  console.log('✓ Zero-gap re-generation after purchase deletion verified');
+  console.log('✓ Gap-filling algorithm verified');
+  console.log('Step 71 PASS? true: Purchase Gap-Free Sequential S.No. verified.');
+
   console.log('\n====================================================');
-  console.log('ALL 70 INVENTORY & ACCOUNTING SUITE STEPS PASSED!');
+  console.log('ALL 71 INVENTORY & ACCOUNTING SUITE STEPS PASSED!');
   console.log('====================================================\n');
 }
 
