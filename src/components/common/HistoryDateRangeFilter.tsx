@@ -11,11 +11,28 @@ export const HistoryDateRangeFilter: React.FC<HistoryDateRangeFilterProps> = ({ 
   const { historyFromDate, historyToDate, setHistoryFromDate, setHistoryToDate, setHistoryDateRange } = useApp();
   const today = getTodayDateString();
 
+  const d = new Date();
+  d.setDate(d.getDate() - 7);
+  const weekStart = d.toISOString().split('T')[0];
+
+  const parts = today.split('-');
+  const monthStart = `${parts[0]}-${parts[1]}-01`;
+
   const isTodayActive = historyFromDate === today && historyToDate === today;
+  const isWeekActive = historyFromDate === weekStart && historyToDate === today;
+  const isMonthActive = historyFromDate === monthStart && historyToDate === today;
   const isAllActive = historyFromDate === '' && historyToDate === '';
 
   const handleSetToday = () => {
     setHistoryDateRange(today, today);
+  };
+
+  const handleSetWeek = () => {
+    setHistoryDateRange(weekStart, today);
+  };
+
+  const handleSetMonth = () => {
+    setHistoryDateRange(monthStart, today);
   };
 
   const handleSetAll = () => {
@@ -94,6 +111,42 @@ export const HistoryDateRangeFilter: React.FC<HistoryDateRangeFilterProps> = ({ 
           }}
         >
           Today
+        </button>
+
+        <button
+          type="button"
+          onClick={handleSetWeek}
+          style={{
+            padding: '3px 8px',
+            fontSize: '0.75rem',
+            fontWeight: 800,
+            borderRadius: '4px',
+            border: isWeekActive ? '1px solid #7C3AED' : '1px solid #D1D5DB',
+            backgroundColor: isWeekActive ? '#8B5CF6' : '#FFFFFF',
+            color: isWeekActive ? '#FFFFFF' : '#374151',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          Week
+        </button>
+
+        <button
+          type="button"
+          onClick={handleSetMonth}
+          style={{
+            padding: '3px 8px',
+            fontSize: '0.75rem',
+            fontWeight: 800,
+            borderRadius: '4px',
+            border: isMonthActive ? '1px solid #D97706' : '1px solid #D1D5DB',
+            backgroundColor: isMonthActive ? '#F59E0B' : '#FFFFFF',
+            color: isMonthActive ? '#FFFFFF' : '#374151',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          Month
         </button>
 
         <button

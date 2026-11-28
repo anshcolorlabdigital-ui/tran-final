@@ -8,7 +8,17 @@ import { X, LogOut, ShieldCheck, UserCheck, Shield, ChevronDown } from 'lucide-r
 import { ConfirmDialog } from '../common/ConfirmDialog';
 
 export const Sidebar: React.FC = () => {
-  const { activeTab, setActiveTab, refreshKey, isMobileMenuOpen, closeMobileMenu, showToast } = useApp();
+  const {
+    activeTab,
+    setActiveTab,
+    refreshKey,
+    isMobileMenuOpen,
+    closeMobileMenu,
+    showToast,
+    setSelectedLedgerSupplierId,
+    setSelectedLedgerPartyId,
+    setSelectedLedgerItemId
+  } = useApp();
   const { currentUser, logout, hasPermission, isAdmin } = useAuth();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
@@ -32,6 +42,15 @@ export const Sidebar: React.FC = () => {
         key={tab}
         className={`pill-nav-btn ${isActive ? 'active' : ''}`}
         onClick={() => {
+          if (tab === 'REPORT_SUPPLIER_LEDGER') {
+            setSelectedLedgerSupplierId(null);
+          }
+          if (tab === 'REPORT_PARTY_LEDGER') {
+            setSelectedLedgerPartyId(null);
+          }
+          if (tab === 'REPORT_ITEM_LEDGER') {
+            setSelectedLedgerItemId(null);
+          }
           setActiveTab(tab);
           closeMobileMenu();
         }}
@@ -231,8 +250,8 @@ export const Sidebar: React.FC = () => {
                   {canReportPurchases && navItem('REPORT_PURCHASES', 'PURCHASES')}
                   {canReportSelfUse && navItem('REPORT_SELF_USE', 'SELF USE')}
                   {canReportItemStock && navItem('REPORT_ITEM_STOCK', 'ITEM STOCK', lowStockItems.length > 0 ? lowStockItems.length : undefined)}
-                  {canReportPartyLedger && navItem('REPORT_PARTY_LEDGER', 'PARTY LEDGER')}
-                  {canReportSupplierLedger && navItem('REPORT_SUPPLIER_LEDGER', 'SUPPLIER LEDGER')}
+                  {canReportPartyLedger && navItem('REPORT_PARTY_LEDGER', 'PARTY OUTSTANDING')}
+                  {canReportSupplierLedger && navItem('REPORT_SUPPLIER_LEDGER', 'SUPPLIER OUTSTANDING')}
                   {canReportItemLedger && navItem('REPORT_ITEM_LEDGER', 'ITEM LEDGER')}
                   {canReportPhysicalStock && navItem('REPORT_PHYSICAL_STOCK', 'STOCK REPORT')}
                 </div>

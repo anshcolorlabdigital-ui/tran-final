@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Item, Supplier } from '../../types';
 import { StockEngine } from '../../db/stockEngine';
-import { Search, FileSpreadsheet } from 'lucide-react';
+import { Search, FileSpreadsheet, ChevronLeft, ChevronRight, X, ChevronDown } from 'lucide-react';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { ExcelImportModal } from '../common/ExcelImportModal';
 import { calculateItemUnitBreakdown, round2 } from '../../utils/calculations';
@@ -46,14 +46,45 @@ export const ItemMasterView: React.FC = () => {
   const [category, setCategory] = useState('');
   const [supplierId, setSupplierId] = useState('');
 
-  // Table filters matching mockup
+  // Table filters and pagination matching user specification
   const [showCategoryWise, setShowCategoryWise] = useState(false);
   const [filterCategory, setFilterCategory] = useState('ALL');
   const [filterItem, setFilterItem] = useState('ALL');
+  const [pageSize, setPageSize] = useState<number | 'ALL'>(10);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  // Search inputs for bottom filters
+  const [categorySearchText, setCategorySearchText] = useState('');
+  const [isCategorySearchOpen, setIsCategorySearchOpen] = useState(false);
+  const [itemFilterSearchText, setItemFilterSearchText] = useState('');
+  const [isItemFilterOpen, setIsItemFilterOpen] = useState(false);
+
+  const categoryFilterRef = useRef<HTMLDivElement>(null);
+  const itemFilterRef = useRef<HTMLDivElement>(null);
 
   const [isNameDropdownOpen, setIsNameDropdownOpen] = useState(false);
   const nameDropdownRef = useRef<HTMLDivElement>(null);
   const itemNameInputRef = useRef<HTMLInputElement>(null);
+
+  // Available items for bottom filter strictly constrained by selected category
+  const availableItemsForFilter = useMemo(() => {
+    if (filterCategory === 'ALL') return items;
+    return items.filter(it => it.category && it.category.toLowerCase() === filterCategory.toLowerCase());
+  }, [items, filterCategory]);
+
+  // Suggestions for bottom category filter
+  const filteredCategorySuggestions = useMemo(() => {
+    const q = categorySearchText.toLowerCase().trim();
+    if (!q) return existingCategories;
+    return existingCategories.filter(c => c.toLowerCase().includes(q));
+  }, [existingCategories, categorySearchText]);
+
+  // Suggestions for bottom item filter
+  const filteredItemFilterSuggestions = useMemo(() => {
+    const q = itemFilterSearchText.toLowerCase().trim();
+    if (!q) return availableItemsForFilter;
+    return availableItemsForFilter.filter(it => it.name.toLowerCase().includes(q));
+  }, [availableItemsForFilter, itemFilterSearchText]);
 
   // Suggestions for Item Name dropdown
   const filteredItemSuggestions = useMemo(() => {
@@ -65,11 +96,17 @@ export const ItemMasterView: React.FC = () => {
     ).slice(0, 60);
   }, [items, name]);
 
-  // Click outside to close Item Name dropdown
+  // Click outside to close Item Name and bottom filter dropdowns
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (nameDropdownRef.current && !nameDropdownRef.current.contains(e.target as Node)) {
         setIsNameDropdownOpen(false);
+      }
+      if (categoryFilterRef.current && !categoryFilterRef.current.contains(e.target as Node)) {
+        setIsCategorySearchOpen(false);
+      }
+      if (itemFilterRef.current && !itemFilterRef.current.contains(e.target as Node)) {
+        setIsItemFilterOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -102,7 +139,7 @@ export const ItemMasterView: React.FC = () => {
 
   // Unit B State
   const [unitBName, setUnitBName] = useState('');
-  const [unitBConversion, setUnitBConversion] = useState('40');
+  const [unitBConversion, setUnitBConversion] = useState('0');
   const [unitBBasicPrice, setUnitBBasicPrice] = useState('0');
   const [unitBGstPercent, setUnitBGstPercent] = useState('0');
   const [unitBTranPercent, setUnitBTranPercent] = useState('0');
@@ -295,7 +332,7 @@ export const ItemMasterView: React.FC = () => {
       setIsUnitBProfCustomized(bProfDeal !== aProfDeal || bProfAm !== aProfAm);
     } else {
       setUnitBName('');
-      setUnitBConversion('40');
+      setUnitBConversion('0');
       setUnitBBasicPrice(String(item.purchaseRate || 0));
       setUnitBGstPercent(String(item.gstPercent || 0));
       setUnitBTranPercent('0');
@@ -348,7 +385,7 @@ export const ItemMasterView: React.FC = () => {
     setUnitAActive(true);
 
     setUnitBName('');
-    setUnitBConversion('40');
+    setUnitBConversion('0');
     setUnitBBasicPrice('0');
     setUnitBGstPercent('0');
     setUnitBTranPercent('0');
@@ -516,6 +553,38 @@ export const ItemMasterView: React.FC = () => {
       return true;
     });
   }, [stockSummaries, filterCategory, filterItem]);
+
+  // Reset currentPage to 1 whenever filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterCategory, filterItem, pageSize]);
+
+  const totalEntries = filteredSummaries.length;
+  const numericPageSize = pageSize === 'ALL' ? (totalEntries || 1) : Number(pageSize);
+  const totalPages = pageSize === 'ALL' || totalEntries === 0 ? 1 : Math.ceil(totalEntries / numericPageSize);
+
+  // Paginated summaries for table display
+  const paginatedSummaries = useMemo(() => {
+    if (pageSize === 'ALL') return filteredSummaries;
+    const start = (currentPage - 1) * numericPageSize;
+    return filteredSummaries.slice(start, start + numericPageSize);
+  }, [filteredSummaries, currentPage, pageSize, numericPageSize]);
+
+  const startEntry = totalEntries === 0 ? 0 : (currentPage - 1) * numericPageSize + 1;
+  const endEntry = pageSize === 'ALL' ? totalEntries : Math.min(currentPage * numericPageSize, totalEntries);
+
+  const pageButtons = useMemo(() => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    if (currentPage <= 4) {
+      return [1, 2, 3, 4, 5, '...', totalPages];
+    }
+    if (currentPage >= totalPages - 3) {
+      return [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+    }
+    return [1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages];
+  }, [totalPages, currentPage]);
 
   const isEditing = Boolean(selectedItemId && !isViewOnly);
   const isViewing = Boolean(selectedItemId && isViewOnly);
@@ -967,7 +1036,7 @@ export const ItemMasterView: React.FC = () => {
                     style={{ width: '80px', color: '#DC2626', fontWeight: 900, textAlign: 'center' }}
                     placeholder=""
                   />
-                  <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>1 {unitAName || 'Roll'} =</span>
+                  <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>1 {unitAName.trim() ? unitAName : ''} =</span>
                   <input
                     type="number"
                     step="any"
@@ -976,7 +1045,7 @@ export const ItemMasterView: React.FC = () => {
                     onChange={e => handleUnitBConversionChange(e.target.value)}
                     style={{ width: '60px', textAlign: 'center', fontWeight: 900, color: '#059669' }}
                   />
-                  <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>{unitBName || 'Mt.'}</span>
+                  <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>{unitBName.trim() ? unitBName : ''}</span>
                 </div>
 
                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer' }}>
@@ -1290,57 +1359,292 @@ export const ItemMasterView: React.FC = () => {
       {/* BOTTOM REGISTER & TABLE matching mockup */}
       <div style={{ maxWidth: '1240px', width: '100%', margin: '0 auto' }}>
         {/* Filters row above table */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '8px', flexWrap: 'wrap' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={showCategoryWise}
-              onChange={e => setShowCategoryWise(e.target.checked)}
-              style={{ width: '16px', height: '16px' }}
-            />
-            Show Category Wise
-          </label>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', marginBottom: '10px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={showCategoryWise}
+                onChange={e => setShowCategoryWise(e.target.checked)}
+                style={{ width: '16px', height: '16px' }}
+              />
+              Show Category Wise
+            </label>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>Select Cate. :</span>
-            <select
-              value={filterCategory}
-              onChange={e => setFilterCategory(e.target.value)}
-              style={{
-                border: '1.5px solid #000000',
-                borderRadius: '4px',
-                padding: '4px 10px',
-                fontWeight: 800,
-                fontSize: '0.85rem',
-                background: '#FFFFFF'
-              }}
-            >
-              <option value="ALL">Q ALL</option>
-              {existingCategories.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
+            {/* Searchable Category Filter */}
+            <div ref={categoryFilterRef} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>Select Cate. :</span>
+              <div style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsCategorySearchOpen(prev => !prev)}
+                  style={{
+                    border: '1.5px solid #000000',
+                    borderRadius: '4px',
+                    padding: '4px 10px',
+                    fontWeight: 800,
+                    fontSize: '0.85rem',
+                    background: '#FFFFFF',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    minWidth: '130px',
+                    justifyContent: 'space-between'
+                  }}
+                >
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>
+                    {filterCategory === 'ALL' ? 'Q ALL' : filterCategory}
+                  </span>
+                  <ChevronDown size={14} />
+                </button>
+
+                {isCategorySearchOpen && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      marginTop: '4px',
+                      background: '#FFFFFF',
+                      border: '2px solid #000000',
+                      borderRadius: '6px',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                      zIndex: 100,
+                      minWidth: '200px',
+                      maxHeight: '260px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      overflow: 'hidden'
+                    }}
+                  >
+                    <div style={{ padding: '6px', borderBottom: '1px solid #E5E7EB', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Search size={14} color="#6B7280" />
+                      <input
+                        type="text"
+                        placeholder="Search category..."
+                        value={categorySearchText}
+                        onChange={e => setCategorySearchText(e.target.value)}
+                        autoFocus
+                        style={{
+                          width: '100%',
+                          border: 'none',
+                          outline: 'none',
+                          fontSize: '0.82rem',
+                          fontWeight: 700
+                        }}
+                      />
+                      {categorySearchText && (
+                        <button
+                          type="button"
+                          onClick={() => setCategorySearchText('')}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                        >
+                          <X size={13} color="#9CA3AF" />
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ overflowY: 'auto', flex: 1, maxHeight: '200px' }}>
+                      <div
+                        onClick={() => {
+                          setFilterCategory('ALL');
+                          setIsCategorySearchOpen(false);
+                          setCategorySearchText('');
+                        }}
+                        style={{
+                          padding: '6px 10px',
+                          cursor: 'pointer',
+                          fontWeight: filterCategory === 'ALL' ? 900 : 700,
+                          fontSize: '0.82rem',
+                          background: filterCategory === 'ALL' ? '#EFF6FF' : 'transparent',
+                          borderBottom: '1px solid #F3F4F6'
+                        }}
+                      >
+                        Q ALL
+                      </div>
+                      {filteredCategorySuggestions.map(c => (
+                        <div
+                          key={c}
+                          onClick={() => {
+                            setFilterCategory(c);
+                            setIsCategorySearchOpen(false);
+                            setCategorySearchText('');
+                            if (filterItem !== 'ALL') {
+                              const itObj = items.find(i => i.name.toLowerCase() === filterItem.toLowerCase());
+                              if (!itObj || !itObj.category || itObj.category.toLowerCase() !== c.toLowerCase()) {
+                                setFilterItem('ALL');
+                                setItemFilterSearchText('');
+                              }
+                            }
+                          }}
+                          style={{
+                            padding: '6px 10px',
+                            cursor: 'pointer',
+                            fontWeight: filterCategory === c ? 900 : 700,
+                            fontSize: '0.82rem',
+                            background: filterCategory === c ? '#EFF6FF' : 'transparent',
+                            borderBottom: '1px solid #F3F4F6'
+                          }}
+                        >
+                          {c}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Searchable Item Filter strictly filtered by Category */}
+            <div ref={itemFilterRef} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>Select Item :</span>
+              <div style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsItemFilterOpen(prev => !prev)}
+                  style={{
+                    border: '1.5px solid #000000',
+                    borderRadius: '4px',
+                    padding: '4px 10px',
+                    fontWeight: 800,
+                    fontSize: '0.85rem',
+                    background: '#FFFFFF',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    minWidth: '150px',
+                    justifyContent: 'space-between'
+                  }}
+                >
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>
+                    {filterItem === 'ALL' ? 'Q ALL' : filterItem}
+                  </span>
+                  <ChevronDown size={14} />
+                </button>
+
+                {isItemFilterOpen && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      marginTop: '4px',
+                      background: '#FFFFFF',
+                      border: '2px solid #000000',
+                      borderRadius: '6px',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                      zIndex: 100,
+                      minWidth: '240px',
+                      maxHeight: '280px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      overflow: 'hidden'
+                    }}
+                  >
+                    <div style={{ padding: '6px', borderBottom: '1px solid #E5E7EB', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Search size={14} color="#6B7280" />
+                      <input
+                        type="text"
+                        placeholder="Type item name to search..."
+                        value={itemFilterSearchText}
+                        onChange={e => setItemFilterSearchText(e.target.value)}
+                        autoFocus
+                        style={{
+                          width: '100%',
+                          border: 'none',
+                          outline: 'none',
+                          fontSize: '0.82rem',
+                          fontWeight: 700
+                        }}
+                      />
+                      {itemFilterSearchText && (
+                        <button
+                          type="button"
+                          onClick={() => setItemFilterSearchText('')}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                        >
+                          <X size={13} color="#9CA3AF" />
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ overflowY: 'auto', flex: 1, maxHeight: '220px' }}>
+                      <div
+                        onClick={() => {
+                          setFilterItem('ALL');
+                          setIsItemFilterOpen(false);
+                          setItemFilterSearchText('');
+                        }}
+                        style={{
+                          padding: '6px 10px',
+                          cursor: 'pointer',
+                          fontWeight: filterItem === 'ALL' ? 900 : 700,
+                          fontSize: '0.82rem',
+                          background: filterItem === 'ALL' ? '#EFF6FF' : 'transparent',
+                          borderBottom: '1px solid #F3F4F6'
+                        }}
+                      >
+                        Q ALL
+                      </div>
+                      {filteredItemFilterSuggestions.length === 0 ? (
+                        <div style={{ padding: '10px', fontSize: '0.8rem', color: '#9CA3AF', textAlign: 'center' }}>
+                          No items match {filterCategory !== 'ALL' ? `in ${filterCategory}` : ''}
+                        </div>
+                      ) : (
+                        filteredItemFilterSuggestions.map(it => (
+                          <div
+                            key={it.id}
+                            onClick={() => {
+                              setFilterItem(it.name);
+                              setIsItemFilterOpen(false);
+                              setItemFilterSearchText('');
+                            }}
+                            style={{
+                              padding: '6px 10px',
+                              cursor: 'pointer',
+                              fontWeight: filterItem === it.name ? 900 : 700,
+                              fontSize: '0.82rem',
+                              background: filterItem === it.name ? '#EFF6FF' : 'transparent',
+                              borderBottom: '1px solid #F3F4F6'
+                            }}
+                          >
+                            <div style={{ fontWeight: 800 }}>{it.name}</div>
+                            {it.category && (
+                              <div style={{ fontSize: '0.72rem', color: '#6B7280' }}>{it.category}</div>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>Select Item :</span>
+          {/* Show Entries Selector matching user requirement */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 800 }}>
+            <span>Show</span>
             <select
-              value={filterItem}
-              onChange={e => setFilterItem(e.target.value)}
+              value={pageSize}
+              onChange={e => setPageSize(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))}
               style={{
                 border: '1.5px solid #000000',
                 borderRadius: '4px',
-                padding: '4px 10px',
+                padding: '3px 8px',
                 fontWeight: 800,
                 fontSize: '0.85rem',
-                background: '#FFFFFF'
+                background: '#FFFFFF',
+                cursor: 'pointer'
               }}
             >
-              <option value="ALL">Q ALL</option>
-              {items.map(it => (
-                <option key={it.id} value={it.name}>{it.name}</option>
-              ))}
+              <option value={10}>10</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={200}>200</option>
+              <option value="ALL">All</option>
             </select>
+            <span>entries</span>
           </div>
         </div>
 
@@ -1380,75 +1684,167 @@ export const ItemMasterView: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredSummaries.map(s => {
-                  const it = s.item;
-                  const isSelected = selectedItemId === it.id;
-                  const unitName = it.unitA?.unitName || it.unit || 'PCS';
-                  const basicPrice = it.unitA?.basicPrice ?? it.purchaseRate ?? 0;
-                  const salePrice = it.unitA?.salePrice ?? it.saleRate ?? 0;
-                  const mrp = it.unitA?.mrp ?? it.mrp ?? 0;
+                {paginatedSummaries.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} style={{ textAlign: 'center', padding: '24px', color: '#9CA3AF', fontWeight: 700, fontSize: '0.88rem' }}>
+                      No items match current filters.
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedSummaries.map(s => {
+                    const it = s.item;
+                    const isSelected = selectedItemId === it.id;
+                    const unitName = it.unitA?.unitName || it.unit || 'PCS';
+                    const basicPrice = it.unitA?.basicPrice ?? it.purchaseRate ?? 0;
+                    const salePrice = it.unitA?.salePrice ?? it.saleRate ?? 0;
+                    const mrp = it.unitA?.mrp ?? it.mrp ?? 0;
 
-                  return (
-                    <tr
-                      key={it.id}
-                      onClick={() => loadItemIntoForm(it, true)}
-                      onDoubleClick={() => loadItemIntoForm(it, false)}
-                      style={{
-                        borderBottom: '1px solid #000000',
-                        background: isSelected ? '#EFF6FF' : '#FFFFFF',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <td style={{ padding: '6px 10px', borderRight: '1px solid #000000', fontWeight: 800, fontSize: '0.82rem' }}>
-                        {it.name}
-                      </td>
-                      <td style={{ padding: '6px 10px', borderRight: '1px solid #000000', fontWeight: 700, fontSize: '0.82rem' }}>
-                        {it.supplierName || '-'}
-                      </td>
-                      <td style={{ padding: '6px 8px', borderRight: '1px solid #000000', textAlign: 'center', fontWeight: 800, fontSize: '0.82rem' }}>
-                        {unitName}
-                      </td>
-                      <td style={{ padding: '6px 10px', borderRight: '1px solid #000000', textAlign: 'right', fontWeight: 800, fontSize: '0.82rem' }}>
-                        {basicPrice}
-                      </td>
-                      <td style={{ padding: '6px 10px', borderRight: '1px solid #000000', textAlign: 'right', fontWeight: 800, fontSize: '0.82rem' }}>
-                        {salePrice}
-                      </td>
-                      <td style={{ padding: '6px 10px', borderRight: '1px solid #000000', textAlign: 'right', fontWeight: 800, fontSize: '0.82rem' }}>
-                        {mrp}
-                      </td>
-                      <td style={{ padding: '6px 10px', borderRight: '1px solid #000000', textAlign: 'center', fontWeight: 900, fontSize: '0.85rem' }}>
-                        {s.closingStock}
-                      </td>
-                      <td style={{ padding: '6px 10px', borderRight: '1px solid #000000', textAlign: 'center', fontWeight: 900, fontSize: '0.82rem', color: s.isLowStock ? '#DC2626' : '#15803D' }}>
-                        {s.isLowStock ? 'YES' : ''}
-                      </td>
-                      <td style={{ padding: '6px 10px', textAlign: 'center' }}>
-                        <button
-                          type="button"
-                          onClick={e => {
-                            e.stopPropagation();
-                            openItemLedger(it.id);
-                          }}
-                          style={{
-                            background: '#E9D5FF',
-                            color: '#7E22CE',
-                            border: '1px solid #C084FC',
-                            borderRadius: '12px',
-                            padding: '2px 10px',
-                            fontWeight: 900,
-                            fontSize: '0.75rem',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          LEADGER
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                    return (
+                      <tr
+                        key={it.id}
+                        onClick={() => loadItemIntoForm(it, true)}
+                        onDoubleClick={() => loadItemIntoForm(it, false)}
+                        style={{
+                          borderBottom: '1px solid #000000',
+                          background: isSelected ? '#EFF6FF' : '#FFFFFF',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <td style={{ padding: '6px 10px', borderRight: '1px solid #000000', fontWeight: 800, fontSize: '0.82rem' }}>
+                          {it.name}
+                        </td>
+                        <td style={{ padding: '6px 10px', borderRight: '1px solid #000000', fontWeight: 700, fontSize: '0.82rem' }}>
+                          {it.supplierName || '-'}
+                        </td>
+                        <td style={{ padding: '6px 8px', borderRight: '1px solid #000000', textAlign: 'center', fontWeight: 800, fontSize: '0.82rem' }}>
+                          {unitName}
+                        </td>
+                        <td style={{ padding: '6px 10px', borderRight: '1px solid #000000', textAlign: 'right', fontWeight: 800, fontSize: '0.82rem' }}>
+                          {basicPrice}
+                        </td>
+                        <td style={{ padding: '6px 10px', borderRight: '1px solid #000000', textAlign: 'right', fontWeight: 800, fontSize: '0.82rem' }}>
+                          {salePrice}
+                        </td>
+                        <td style={{ padding: '6px 10px', borderRight: '1px solid #000000', textAlign: 'right', fontWeight: 800, fontSize: '0.82rem' }}>
+                          {mrp}
+                        </td>
+                        <td style={{ padding: '6px 10px', borderRight: '1px solid #000000', textAlign: 'center', fontWeight: 900, fontSize: '0.85rem' }}>
+                          {s.closingStock}
+                        </td>
+                        <td style={{ padding: '6px 10px', borderRight: '1px solid #000000', textAlign: 'center', fontWeight: 900, fontSize: '0.82rem', color: s.isLowStock ? '#DC2626' : '#15803D' }}>
+                          {s.isLowStock ? 'YES' : ''}
+                        </td>
+                        <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={e => {
+                              e.stopPropagation();
+                              openItemLedger(it.id);
+                            }}
+                            style={{
+                              background: '#E9D5FF',
+                              color: '#7E22CE',
+                              border: '1px solid #C084FC',
+                              borderRadius: '12px',
+                              padding: '2px 10px',
+                              fontWeight: 900,
+                              fontSize: '0.75rem',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            LEADGER
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        {/* Pagination Bar matching user requirement */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '12px 16px',
+            background: '#FFFFFF',
+            border: '2px solid #000000',
+            borderTop: 'none',
+            borderRadius: '0 0 6px 6px',
+            flexWrap: 'wrap',
+            gap: '12px',
+            marginTop: '-2px'
+          }}
+        >
+          <div style={{ fontWeight: 800, fontSize: '0.85rem', color: '#374151' }}>
+            Showing {startEntry} to {endEntry} of {totalEntries} entries
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              style={{
+                padding: '4px 12px',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                border: '1.5px solid #000000',
+                borderRadius: '4px',
+                background: currentPage <= 1 ? '#F3F4F6' : '#FFFFFF',
+                cursor: currentPage <= 1 ? 'not-allowed' : 'pointer',
+                color: currentPage <= 1 ? '#9CA3AF' : '#000000'
+              }}
+            >
+              Previous
+            </button>
+
+            {pageButtons.map((btn, idx) => (
+              btn === '...' ? (
+                <span key={`dots-${idx}`} style={{ padding: '4px 6px', fontWeight: 800 }}>…</span>
+              ) : (
+                <button
+                  key={`page-${btn}`}
+                  type="button"
+                  onClick={() => setCurrentPage(Number(btn))}
+                  style={{
+                    padding: '4px 10px',
+                    minWidth: '32px',
+                    fontWeight: 900,
+                    fontSize: '0.82rem',
+                    border: '1.5px solid #000000',
+                    borderRadius: '4px',
+                    background: currentPage === btn ? '#002B99' : '#FFFFFF',
+                    color: currentPage === btn ? '#FFFFFF' : '#000000',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {btn}
+                </button>
+              )
+            ))}
+
+            <button
+              type="button"
+              disabled={currentPage >= totalPages}
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              style={{
+                padding: '4px 12px',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                border: '1.5px solid #000000',
+                borderRadius: '4px',
+                background: currentPage >= totalPages ? '#F3F4F6' : '#FFFFFF',
+                cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer',
+                color: currentPage >= totalPages ? '#9CA3AF' : '#000000'
+              }}
+            >
+              Next
+            </button>
           </div>
         </div>
       </div>

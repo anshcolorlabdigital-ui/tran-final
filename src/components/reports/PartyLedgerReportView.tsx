@@ -11,7 +11,8 @@ import {
   PlusCircle,
   X,
   ArrowLeft,
-  Trash2
+  Trash2,
+  Search
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { PaymentCollectModal } from '../common/PaymentCollectModal';
@@ -47,6 +48,8 @@ export const PartyLedgerReportView: React.FC = () => {
     if (selectedLedgerPartyId && parties.some(p => p.id === selectedLedgerPartyId)) {
       setCurrentPartyId(selectedLedgerPartyId);
       setViewMode('INDIVIDUAL_LEDGER');
+    } else if (selectedLedgerPartyId === null) {
+      setViewMode('OUTSTANDING_LIST');
     }
   }, [selectedLedgerPartyId, parties]);
 
@@ -54,6 +57,9 @@ export const PartyLedgerReportView: React.FC = () => {
   const [fromDate, setFromDate] = useState<string>('2026-11-01');
   const [toDate, setToDate] = useState<string>(getTodayDateString());
   const [isAllTime, setIsAllTime] = useState<boolean>(true);
+
+  // Party Search Query
+  const [partySearchQuery, setPartySearchQuery] = useState<string>('');
 
   // Payment Receipt Modal State
   const [showPaymentForm, setShowPaymentForm] = useState<boolean>(false);
@@ -108,7 +114,7 @@ export const PartyLedgerReportView: React.FC = () => {
 
   // All parties calculated data for the PARTY OUTSTANDING list view matching mockup
   const partyOutstandingRows = useMemo(() => {
-    return parties.map(p => {
+    let rows = parties.map(p => {
       const balSummary = db.getPartyBalanceSummary(p.id);
       const pLogs = db.getPartyLogs().filter(l => l.partyId === p.id && l.type !== 'OPENING_BALANCE');
 
@@ -138,7 +144,18 @@ export const PartyLedgerReportView: React.FC = () => {
         balance: round2(netBalance)
       };
     });
-  }, [parties, isAllTime, fromDate, toDate, refreshKey]);
+
+    if (partySearchQuery.trim()) {
+      const q = partySearchQuery.trim().toLowerCase();
+      rows = rows.filter(r =>
+        r.party.name.toLowerCase().includes(q) ||
+        (r.party.phone && r.party.phone.toLowerCase().includes(q)) ||
+        (r.city && r.city.toLowerCase().includes(q))
+      );
+    }
+
+    return rows;
+  }, [parties, isAllTime, fromDate, toDate, refreshKey, partySearchQuery]);
 
   // Totals for PARTY OUTSTANDING list view
   const outstandingTotals = useMemo(() => {
@@ -570,6 +587,34 @@ export const PartyLedgerReportView: React.FC = () => {
               <div style={{ fontSize: '2rem', fontWeight: 900, color: '#000000', fontFamily: 'monospace' }}>
                 {outstandingTotals.balance}
               </div>
+            </div>
+          </div>
+
+          {/* Party Search Bar */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', gap: '10px', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', flex: '1', maxWidth: '420px' }}>
+              <Search size={16} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
+              <input
+                type="text"
+                placeholder="Search party by name, phone or city..."
+                className="input-text-clean"
+                value={partySearchQuery}
+                onChange={e => setPartySearchQuery(e.target.value)}
+                style={{ paddingLeft: '34px', width: '100%', fontSize: '0.88rem', fontWeight: 700 }}
+              />
+              {partySearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setPartySearchQuery('')}
+                  style={{ position: 'absolute', right: '10px', top: '8px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#9CA3AF' }}
+                  title="Clear search"
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+            <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#4B5563' }}>
+              Showing {partyOutstandingRows.length} of {parties.length} Parties
             </div>
           </div>
 

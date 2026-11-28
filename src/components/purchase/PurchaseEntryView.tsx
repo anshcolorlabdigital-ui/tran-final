@@ -58,6 +58,8 @@ export const PurchaseEntryView: React.FC = () => {
   // Items added to the bill
   const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>([]);
   const [manualRoundUp, setManualRoundUp] = useState<string | null>(null);
+  const [paidCash, setPaidCash] = useState<string>('0');
+  const [isCashPaymentActive, setIsCashPaymentActive] = useState<boolean>(false);
   const [isTouched, setIsTouched] = useState(false);
   const [searchHistory, setSearchHistory] = useState('');
 
@@ -283,6 +285,8 @@ export const PurchaseEntryView: React.FC = () => {
     setEditingItemIndex(null);
     setAssociatedOrderId(null);
     setManualRoundUp(null);
+    setPaidCash('0');
+    setIsCashPaymentActive(false);
     showToast('New Purchase entry ready', 'info');
     setTimeout(() => {
       billDateInputRef.current?.focus();
@@ -326,7 +330,8 @@ export const PurchaseEntryView: React.FC = () => {
       gstTotal: billSummary.gstTotal,
       roundUp: billSummary.roundUp,
       billTotal: billSummary.billTotal,
-      recdCash: 0,
+      recdCash: Number(paidCash) || 0,
+      paidCash: Number(paidCash) || 0,
       recdUpi: 0,
       orderId: associatedOrderId || undefined,
       createdAt: new Date().toISOString()
@@ -375,6 +380,9 @@ export const PurchaseEntryView: React.FC = () => {
     setSupplierId(purchase.supplierId);
     setPurchaseItems(purchase.items);
     setManualRoundUp(purchase.roundUp !== undefined ? String(purchase.roundUp) : null);
+    const paid = Number(purchase.paidCash || purchase.recdCash || 0);
+    setPaidCash(String(paid));
+    setIsCashPaymentActive(paid > 0);
     setAssociatedOrderId(purchase.orderId || null);
     showToast(viewOnly ? `Viewing purchase bill ${purchase.billNo}` : `Loaded purchase bill ${purchase.billNo} for editing`, 'info');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -435,23 +443,28 @@ export const PurchaseEntryView: React.FC = () => {
     gstTotal: billSummary.gstTotal,
     roundUp: billSummary.roundUp,
     billTotal: billSummary.billTotal,
-    recdCash: 0,
+    recdCash: Number(paidCash) || 0,
+    paidCash: Number(paidCash) || 0,
     recdUpi: 0,
     createdAt: new Date().toISOString()
   };
 
   const filteredPurchases = useMemo(() => {
     const q = searchHistory.toLowerCase().trim();
-    return purchasesHistory.filter(p => {
+    const list = purchasesHistory.filter(p => {
       if (historyFromDate && p.billDate < historyFromDate) return false;
       if (historyToDate && p.billDate > historyToDate) return false;
       if (!q) return true;
       return (
         p.billNo.toLowerCase().includes(q) ||
         p.supplierName.toLowerCase().includes(q) ||
+        (p.recdDate && p.recdDate.includes(q)) ||
         p.billDate.includes(q)
       );
     });
+    // Default arrange with latest/today's date at top in descending order
+    list.sort((a, b) => new Date(b.recdDate || b.billDate || b.createdAt || 0).getTime() - new Date(a.recdDate || a.billDate || a.createdAt || 0).getTime());
+    return list;
   }, [purchasesHistory, searchHistory, historyFromDate, historyToDate]);
 
   const isEditing = Boolean(editingPurchaseId && !isViewOnly);
@@ -1033,17 +1046,87 @@ export const PurchaseEntryView: React.FC = () => {
               </div>
             </div>
 
-            {/* BILL TOTAL */}
+            {/* BILL TOTAL & CASH PAYMENT ROW */}
             <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
               <span style={{ color: '#EA3943', fontWeight: 900, fontSize: '1.05rem' }}>BILL TOTAL</span>
-              <input
-                type="text"
-                readOnly
-                className="input-text-clean"
-                value={billSummary.billTotal}
-                style={{ textAlign: 'right', fontWeight: 900, fontSize: '1.15rem', background: '#FFFFFF', color: '#002B99' }}
-              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="text"
+                  readOnly
+                  className="input-text-clean"
+                  value={billSummary.billTotal}
+                  style={{ textAlign: 'right', fontWeight: 900, fontSize: '1.15rem', background: '#FFFFFF', color: '#002B99', flex: 1 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsTouched(true);
+                    if (!isCashPaymentActive) {
+                      setIsCashPaymentActive(true);
+                      setPaidCash(String(billSummary.billTotal));
+                    } else {
+                      setIsCashPaymentActive(false);
+                      setPaidCash('0');
+                    }
+                  }}
+                  style={{
+                    background: isCashPaymentActive ? '#DC2626' : '#E0F2FE',
+                    color: isCashPaymentActive ? '#FFFFFF' : '#0369A1',
+                    border: '1.5px solid #000000',
+                    borderRadius: '6px',
+                    padding: '6px 12px',
+                    fontWeight: 900,
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap'
+                  }}
+                  title="Click to toggle Cash Payment / Paid Amount for Supplier"
+                >
+                  {isCashPaymentActive ? '✓ Cash Payment' : '+ Cash Payment'}
+                </button>
+              </div>
             </div>
+
+            {/* CASH PAYMENT / PAID AMOUNT INPUT */}
+            {isCashPaymentActive && (
+              <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', alignItems: 'center', gap: '8px', marginTop: '6px', background: '#FEF2F2', padding: '6px 8px', borderRadius: '6px', border: '1.5px solid #F87171' }}>
+                <span style={{ color: '#DC2626', fontWeight: 800, fontSize: '0.85rem' }}>Paid Amount (₹)</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={paidCash}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setPaidCash(e.target.value);
+                    }}
+                    style={{ textAlign: 'right', fontWeight: 900, fontSize: '1rem', background: '#FFFFFF', color: '#DC2626', flex: 1 }}
+                    placeholder="0"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsTouched(true);
+                      setPaidCash(String(billSummary.billTotal));
+                    }}
+                    style={{
+                      background: '#FFFFFF',
+                      border: '1px solid #DC2626',
+                      color: '#DC2626',
+                      borderRadius: '4px',
+                      padding: '4px 8px',
+                      fontWeight: 800,
+                      fontSize: '0.75rem',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    Full
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Customer Action Buttons: Del, Large Save, Print */}
@@ -1093,16 +1176,21 @@ export const PurchaseEntryView: React.FC = () => {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <HistoryDateRangeFilter />
-            <div style={{ position: 'relative', width: '220px' }}>
-              <Search size={14} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
-              <input
-                type="text"
-                placeholder="Search bill no, supplier..."
-                className="input-text-clean"
-                value={searchHistory}
-                onChange={e => setSearchHistory(e.target.value)}
-                style={{ paddingLeft: '32px', fontSize: '0.85rem' }}
-              />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#4B5563', marginBottom: '2px' }}>
+                Search bill no, supplier...
+              </label>
+              <div style={{ position: 'relative', width: '220px' }}>
+                <Search size={14} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
+                <input
+                  type="text"
+                  placeholder="Search bill no, supplier..."
+                  className="input-text-clean"
+                  value={searchHistory}
+                  onChange={e => setSearchHistory(e.target.value)}
+                  style={{ paddingLeft: '32px', fontSize: '0.85rem' }}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -1112,7 +1200,7 @@ export const PurchaseEntryView: React.FC = () => {
             <thead>
               <tr>
                 <th style={{ width: '70px', textAlign: 'center' }}>S.No.</th>
-                <th>Bill Date</th>
+                <th>RECD. DATE</th>
                 <th>Bill No.</th>
                 <th>Supplier / Party</th>
                 <th style={{ textAlign: 'center' }}>Total Items</th>
@@ -1140,7 +1228,7 @@ export const PurchaseEntryView: React.FC = () => {
                     title="Single-click to View, Double-click to Edit"
                   >
                     <td style={{ textAlign: 'center', fontWeight: 900, color: '#1E40AF' }}>{p.sno || '-'}</td>
-                    <td>{p.billDate}</td>
+                    <td>{p.recdDate || p.billDate}</td>
                     <td style={{ fontWeight: 800 }}>{p.billNo}</td>
                     <td>{p.supplierName}</td>
                     <td style={{ textAlign: 'center' }}>{p.items?.length || 0}</td>

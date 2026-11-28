@@ -80,6 +80,7 @@ export const SalesEntryView: React.FC = () => {
   const [unitAProfAm, setUnitAProfAm] = useState<string>('0');
   const [unitAProfDeal, setUnitAProfDeal] = useState<string>('0');
   const [unitAQty, setUnitAQty] = useState<string>('1');
+  const [customUnitAAmount, setCustomUnitAAmount] = useState<string>('');
 
   // Unit B Pricing State
   const [unitBBasicPrice, setUnitBBasicPrice] = useState<string>('0');
@@ -87,6 +88,7 @@ export const SalesEntryView: React.FC = () => {
   const [unitBProfAm, setUnitBProfAm] = useState<string>('0');
   const [unitBProfDeal, setUnitBProfDeal] = useState<string>('0');
   const [unitBQty, setUnitBQty] = useState<string>('1');
+  const [customUnitBAmount, setCustomUnitBAmount] = useState<string>('');
 
   // Items added to the bill
   const [billItems, setBillItems] = useState<SaleItem[]>([]);
@@ -312,6 +314,10 @@ export const SalesEntryView: React.FC = () => {
     };
   }, [selectedItemObj, unitBQty, isDealer]);
 
+  // Live displayed amounts allowing manual override
+  const displayedUnitAAmount = customUnitAAmount !== '' ? customUnitAAmount : String(calculatedUnitAPricing.amount);
+  const displayedUnitBAmount = customUnitBAmount !== '' ? customUnitBAmount : String(calculatedUnitBPricing.amount);
+
   // Current stock for the selected item
   const selectedItemCurrentStock = useMemo(() => {
     if (!selectedItemId) return 0;
@@ -342,6 +348,11 @@ export const SalesEntryView: React.FC = () => {
       showToast(`Notice: Available stock is ${selectedItemCurrentStock} ${itemObj.unit || 'Units'}`, 'warning');
     }
 
+    const finalAmount = customUnitAAmount !== '' && !isNaN(Number(customUnitAAmount))
+      ? Number(Number(customUnitAAmount).toFixed(2))
+      : calculatedUnitAPricing.amount;
+    const finalSalePrice = numQty > 0 ? Number((finalAmount / numQty).toFixed(2)) : calculatedUnitAPricing.salePrice;
+
     const unitLabel = itemObj.unitA?.unitName || itemObj.unit || 'Roll';
     const newSaleItem: SaleItem = {
       id: `sale-item-${Date.now()}-${Math.random()}`,
@@ -357,10 +368,10 @@ export const SalesEntryView: React.FC = () => {
       profPercentDeal: calculatedUnitAPricing.profPercentDeal,
       profPercent: selectedParty?.partyType === 'DEALER' ? calculatedUnitAPricing.profPercentDeal : calculatedUnitAPricing.profPercentAm,
       toPercent: selectedParty?.partyType === 'DEALER' ? calculatedUnitAPricing.profPercentDeal : calculatedUnitAPricing.profPercentAm,
-      salePrice: calculatedUnitAPricing.salePrice,
-      mrp: calculatedUnitAPricing.mrp,
+      salePrice: finalSalePrice,
+      mrp: finalSalePrice,
       qty: calculatedUnitAPricing.qty,
-      amount: calculatedUnitAPricing.amount,
+      amount: finalAmount,
       isSecondaryUnit: false,
       conversionFactor: 1,
       baseQty: calculatedUnitAPricing.qty
@@ -372,6 +383,7 @@ export const SalesEntryView: React.FC = () => {
     // Reset item input and immediately focus ItemSearchSelect for the next product!
     setSelectedItemId('');
     setUnitAQty('1');
+    setCustomUnitAAmount('');
     setTimeout(() => {
       itemSearchRef.current?.focus();
     }, 40);
@@ -399,6 +411,11 @@ export const SalesEntryView: React.FC = () => {
     const baseQty = Number((numQty / convFactor).toFixed(2));
     const unitLabel = itemObj.unitB.unitName || 'Mt.';
 
+    const finalAmount = customUnitBAmount !== '' && !isNaN(Number(customUnitBAmount))
+      ? Number(Number(customUnitBAmount).toFixed(2))
+      : calculatedUnitBPricing.amount;
+    const finalSalePrice = numQty > 0 ? Number((finalAmount / numQty).toFixed(2)) : calculatedUnitBPricing.salePrice;
+
     const newSaleItem: SaleItem = {
       id: `sale-item-${Date.now()}-${Math.random()}`,
       itemId: itemObj.id,
@@ -413,10 +430,10 @@ export const SalesEntryView: React.FC = () => {
       profPercentDeal: calculatedUnitBPricing.profPercentDeal,
       profPercent: selectedParty?.partyType === 'DEALER' ? calculatedUnitBPricing.profPercentDeal : calculatedUnitBPricing.profPercentAm,
       toPercent: selectedParty?.partyType === 'DEALER' ? calculatedUnitBPricing.profPercentDeal : calculatedUnitBPricing.profPercentAm,
-      salePrice: calculatedUnitBPricing.salePrice,
-      mrp: calculatedUnitBPricing.mrp,
+      salePrice: finalSalePrice,
+      mrp: finalSalePrice,
       qty: calculatedUnitBPricing.qty,
-      amount: calculatedUnitBPricing.amount,
+      amount: finalAmount,
       isSecondaryUnit: true,
       conversionFactor: convFactor,
       baseQty
@@ -428,9 +445,26 @@ export const SalesEntryView: React.FC = () => {
     // Reset item input and immediately focus ItemSearchSelect for next product
     setSelectedItemId('');
     setUnitBQty('1');
+    setCustomUnitBAmount('');
     setTimeout(() => {
       itemSearchRef.current?.focus();
     }, 40);
+  };
+
+  const handleUpdateLineItemAmount = (index: number, newAmountVal: string) => {
+    setIsTouched(true);
+    const amt = parseFloat(newAmountVal) || 0;
+    setBillItems(prev => prev.map((item, i) => {
+      if (i !== index) return item;
+      const q = Number(item.qty) || 1;
+      const unitPrice = q > 0 ? Number((amt / q).toFixed(2)) : item.salePrice;
+      return {
+        ...item,
+        amount: amt,
+        salePrice: unitPrice,
+        mrp: unitPrice
+      };
+    }));
   };
 
   const handleEditLineItem = (index: number) => {
@@ -445,6 +479,7 @@ export const SalesEntryView: React.FC = () => {
       setUnitBProfAm(String(item.profPercentAm !== undefined ? item.profPercentAm : (item.profPercent || 0)));
       setUnitBProfDeal(String(item.profPercentDeal !== undefined ? item.profPercentDeal : (item.profPercent || 0)));
       setUnitBQty(String(item.qty));
+      setCustomUnitBAmount(String(item.amount));
       setTimeout(() => {
         unitBBasicPriceInputRef.current?.focus();
         unitBBasicPriceInputRef.current?.select();
@@ -455,6 +490,7 @@ export const SalesEntryView: React.FC = () => {
       setUnitAProfAm(String(item.profPercentAm !== undefined ? item.profPercentAm : (item.profPercent || 0)));
       setUnitAProfDeal(String(item.profPercentDeal !== undefined ? item.profPercentDeal : (item.profPercent || 0)));
       setUnitAQty(String(item.qty));
+      setCustomUnitAAmount(String(item.amount));
       setTimeout(() => {
         unitABasicPriceInputRef.current?.focus();
         unitABasicPriceInputRef.current?.select();
@@ -485,6 +521,8 @@ export const SalesEntryView: React.FC = () => {
     setRecdCash('0');
     setRecdUpi('0');
     setSelectedItemId('');
+    setCustomUnitAAmount('');
+    setCustomUnitBAmount('');
     setEditingItemIndex(null);
     setManualRoundUp(null);
     showToast('New Sale entry ready', 'info');
@@ -640,7 +678,7 @@ export const SalesEntryView: React.FC = () => {
 
   const filteredSales = useMemo(() => {
     const q = searchHistory.toLowerCase().trim();
-    return salesHistory.filter(s => {
+    const list = salesHistory.filter(s => {
       if (historyFromDate && s.billDate < historyFromDate) return false;
       if (historyToDate && s.billDate > historyToDate) return false;
       if (!q) return true;
@@ -650,6 +688,9 @@ export const SalesEntryView: React.FC = () => {
         s.billDate.includes(q)
       );
     });
+    // Default arrange with latest/today's date at top in descending order
+    list.sort((a, b) => new Date(b.billDate || b.createdAt || 0).getTime() - new Date(a.billDate || a.createdAt || 0).getTime());
+    return list;
   }, [salesHistory, searchHistory, historyFromDate, historyToDate]);
 
   const isEditing = Boolean(editingSaleId && !isViewOnly);
@@ -958,8 +999,25 @@ export const SalesEntryView: React.FC = () => {
                 />
               </div>
               <div>
-                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Amount</label>
-                <input type="text" readOnly className="input-text-clean" value={calculatedUnitAPricing.amount} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 800 }} />
+                <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Amount (₹)</label>
+                <input
+                  type="number"
+                  step="any"
+                  className="input-text-clean"
+                  value={displayedUnitAAmount}
+                  onChange={e => {
+                    setIsTouched(true);
+                    setCustomUnitAAmount(e.target.value);
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddUnitAItem();
+                    }
+                  }}
+                  style={{ textAlign: 'center', background: '#FFFFFF', border: '1.5px solid #000000', padding: '4px', fontWeight: 900, color: '#002B99' }}
+                  title="Click to edit or override amount"
+                />
               </div>
               <div className="add-btn-col" style={{ paddingBottom: '2px' }}>
                 <button
@@ -1086,8 +1144,25 @@ export const SalesEntryView: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Amount</label>
-                  <input type="text" readOnly className="input-text-clean" value={calculatedUnitBPricing.amount} style={{ textAlign: 'center', background: '#F3F4F6', padding: '4px', fontWeight: 800 }} />
+                  <label style={{ display: 'block', color: '#EA3943', fontWeight: 800, fontSize: '0.72rem', textAlign: 'center', marginBottom: '2px' }}>Amount (₹)</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input-text-clean"
+                    value={displayedUnitBAmount}
+                    onChange={e => {
+                      setIsTouched(true);
+                      setCustomUnitBAmount(e.target.value);
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddUnitBItem();
+                      }
+                    }}
+                    style={{ textAlign: 'center', background: '#FFFFFF', border: '1.5px solid #000000', padding: '4px', fontWeight: 900, color: '#002B99' }}
+                    title="Click to edit or override amount"
+                  />
                 </div>
                 <div className="add-btn-col" style={{ paddingBottom: '2px' }}>
                   <button
@@ -1159,7 +1234,26 @@ export const SalesEntryView: React.FC = () => {
                       {selectedParty?.partyType === 'DEALER' ? item.salePrice : (item.mrp || item.salePrice)}
                     </td>
                     <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 800, color: '#16A34A', borderRight: '1px solid #000000' }}>{item.qty} {item.unit}</td>
-                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, borderRight: '1px solid #000000' }}>{item.amount}</td>
+                    <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 800, borderRight: '1px solid #000000' }}>
+                      <input
+                        type="number"
+                        step="any"
+                        value={item.amount}
+                        onChange={e => handleUpdateLineItemAmount(idx, e.target.value)}
+                        onClick={e => e.stopPropagation()}
+                        style={{
+                          width: '90px',
+                          textAlign: 'right',
+                          fontWeight: 900,
+                          color: '#002B99',
+                          padding: '3px 6px',
+                          border: '1.5px solid #000000',
+                          borderRadius: '4px',
+                          background: '#FFFFFF'
+                        }}
+                        title="Click to edit item amount directly"
+                      />
+                    </td>
                     <td style={{ padding: '6px 8px', textAlign: 'center' }}>
                       <button
                         type="button"
@@ -1378,9 +1472,14 @@ export const SalesEntryView: React.FC = () => {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <HistoryDateRangeFilter />
-            <div style={{ position: 'relative', width: '220px' }}>
-              <Search size={14} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
-              <input type="text" placeholder="Search invoice, customer..." className="input-text-clean" value={searchHistory} onChange={e => setSearchHistory(e.target.value)} style={{ paddingLeft: '32px', fontSize: '0.85rem' }} />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#4B5563', marginBottom: '2px' }}>
+                Search invoice, customer...
+              </label>
+              <div style={{ position: 'relative', width: '220px' }}>
+                <Search size={14} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
+                <input type="text" placeholder="Search invoice, customer..." className="input-text-clean" value={searchHistory} onChange={e => setSearchHistory(e.target.value)} style={{ paddingLeft: '32px', fontSize: '0.85rem' }} />
+              </div>
             </div>
           </div>
         </div>

@@ -411,7 +411,7 @@ export const SelfUseView: React.FC = () => {
 
   const filteredHistory = useMemo(() => {
     const q = searchHistory.toLowerCase().trim();
-    return selfUseHistory.filter(su => {
+    const list = selfUseHistory.filter(su => {
       if (historyFromDate && su.billDate < historyFromDate) return false;
       if (historyToDate && su.billDate > historyToDate) return false;
       if (!q) return true;
@@ -421,6 +421,9 @@ export const SelfUseView: React.FC = () => {
         su.billDate.includes(q)
       );
     });
+    // Default arrange with latest/today's date at top in descending order
+    list.sort((a, b) => new Date(b.billDate || b.createdAt || 0).getTime() - new Date(a.billDate || a.createdAt || 0).getTime());
+    return list;
   }, [selfUseHistory, searchHistory, historyFromDate, historyToDate]);
 
   const isEditing = Boolean(editingSelfUseId && !isViewOnly);
@@ -1014,16 +1017,21 @@ export const SelfUseView: React.FC = () => {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <HistoryDateRangeFilter />
-            <div style={{ position: 'relative', width: '220px' }}>
-              <Search size={14} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
-              <input
-                type="text"
-                placeholder="Search voucher no..."
-                className="input-text-clean"
-                value={searchHistory}
-                onChange={e => setSearchHistory(e.target.value)}
-                style={{ paddingLeft: '32px', fontSize: '0.85rem' }}
-              />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#4B5563', marginBottom: '2px' }}>
+                Search voucher no...
+              </label>
+              <div style={{ position: 'relative', width: '220px' }}>
+                <Search size={14} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
+                <input
+                  type="text"
+                  placeholder="Search voucher no..."
+                  className="input-text-clean"
+                  value={searchHistory}
+                  onChange={e => setSearchHistory(e.target.value)}
+                  style={{ paddingLeft: '32px', fontSize: '0.85rem' }}
+                />
+              </div>
             </div>
           </div>
         </div>

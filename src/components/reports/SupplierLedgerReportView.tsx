@@ -11,7 +11,8 @@ import {
   PlusCircle,
   X,
   ArrowLeft,
-  Trash2
+  Trash2,
+  Search
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { SupplierPaymentModal } from '../common/SupplierPaymentModal';
@@ -46,6 +47,8 @@ export const SupplierLedgerReportView: React.FC = () => {
     if (selectedLedgerSupplierId && suppliers.some(s => s.id === selectedLedgerSupplierId)) {
       setCurrentSupplierId(selectedLedgerSupplierId);
       setViewMode('INDIVIDUAL_LEDGER');
+    } else if (selectedLedgerSupplierId === null) {
+      setViewMode('OUTSTANDING_LIST');
     }
   }, [selectedLedgerSupplierId, suppliers]);
 
@@ -53,6 +56,9 @@ export const SupplierLedgerReportView: React.FC = () => {
   const [fromDate, setFromDate] = useState<string>('2026-11-01');
   const [toDate, setToDate] = useState<string>(getTodayDateString());
   const [isAllTime, setIsAllTime] = useState<boolean>(true);
+
+  // Supplier Search Query
+  const [supplierSearchQuery, setSupplierSearchQuery] = useState<string>('');
 
   // Supplier Payment Modal State
   const [showPaymentModal, setShowPaymentModal] = useState<boolean>(false);
@@ -143,6 +149,16 @@ export const SupplierLedgerReportView: React.FC = () => {
   const displayedOutstandingRows = useMemo(() => {
     let list = [...supplierOutstandingRows];
 
+    if (supplierSearchQuery.trim()) {
+      const q = supplierSearchQuery.trim().toLowerCase();
+      list = list.filter(r =>
+        r.supplier.name.toLowerCase().includes(q) ||
+        (r.supplier.phone && r.supplier.phone.toLowerCase().includes(q)) ||
+        (r.supplier.city && r.supplier.city.toLowerCase().includes(q)) ||
+        (r.gstin && r.gstin.toLowerCase().includes(q))
+      );
+    }
+
     if (balanceFilter === 'ZERO') {
       list = list.filter(r => r.balance === 0);
     } else if (balanceFilter === 'PLUS') {
@@ -158,7 +174,7 @@ export const SupplierLedgerReportView: React.FC = () => {
     }
 
     return list;
-  }, [supplierOutstandingRows, balanceFilter, sortOrder]);
+  }, [supplierOutstandingRows, balanceFilter, sortOrder, supplierSearchQuery]);
 
   // Totals for SUPPLIER OUTSTANDING list view
   const outstandingTotals = useMemo(() => {
@@ -664,6 +680,34 @@ export const SupplierLedgerReportView: React.FC = () => {
                 />
                 <span>Desending</span>
               </label>
+            </div>
+          </div>
+
+          {/* Supplier Search Bar */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', gap: '10px', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', flex: '1', maxWidth: '420px' }}>
+              <Search size={16} color="#6B7280" style={{ position: 'absolute', left: '10px', top: '10px' }} />
+              <input
+                type="text"
+                placeholder="Search party / supplier by name, phone, city or GSTIN..."
+                className="input-text-clean"
+                value={supplierSearchQuery}
+                onChange={e => setSupplierSearchQuery(e.target.value)}
+                style={{ paddingLeft: '34px', width: '100%', fontSize: '0.88rem', fontWeight: 700 }}
+              />
+              {supplierSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSupplierSearchQuery('')}
+                  style={{ position: 'absolute', right: '10px', top: '8px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#9CA3AF' }}
+                  title="Clear search"
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+            <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#4B5563' }}>
+              Showing {displayedOutstandingRows.length} of {suppliers.length} Suppliers
             </div>
           </div>
 

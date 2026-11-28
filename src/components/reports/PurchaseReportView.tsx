@@ -3,7 +3,8 @@ import { db } from '../../db/db';
 import { useApp } from '../../context/AppContext';
 import { formatDateToDisplay, getTodayDateString } from '../../utils/dateUtils';
 import { formatCurrency, round2 } from '../../utils/calculations';
-import { Download, Printer } from 'lucide-react';
+import { Download, Printer, X } from 'lucide-react';
+import { Purchase } from '../../types';
 import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 
 export const PurchaseReportView: React.FC = () => {
@@ -41,6 +42,7 @@ export const PurchaseReportView: React.FC = () => {
   const [quickFilter, setQuickFilter] = useState<'ALL' | 'MONTH' | 'TODAY'>('ALL');
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
   const [selectedItemId, setSelectedItemId] = useState<string>('');
+  const [selectedPurchaseDetail, setSelectedPurchaseDetail] = useState<Purchase | null>(null);
 
   const setQuickFilterOption = (type: 'ALL' | 'MONTH' | 'TODAY') => {
     setQuickFilter(type);
@@ -393,7 +395,25 @@ export const PurchaseReportView: React.FC = () => {
                                   rowSpan={p.items.length}
                                   style={{ padding: '8px 10px', borderRight: '1px solid #000000', verticalAlign: 'top', fontWeight: 900, fontFamily: 'monospace', fontSize: '0.85rem' }}
                                 >
-                                  <div>{p.billNo}</div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedPurchaseDetail(p)}
+                                    style={{
+                                      background: 'transparent',
+                                      border: 'none',
+                                      color: '#002B99',
+                                      fontWeight: 900,
+                                      textDecoration: 'underline',
+                                      cursor: 'pointer',
+                                      padding: 0,
+                                      textAlign: 'left',
+                                      fontFamily: 'monospace',
+                                      fontSize: '0.88rem'
+                                    }}
+                                    title="Click to view purchase invoice details"
+                                  >
+                                    {p.billNo}
+                                  </button>
                                   {p.sno && <div style={{ fontSize: '0.72rem', color: '#1E40AF', fontWeight: 800 }}>S.No: {p.sno}</div>}
                                 </td>
                                 <td
@@ -489,6 +509,94 @@ export const PurchaseReportView: React.FC = () => {
       >
         TOP
       </div>
+
+      {/* Detailed Purchase Bill Modal */}
+      {selectedPurchaseDetail && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            padding: '20px'
+          }}
+        >
+          <div
+            style={{
+              background: '#FFFFFF',
+              border: '2px solid #000000',
+              borderRadius: '12px',
+              width: '100%',
+              maxWidth: '800px',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden'
+            }}
+          >
+            <div
+              style={{
+                background: '#D4C4FB',
+                padding: '12px 18px',
+                borderBottom: '2px solid #000000',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}
+            >
+              <div style={{ fontWeight: 900, fontSize: '1.1rem' }}>
+                Purchase Invoice: {selectedPurchaseDetail.billNo} {selectedPurchaseDetail.sno ? `(S.No: ${selectedPurchaseDetail.sno})` : ''}
+              </div>
+              <button
+                onClick={() => setSelectedPurchaseDetail(null)}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div style={{ padding: '16px', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px', fontWeight: 800 }}>
+                <div>Supplier: <span style={{ color: '#002B99' }}>{selectedPurchaseDetail.supplierName}</span></div>
+                <div>Bill Date: {formatDateToDisplay(selectedPurchaseDetail.billDate)}</div>
+                <div>RECD Date: {formatDateToDisplay(selectedPurchaseDetail.recdDate || selectedPurchaseDetail.billDate)}</div>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ background: '#ECECEC', borderBottom: '1px solid #000000' }}>
+                    <th style={{ padding: '8px' }}>Item</th>
+                    <th style={{ padding: '8px', textAlign: 'center' }}>Qty</th>
+                    <th style={{ padding: '8px', textAlign: 'right' }}>Basic Rate</th>
+                    <th style={{ padding: '8px', textAlign: 'right' }}>GST</th>
+                    <th style={{ padding: '8px', textAlign: 'right' }}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedPurchaseDetail.items.map((it, idx) => (
+                    <tr key={idx} style={{ borderBottom: '1px solid #E5E7EB' }}>
+                      <td style={{ padding: '8px', fontWeight: 700 }}>{it.itemName} ({it.unit || 'PCS'})</td>
+                      <td style={{ padding: '8px', textAlign: 'center', fontWeight: 800 }}>{it.qty}</td>
+                      <td style={{ padding: '8px', textAlign: 'right' }}>₹{it.purchaseRate || it.basicPrice}</td>
+                      <td style={{ padding: '8px', textAlign: 'right' }}>{it.gstPercent || 0}%</td>
+                      <td style={{ padding: '8px', textAlign: 'right', fontWeight: 800 }}>₹{it.amount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '20px', marginTop: '16px', fontWeight: 900, fontSize: '1rem' }}>
+                <div>Basic Total: ₹{selectedPurchaseDetail.basicTotal}</div>
+                <div>GST Total: ₹{selectedPurchaseDetail.gstTotal}</div>
+                <div style={{ color: '#002B99', fontSize: '1.15rem' }}>Bill Total: ₹{selectedPurchaseDetail.billTotal}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
